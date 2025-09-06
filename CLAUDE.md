@@ -124,7 +124,8 @@ git commit -m "Your commit message"
 ./claude.sh  # Verify system still works
 ```
 
-**IMPORTANT**: CHANGELOG.md and package.json MUST be updated and appear in git diff before every commit. This ensures proper version tracking and release management.
+**IMPORTANT**: CHANGELOG.md and package.json MUST be updated and appear in git diff before every
+commit. This ensures proper version tracking and release management.
 
 #### Development Testing
 
@@ -155,7 +156,7 @@ git log --oneline v0.1.0..HEAD
 
 # 2. Update CHANGELOG.md [Unreleased] section with:
 #    - Added: new features
-#    - Changed: modifications to existing functionality  
+#    - Changed: modifications to existing functionality
 #    - Deprecated: features marked for removal
 #    - Removed: deleted features
 #    - Fixed: bug fixes
@@ -220,7 +221,8 @@ The system includes an automatic migration system for database schema updates:
   - Version 1: Initial schema with events table
   - Version 2: Added `arguments` column for hook parameters
 
-Migration status can be checked via the `/migrations` API endpoint or by querying the database directly.
+Migration status can be checked via the `/migrations` API endpoint or by querying the database
+directly.
 
 ### Configuration
 
@@ -249,7 +251,8 @@ The system supports dynamic command-line arguments for hooks:
 - **Debug Mode**: `--debug` enables additional logging and debugging features
 - **Custom Arguments**: Any `--key=value` or `--flag` format is supported for extensibility
 
-Arguments are stored in the database `arguments` column and passed to event processors for custom handling.
+Arguments are stored in the database `arguments` column and passed to event processors for custom
+handling.
 
 #### Sound Effects Feature
 
@@ -263,14 +266,17 @@ The system includes built-in sound effect processing:
 
 ### Server Lifecycle Management
 
-The cc-hooks system implements sophisticated lifecycle management to handle multiple Claude Code instances sharing a single server:
+The cc-hooks system implements sophisticated lifecycle management to handle multiple Claude Code
+instances sharing a single server:
 
 #### Instance Tracking
+
 - Each Claude Code session registers itself with a unique PID in `.claude-instances/`
 - The wrapper script tracks active instances and cleans up stale PID files automatically
 - Server is only started if no healthy server exists, and only stopped when the last instance exits
 
 #### Startup Process
+
 1. Clean up any stale instance PID files from previous sessions
 2. Register current instance before starting server
 3. Check if server is already running via health endpoint
@@ -279,6 +285,7 @@ The cc-hooks system implements sophisticated lifecycle management to handle mult
 6. If server fails to start or respond, exit with error
 
 #### Shutdown Process
+
 1. Unregister current instance first
 2. Count remaining active instances
 3. If other instances exist, keep server running
@@ -289,6 +296,7 @@ The cc-hooks system implements sophisticated lifecycle management to handle mult
    - Clean up instances directory
 
 #### Server Health Checks
+
 - Health endpoint: `http://localhost:12345/health`
 - Connection timeout: 2 seconds
 - Used during startup validation and instance management
@@ -301,7 +309,8 @@ The system integrates with Claude Code through its hooks configuration. To use t
 2. Run Claude Code through `claude.sh` wrapper to ensure server is running
 3. Events will be queued and processed sequentially
 
-The wrapper handles all server lifecycle management automatically, allowing multiple Claude Code sessions to share the same event processing server efficiently.
+The wrapper handles all server lifecycle management automatically, allowing multiple Claude Code
+sessions to share the same event processing server efficiently.
 
 ## Important Files
 

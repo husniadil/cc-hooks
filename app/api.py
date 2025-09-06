@@ -13,6 +13,7 @@ logger = logging.getLogger(__name__)
 
 class Event(BaseModel):
     """Pydantic model for incoming events."""
+
     data: Dict[Any, Any]
     arguments: Optional[Dict[str, Any]] = None
 
@@ -29,7 +30,7 @@ def create_app(lifespan=None) -> FastAPI:
     @app.post("/events")
     async def create_event(event: Event):
         """Endpoint to receive JSON events and emit them asynchronously.
-        
+
         Returns OK immediately after queuing the event for processing.
         """
         try:
@@ -45,7 +46,9 @@ def create_app(lifespan=None) -> FastAPI:
                 )
 
             # Queue event using database module
-            event_id = await queue_event(session_id, hook_event_name, event.data, event.arguments)
+            event_id = await queue_event(
+                session_id, hook_event_name, event.data, event.arguments
+            )
 
             return {
                 "status": "ok",
@@ -60,7 +63,7 @@ def create_app(lifespan=None) -> FastAPI:
     @app.get("/events/status")
     async def get_events_status():
         """Get current status of events in the queue.
-        
+
         Useful for monitoring and debugging.
         """
         try:
@@ -72,7 +75,7 @@ def create_app(lifespan=None) -> FastAPI:
     @app.get("/migrations/status")
     async def get_migrations_status():
         """Get current database migration status.
-        
+
         Shows applied migrations and pending count.
         """
         try:

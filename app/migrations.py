@@ -31,8 +31,8 @@ MIGRATIONS = [
     {
         "version": 2,
         "description": "Add arguments column for hook parameters",
-        "sql": "ALTER TABLE events ADD COLUMN arguments TEXT NULL"
-    }
+        "sql": "ALTER TABLE events ADD COLUMN arguments TEXT NULL",
+    },
 ]
 
 

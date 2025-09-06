@@ -12,6 +12,7 @@ load_dotenv()
 @dataclass
 class Config:
     """Configuration settings loaded from environment variables."""
+
     db_path: str = "events.db"
     host: str = "0.0.0.0"
     port: int = 12345

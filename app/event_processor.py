@@ -14,6 +14,7 @@ from app.event_db import (
     mark_event_completed,
     mark_event_failed,
 )
+from utils.tts_announcer import announce_event
 
 # Hook event name literals
 HookEventName = Literal[
@@ -39,7 +40,7 @@ HOOK_PRE_COMPACT: HookEventName = "PreCompact"
 
 # Constants
 RETRY_DELAY_SECONDS = 0.5
-NO_EVENTS_WAIT_SECONDS = 1
+NO_EVENTS_WAIT_SECONDS = 0.1
 ERROR_WAIT_SECONDS = 5
 DEFAULT_SLEEP_SECONDS = 0.01
 
@@ -56,7 +57,14 @@ async def process_events():
             row = await get_next_pending_event()
 
             if row:
-                event_id, session_id, hook_event_name, payload, retry_count, arguments_json = row
+                (
+                    event_id,
+                    session_id,
+                    hook_event_name,
+                    payload,
+                    retry_count,
+                    arguments_json,
+                ) = row
                 logger.info(
                     f"Processing event {event_id}: {hook_event_name} for session {session_id} (attempt {retry_count + 1}/{config.max_retry_count})"
                 )
@@ -68,14 +76,16 @@ async def process_events():
                 event_data = json.loads(payload)
                 event_data["session_id"] = session_id
                 event_data["hook_event_name"] = hook_event_name
-                
+
                 # Parse arguments if present
                 arguments = None
                 if arguments_json:
                     try:
                         arguments = json.loads(arguments_json)
                     except json.JSONDecodeError as e:
-                        logger.warning(f"Failed to parse arguments JSON for event {event_id}: {e}")
+                        logger.warning(
+                            f"Failed to parse arguments JSON for event {event_id}: {e}"
+                        )
                         arguments = None
 
                 # Retry loop
@@ -122,29 +132,64 @@ async def process_events():
 
 
 # Sound effect processing
-async def play_sound_effect(sound_file: str):
-    """Play sound effect using the sound player utility."""
+async def play_sound(sound_file: str):
+    """Play sound using the sound player utility (BLOCKING - waits for completion)."""
     try:
         script_dir = Path(__file__).parent.parent  # Go up from app/ to project root
         sound_player_path = script_dir / "utils" / "sound_player.py"
-        
+
         if not sound_player_path.exists():
             logger.warning(f"Sound player script not found: {sound_player_path}")
             return False
-            
-        # Run sound player in background (non-blocking)
+
+        # Run sound player synchronously (blocking - wait for completion)
         process = await asyncio.create_subprocess_exec(
-            "uv", "run", str(sound_player_path), sound_file,
-            stdout=asyncio.subprocess.DEVNULL,
-            stderr=asyncio.subprocess.DEVNULL
+            "uv",
+            "run",
+            str(sound_player_path),
+            sound_file,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
         )
-        
-        # Don't wait for completion, let it play in background
-        logger.info(f"Triggered sound effect: {sound_file}")
-        return True
-        
+
+        # Wait for sound to finish playing before continuing
+        stdout, stderr = await process.communicate()
+
+        if process.returncode == 0:
+            logger.info(f"Sound played successfully: {sound_file}")
+            return True
+        else:
+            logger.warning(
+                f"Sound player failed with return code {process.returncode}: {stderr.decode()}"
+            )
+            return False
+
     except Exception as e:
-        logger.warning(f"Failed to play sound effect {sound_file}: {e}")
+        logger.warning(f"Failed to play sound {sound_file}: {e}")
+        return False
+
+
+# TTS announcement processing
+async def play_announcement_sound(
+    hook_event_name: str, event_data: dict, volume: float = 0.5
+):
+    """Play appropriate announcement sound based on hook event context."""
+    try:
+        # Use synchronous announce_event in a thread to avoid blocking
+        loop = asyncio.get_event_loop()
+        success = await loop.run_in_executor(
+            None, announce_event, hook_event_name, event_data, volume
+        )
+
+        if success:
+            logger.info(f"Announced {hook_event_name} event successfully")
+        else:
+            logger.warning(f"Failed to announce {hook_event_name} event")
+
+        return success
+
+    except Exception as e:
+        logger.warning(f"Failed to play announcement for {hook_event_name}: {e}")
         return False
 
 
@@ -165,12 +210,24 @@ async def process_single_event(event_data: dict, arguments: Optional[dict] = Non
     hook_event_name = event_data["hook_event_name"]
 
     logger.info(f"Processing {hook_event_name} event for session {session_id}")
-    
-    # Check for sound effect argument
+
+    # Check for sound effect argument (backward compatibility)
     if arguments and "sound_effect" in arguments:
         sound_file = arguments["sound_effect"]
         logger.info(f"Sound effect requested: {sound_file}")
-        await play_sound_effect(sound_file)
+        await play_sound(sound_file)
+
+    # Check for announcement request (new intelligent mapping)
+    if arguments and "announce" in arguments:
+        # Volume can be specified, default to 0.5
+        volume = 0.5
+        if isinstance(arguments["announce"], (int, float)):
+            volume = float(arguments["announce"])
+        elif arguments["announce"] is True:
+            volume = 0.5  # Default volume for --announce flag
+
+        logger.info(f"Announcement requested for {hook_event_name} (volume: {volume})")
+        await play_announcement_sound(hook_event_name, event_data, volume)
 
     # Handle different hook event types
     if hook_event_name == HOOK_SESSION_START:

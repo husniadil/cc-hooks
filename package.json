@@ -1,6 +1,6 @@
 {
   "name": "cc-hooks",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Claude Code configuration repository with hooks, agents, and customizations",
   "private": true,
   "scripts": {
