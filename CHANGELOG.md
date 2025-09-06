@@ -7,6 +7,31 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.3.1] - 2025-09-06
+
+### Added
+
+- **Development Server Hot Reload**: Enhanced development workflow with automatic code reloading
+  - `npm run dev` now starts server with `--dev` flag (includes hot reload)
+  - `npm run dev:reload` provides explicit hot reload command
+  - `uv run server.py --dev` and `uv run server.py --reload` support for direct server usage
+  - Watch directories configured for `app/`, `utils/`, and root directory
+  - Excludes databases, instances, and sound files from reload watching
+
+### Enhanced
+
+- **Server Configuration**: Improved development experience with conditional reload logic
+  - Automatic detection of `--reload` and `--dev` command line arguments
+  - Production mode preserved for normal server operations
+  - Better separation between development and production server startup
+
+### Documentation
+
+- **CLAUDE.md Improvements**: Updated development workflow documentation
+  - Clarified development testing commands with hot reload examples
+  - Enhanced formatting and structure for better readability
+  - Improved changelog workflow documentation formatting
+
 ## [0.3.0] - 2025-09-06
 
 ### Added

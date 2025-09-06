@@ -39,6 +39,11 @@ The event flow:
 # Start only the server (for development/testing)
 uv run server.py
 
+# Start server with hot reload for development
+uv run server.py --dev
+# or
+uv run server.py --reload
+
 # Test the hook script manually
 echo '{"session_id": "test", "hook_event_name": "Test"}' | uv run hooks.py
 
@@ -111,7 +116,7 @@ npm run format
 # - Add changes to CHANGELOG.md [Unreleased] section
 # - Move [Unreleased] changes to new [X.Y.Z] section with date
 # - Increment version in package.json to match changelog version
-# - Ensure changelog version section header format: ## [X.Y.Z] - YYYY-MM-DD  
+# - Ensure changelog version section header format: ## [X.Y.Z] - YYYY-MM-DD
 # - Verify both files appear in git diff
 
 # 3. Verify changes are ready
@@ -129,17 +134,21 @@ git commit -m "Your commit message"
 **IMPORTANT**: CHANGELOG.md and package.json MUST be updated and appear in git diff before every
 commit. This ensures proper version tracking and release management.
 
-**CRITICAL CHANGELOG WORKFLOW**: 
+**CRITICAL CHANGELOG WORKFLOW**:
+
 1. First add changes to [Unreleased] section
-2. **Then immediately** move those changes to new versioned section: `## [X.Y.Z] - 2025-MM-DD`  
+2. **Then immediately** move those changes to new versioned section: `## [X.Y.Z] - 2025-MM-DD`
 3. Leave [Unreleased] section empty for future changes
 4. **NEVER commit with changes still in [Unreleased]** - they must be in a proper version section
 
 #### Development Testing
 
 ```bash
-# Quick development server test
-npm run dev  # Start server only
+# Quick development server test with hot reload
+npm run dev  # Start server with --dev flag (includes hot reload)
+
+# Alternative: explicit hot reload command
+npm run dev:reload  # Start server with --reload flag
 
 # Full integration test
 npm run start  # Start server + Claude Code wrapper
@@ -179,7 +188,7 @@ npm run format
 #    Format: ## [X.Y.Z] - YYYY-MM-DD (always include date!)
 #    Leave [Unreleased] section empty after moving content
 # 2. Update package.json version to match changelog version exactly
-# 3. Verify both files have matching version numbers  
+# 3. Verify both files have matching version numbers
 # 4. Commit and tag release
 git add CHANGELOG.md package.json
 git commit -m "Release v0.x.x"

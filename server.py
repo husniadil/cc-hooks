@@ -16,6 +16,7 @@
 import uvicorn
 import asyncio
 import logging
+import sys
 from contextlib import asynccontextmanager
 from app.api import create_app
 from app.event_db import init_db
@@ -46,4 +47,19 @@ async def lifespan(app):
 app = create_app(lifespan=lifespan)
 
 if __name__ == "__main__":
-    uvicorn.run(app, host=config.host, port=config.port)
+    # Check if we're in development mode (with --reload flag or specific argument)
+    reload = "--reload" in sys.argv or "--dev" in sys.argv
+
+    if reload:
+        # Development mode with hot reload
+        uvicorn.run(
+            "server:app",  # Use string import for reload to work
+            host=config.host,
+            port=config.port,
+            reload=True,
+            reload_dirs=[".", "app", "utils"],  # Watch these directories
+            reload_excludes=["*.db", ".claude-instances", "sound"],  # Ignore these
+        )
+    else:
+        # Production mode without reload
+        uvicorn.run(app, host=config.host, port=config.port)
