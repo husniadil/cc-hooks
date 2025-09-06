@@ -1,0 +1,24 @@
+{
+  "name": "cc-hooks",
+  "version": "1.0.0",
+  "description": "Claude Code configuration repository with hooks, agents, and customizations",
+  "private": true,
+  "scripts": {
+    "dev": "uv run server.py",
+    "start": "./claude.sh",
+    "format": "npm run format:prettier && npm run format:py",
+    "format:prettier": "prettier --write .",
+    "format:py": "black . --line-length 88"
+  },
+  "devDependencies": {
+    "prettier": "^3.6.2"
+  },
+  "keywords": [
+    "claude-code",
+    "configuration",
+    "python-hooks",
+    "development-tools",
+    "productivity"
+  ],
+  "author": "Husni Adil Makmur"
+}

@@ -1,0 +1,4 @@
+node_modules/
+.claude/
+*.py
+.tool-versions

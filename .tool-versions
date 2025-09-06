@@ -1,0 +1,10 @@
+# Core runtime environments
+python 3.12.7
+node 20.19.4
+
+# Package managers and tools
+uv 0.5.29
+
+# Development tools for Claude Code hooks and configuration
+# Note: black formatter is installed via pip, not mise
+# Note: prettier is installed as npm dev dependency
