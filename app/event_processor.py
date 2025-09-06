@@ -4,7 +4,9 @@
 import asyncio
 import json
 import logging
-from typing import Literal
+import subprocess
+from typing import Literal, Optional
+from pathlib import Path
 from app.config import config
 from app.event_db import (
     get_next_pending_event,
@@ -54,7 +56,7 @@ async def process_events():
             row = await get_next_pending_event()
 
             if row:
-                event_id, session_id, hook_event_name, payload, retry_count = row
+                event_id, session_id, hook_event_name, payload, retry_count, arguments_json = row
                 logger.info(
                     f"Processing event {event_id}: {hook_event_name} for session {session_id} (attempt {retry_count + 1}/{config.max_retry_count})"
                 )
@@ -66,6 +68,15 @@ async def process_events():
                 event_data = json.loads(payload)
                 event_data["session_id"] = session_id
                 event_data["hook_event_name"] = hook_event_name
+                
+                # Parse arguments if present
+                arguments = None
+                if arguments_json:
+                    try:
+                        arguments = json.loads(arguments_json)
+                    except json.JSONDecodeError as e:
+                        logger.warning(f"Failed to parse arguments JSON for event {event_id}: {e}")
+                        arguments = None
 
                 # Retry loop
                 current_retry = retry_count
@@ -74,7 +85,7 @@ async def process_events():
 
                 while current_retry < config.max_retry_count and not success:
                     try:
-                        await process_single_event(event_data)
+                        await process_single_event(event_data, arguments)
                         success = True
 
                         # Mark as completed
@@ -110,11 +121,39 @@ async def process_events():
             await asyncio.sleep(ERROR_WAIT_SECONDS)
 
 
+# Sound effect processing
+async def play_sound_effect(sound_file: str):
+    """Play sound effect using the sound player utility."""
+    try:
+        script_dir = Path(__file__).parent.parent  # Go up from app/ to project root
+        sound_player_path = script_dir / "utils" / "sound_player.py"
+        
+        if not sound_player_path.exists():
+            logger.warning(f"Sound player script not found: {sound_player_path}")
+            return False
+            
+        # Run sound player in background (non-blocking)
+        process = await asyncio.create_subprocess_exec(
+            "uv", "run", str(sound_player_path), sound_file,
+            stdout=asyncio.subprocess.DEVNULL,
+            stderr=asyncio.subprocess.DEVNULL
+        )
+        
+        # Don't wait for completion, let it play in background
+        logger.info(f"Triggered sound effect: {sound_file}")
+        return True
+        
+    except Exception as e:
+        logger.warning(f"Failed to play sound effect {sound_file}: {e}")
+        return False
+
+
 # Your custom event processing logic
-async def process_single_event(event_data: dict):
+async def process_single_event(event_data: dict, arguments: Optional[dict] = None):
     """
     Process events based on hook_event_name.
     Expected fields: session_id, hook_event_name
+    Optional arguments: sound_effect, etc.
     """
     # Validate required fields
     if "session_id" not in event_data:
@@ -126,6 +165,12 @@ async def process_single_event(event_data: dict):
     hook_event_name = event_data["hook_event_name"]
 
     logger.info(f"Processing {hook_event_name} event for session {session_id}")
+    
+    # Check for sound effect argument
+    if arguments and "sound_effect" in arguments:
+        sound_file = arguments["sound_effect"]
+        logger.info(f"Sound effect requested: {sound_file}")
+        await play_sound_effect(sound_file)
 
     # Handle different hook event types
     if hook_event_name == HOOK_SESSION_START:

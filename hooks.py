@@ -9,10 +9,11 @@
 # Claude Code hooks entry point
 # Receives hook events from Claude Code via stdin and forwards them to the API server
 
+import argparse
 import json
 import sys
 import requests
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 from app.config import config
 
 
@@ -32,12 +33,15 @@ def read_json_from_stdin() -> Dict[Any, Any]:
         sys.exit(1)
 
 
-def send_to_api(event_data: Dict[Any, Any]) -> bool:
+def send_to_api(event_data: Dict[Any, Any], arguments: Optional[Dict[str, Any]] = None) -> bool:
     """Send event data to the API endpoint."""
     api_url = f"http://{config.host}:{config.port}/events"
 
     try:
         payload = {"data": event_data}
+        if arguments:
+            payload["arguments"] = arguments
+            
         response = requests.post(api_url, json=payload, timeout=30)
         response.raise_for_status()
 
@@ -53,10 +57,45 @@ def send_to_api(event_data: Dict[Any, Any]) -> bool:
         return False
 
 
+def parse_custom_arguments():
+    """
+    Parse any --key=value or --flag arguments dynamically.
+    This makes the script scalable for future parameter additions.
+    """
+    arguments = {}
+    
+    # Process command line arguments manually to support any --key=value format
+    i = 1  # Skip script name
+    while i < len(sys.argv):
+        arg = sys.argv[i]
+        
+        if arg.startswith('--'):
+            key = arg[2:]  # Remove '--' prefix
+            
+            if '=' in key:
+                # Handle --key=value format
+                key, value = key.split('=', 1)
+                # Convert dashes to underscores for Python-friendly keys
+                key = key.replace('-', '_')
+                arguments[key] = value
+            else:
+                # Handle --flag format (boolean)
+                # Convert dashes to underscores for Python-friendly keys
+                key = key.replace('-', '_')
+                arguments[key] = True
+                
+        i += 1
+    
+    return arguments
+
+
 def main():
     """Main function to handle the hook process."""
+    # Parse any custom arguments dynamically
+    arguments = parse_custom_arguments()
+    
     event_data = read_json_from_stdin()
-    success = send_to_api(event_data)
+    success = send_to_api(event_data, arguments if arguments else None)
 
     if not success:
         sys.exit(1)

@@ -4,7 +4,7 @@
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 import logging
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 from app.event_db import queue_event, get_events_status as get_db_events_status
 from app.migrations import get_migration_status
 
@@ -14,6 +14,7 @@ logger = logging.getLogger(__name__)
 class Event(BaseModel):
     """Pydantic model for incoming events."""
     data: Dict[Any, Any]
+    arguments: Optional[Dict[str, Any]] = None
 
 
 def create_app(lifespan=None) -> FastAPI:
@@ -44,7 +45,7 @@ def create_app(lifespan=None) -> FastAPI:
                 )
 
             # Queue event using database module
-            event_id = await queue_event(session_id, hook_event_name, event.data)
+            event_id = await queue_event(session_id, hook_event_name, event.data, event.arguments)
 
             return {
                 "status": "ok",

@@ -25,7 +25,7 @@ async def init_db():
 
 # Event storage functions
 async def queue_event(
-    session_id: str, hook_event_name: str, event_data: Dict[Any, Any]
+    session_id: str, hook_event_name: str, event_data: Dict[Any, Any], arguments: Optional[Dict[str, Any]] = None
 ) -> int:
     """
     Queue an event for processing by storing it in the database.
@@ -33,8 +33,8 @@ async def queue_event(
     """
     async with aiosqlite.connect(DB_PATH) as db:
         cursor = await db.execute(
-            "INSERT INTO events (session_id, hook_event_name, payload) VALUES (?, ?, ?)",
-            (session_id, hook_event_name, json.dumps(event_data)),
+            "INSERT INTO events (session_id, hook_event_name, payload, arguments) VALUES (?, ?, ?, ?)",
+            (session_id, hook_event_name, json.dumps(event_data), json.dumps(arguments) if arguments else None),
         )
         await db.commit()
         event_id = cursor.lastrowid
@@ -89,14 +89,14 @@ async def get_events_status() -> Dict[str, Any]:
         }
 
 
-async def get_next_pending_event() -> Optional[Tuple[int, str, str, str, int]]:
+async def get_next_pending_event() -> Optional[Tuple[int, str, str, str, int, Optional[str]]]:
     """
     Get the next pending event from the queue.
-    Returns tuple of (event_id, session_id, hook_event_name, payload, retry_count) or None.
+    Returns tuple of (event_id, session_id, hook_event_name, payload, retry_count, arguments) or None.
     """
     async with aiosqlite.connect(DB_PATH) as db:
         cursor = await db.execute(
-            "SELECT id, session_id, hook_event_name, payload, retry_count FROM events WHERE status = ? ORDER BY id LIMIT 1",
+            "SELECT id, session_id, hook_event_name, payload, retry_count, arguments FROM events WHERE status = ? ORDER BY id LIMIT 1",
             ("pending",),
         )
         return await cursor.fetchone()

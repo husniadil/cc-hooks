@@ -28,11 +28,11 @@ MIGRATIONS = [
         """,
     },
     # Add future migrations here with incremented version numbers
-    # {
-    #     "version": 2,
-    #     "description": "Add index on session_id",
-    #     "sql": "CREATE INDEX IF NOT EXISTS idx_events_session_id ON events(session_id)"
-    # }
+    {
+        "version": 2,
+        "description": "Add arguments column for hook parameters",
+        "sql": "ALTER TABLE events ADD COLUMN arguments TEXT NULL"
+    }
 ]
 
 
