@@ -11,6 +11,7 @@
 
 import argparse
 import json
+import os
 import sys
 import requests
 from typing import Dict, Any, Optional
@@ -43,6 +44,11 @@ def send_to_api(
         payload = {"data": event_data}
         if arguments:
             payload["arguments"] = arguments
+
+        # Add instance_id from environment variable if available
+        instance_id = os.getenv("CC_INSTANCE_ID")
+        if instance_id:
+            payload["instance_id"] = instance_id
 
         response = requests.post(api_url, json=payload, timeout=30)
         response.raise_for_status()

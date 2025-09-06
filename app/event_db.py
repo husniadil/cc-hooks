@@ -10,8 +10,24 @@ from app.config import config
 DB_PATH = config.db_path
 RECENT_EVENTS_LIMIT = 10
 
+# Global variable to track server start time
+_server_start_time: Optional[str] = None
+
 # Configure logging
 logger = logging.getLogger(__name__)
+
+
+# Server start time management
+async def set_server_start_time(start_time: str):
+    """Set the server start time for filtering events"""
+    global _server_start_time
+    _server_start_time = start_time
+    logger.info(f"Server start time set to: {start_time}")
+
+
+def get_server_start_time() -> Optional[str]:
+    """Get the current server start time"""
+    return _server_start_time
 
 
 # Database initialization
@@ -29,6 +45,7 @@ async def queue_event(
     hook_event_name: str,
     event_data: Dict[Any, Any],
     arguments: Optional[Dict[str, Any]] = None,
+    instance_id: Optional[str] = None,
 ) -> int:
     """
     Queue an event for processing by storing it in the database.
@@ -36,18 +53,20 @@ async def queue_event(
     """
     async with aiosqlite.connect(DB_PATH) as db:
         cursor = await db.execute(
-            "INSERT INTO events (session_id, hook_event_name, payload, arguments) VALUES (?, ?, ?, ?)",
+            "INSERT INTO events (session_id, hook_event_name, payload, arguments, instance_id) VALUES (?, ?, ?, ?, ?)",
             (
                 session_id,
                 hook_event_name,
                 json.dumps(event_data),
                 json.dumps(arguments) if arguments else None,
+                instance_id,
             ),
         )
         await db.commit()
         event_id = cursor.lastrowid
+        instance_info = f" (instance: {instance_id})" if instance_id else ""
         logger.info(
-            f"Event queued successfully with ID {event_id}: {hook_event_name} for session {session_id}"
+            f"Event queued successfully with ID {event_id}: {hook_event_name} for session {session_id}{instance_info}"
         )
         return event_id
 
@@ -71,7 +90,7 @@ async def get_events_status() -> Dict[str, Any]:
 
         cursor = await db.execute(  # get latest events
             """
-            SELECT id, session_id, hook_event_name, status, created_at, processed_at, error_message
+            SELECT id, session_id, hook_event_name, status, created_at, processed_at, error_message, instance_id
             FROM events 
             ORDER BY id DESC 
             LIMIT ?
@@ -91,6 +110,7 @@ async def get_events_status() -> Dict[str, Any]:
                     "created_at": row[4],
                     "processed_at": row[5],
                     "error_message": row[6],
+                    "instance_id": row[7],
                 }
                 for row in recent_events
             ],
@@ -102,13 +122,25 @@ async def get_next_pending_event() -> (
 ):
     """
     Get the next pending event from the queue.
+    Only returns events created at or after server start time.
     Returns tuple of (event_id, session_id, hook_event_name, payload, retry_count, arguments) or None.
     """
     async with aiosqlite.connect(DB_PATH) as db:
-        cursor = await db.execute(
-            "SELECT id, session_id, hook_event_name, payload, retry_count, arguments FROM events WHERE status = ? ORDER BY id LIMIT 1",
-            ("pending",),
-        )
+        server_start = get_server_start_time()
+
+        if server_start:
+            # Only process events created at or after server start time
+            cursor = await db.execute(
+                "SELECT id, session_id, hook_event_name, payload, retry_count, arguments FROM events WHERE status = ? AND created_at >= ? ORDER BY id LIMIT 1",
+                ("pending", server_start),
+            )
+        else:
+            # Fallback to original behavior if start time not set (shouldn't happen in normal operation)
+            logger.warning("Server start time not set, processing all pending events")
+            cursor = await db.execute(
+                "SELECT id, session_id, hook_event_name, payload, retry_count, arguments FROM events WHERE status = ? ORDER BY id LIMIT 1",
+                ("pending",),
+            )
         return await cursor.fetchone()
 
 
@@ -123,19 +155,24 @@ async def mark_event_processing(event_id: int):
 
 async def mark_event_completed(event_id: int, retry_count: int):
     """Mark an event as successfully completed"""
-    from datetime import datetime
+    from datetime import datetime, timezone
 
     async with aiosqlite.connect(DB_PATH) as db:
         await db.execute(
             "UPDATE events SET status = ?, processed_at = ?, retry_count = ? WHERE id = ?",
-            ("completed", datetime.now().isoformat(), retry_count, event_id),
+            (
+                "completed",
+                datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S"),
+                retry_count,
+                event_id,
+            ),
         )
         await db.commit()
 
 
 async def mark_event_failed(event_id: int, retry_count: int, error_message: str):
     """Mark an event as failed after max retries"""
-    from datetime import datetime
+    from datetime import datetime, timezone
 
     async with aiosqlite.connect(DB_PATH) as db:
         await db.execute(
@@ -144,8 +181,22 @@ async def mark_event_failed(event_id: int, retry_count: int, error_message: str)
                 "failed",
                 error_message,
                 retry_count,
-                datetime.now().isoformat(),
+                datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S"),
                 event_id,
             ),
         )
         await db.commit()
+
+
+async def get_last_event_status_for_instance(instance_id: str) -> Optional[str]:
+    """
+    Get status of the last (most recent) event for a specific instance.
+    Returns the status of the last event or None if no events found.
+    """
+    async with aiosqlite.connect(DB_PATH) as db:
+        cursor = await db.execute(
+            "SELECT status FROM events WHERE instance_id = ? ORDER BY id DESC LIMIT 1",
+            (instance_id,),
+        )
+        result = await cursor.fetchone()
+        return result[0] if result else None

@@ -7,17 +7,30 @@ SERVER_SCRIPT="server.py"
 REPL_COMMAND="claude"
 INSTANCES_DIR=".claude-instances"
 INSTANCE_PID=$$
+INSTANCE_UUID=$(uuidgen | tr '[:upper:]' '[:lower:]')
 
 # Function to check if server is responding
 check_server_health() {
     curl -s --connect-timeout 2 http://localhost:$SERVER_PORT/health >/dev/null 2>&1
 }
 
+# Function to check if last event is still pending for this instance
+check_last_event_pending() {
+    local response
+    response=$(curl -s --connect-timeout 2 http://localhost:$SERVER_PORT/instances/$INSTANCE_UUID/last-event 2>/dev/null)
+    if [ $? -eq 0 ]; then
+        # Extract has_pending boolean from JSON response - improved pattern
+        echo "$response" | grep -o '"has_pending":\(true\|false\)' | grep -o '\(true\|false\)'
+    else
+        echo "false"  # Default to false if API call fails
+    fi
+}
+
 # Function to register this instance
 register_instance() {
     mkdir -p "$INSTANCES_DIR"
-    echo "$INSTANCE_PID" > "$INSTANCES_DIR/$INSTANCE_PID.pid"
-    echo "Registered Claude Code instance: $INSTANCE_PID"
+    echo "$INSTANCE_UUID" > "$INSTANCES_DIR/$INSTANCE_PID.pid"
+    echo "Registered Claude Code instance: $INSTANCE_PID (UUID: $INSTANCE_UUID)"
 }
 
 # Function to unregister this instance
@@ -32,7 +45,8 @@ count_active_instances() {
     if [ -d "$INSTANCES_DIR" ]; then
         for pidfile in "$INSTANCES_DIR"/*.pid; do
             if [ -f "$pidfile" ]; then
-                local pid=$(cat "$pidfile")
+                # Extract PID from filename (not file contents which contains UUID)
+                local pid=$(basename "$pidfile" .pid)
                 # Check if process is still running
                 if kill -0 "$pid" 2>/dev/null; then
                     count=$((count + 1))
@@ -109,9 +123,35 @@ if [ -z "$SERVER_PID" ]; then
     SERVER_PID=$(pgrep -f "uv run.*$SERVER_SCRIPT" | head -n1)
 fi
 
-# Cleanup function
+# Cleanup function with graceful shutdown
 cleanup() {
-    # Unregister this instance first
+    echo "Initiating graceful shutdown for instance $INSTANCE_UUID..."
+    
+    # Check if last event is still pending before unregistering
+    local has_pending=$(check_last_event_pending)
+    echo "Last event pending status for this instance: $has_pending"
+    
+    # Wait for last event to complete (max 10 seconds)
+    if [ "$has_pending" = "true" ]; then
+        echo "Waiting for last event to complete..."
+        local wait_count=0
+        while [ "$has_pending" = "true" ] && [ "$wait_count" -lt 10 ]; do
+            sleep 1
+            has_pending=$(check_last_event_pending)
+            wait_count=$((wait_count + 1))
+            if [ "$has_pending" = "true" ]; then
+                echo "Still waiting for last event... (${wait_count}s elapsed)"
+            fi
+        done
+        
+        if [ "$has_pending" = "true" ]; then
+            echo "Warning: Force exiting with last event still pending after 10s timeout"
+        else
+            echo "Last event completed successfully"
+        fi
+    fi
+    
+    # Unregister this instance after waiting for events
     unregister_instance
     
     # Check how many instances are still running
@@ -150,5 +190,6 @@ cleanup() {
 # Trap cleanup on script exit
 trap cleanup EXIT INT TERM
 
-# Start Claude Code with all user arguments
+# Set instance ID environment variable and start Claude Code with all user arguments
+export CC_INSTANCE_ID="$INSTANCE_UUID"
 $REPL_COMMAND "$@"

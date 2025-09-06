@@ -7,6 +7,46 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.3.2] - 2025-09-06
+
+### Added
+
+- **Instance Tracking System**: Comprehensive tracking and identification of Claude Code instances
+  - `CC_INSTANCE_ID` environment variable automatically set by wrapper script
+  - UUID-based instance identification for better session management
+  - Instance-specific event filtering and status tracking
+  - New API endpoint `/instances/{instance_id}/last-event` for per-instance event monitoring
+- **Server Lifecycle Management**: Enhanced startup/shutdown coordination
+  - Server start time tracking for event filtering and session management
+  - Improved instance cleanup during wrapper script shutdown
+  - Better pending event detection before server shutdown
+  - UUID generation and management for unique instance identification
+
+### Enhanced
+
+- **Database Operations**: Added server start time tracking and instance-based event filtering
+  - `set_server_start_time()` and `get_server_start_time()` functions for session boundaries
+  - `get_last_event_status_for_instance()` for instance-specific event monitoring
+  - Improved event queries with server start time filtering
+- **API Endpoints**: Instance-aware event processing and status monitoring
+  - Optional `instance_id` field in event submission model
+  - Enhanced event queuing with automatic instance ID extraction from environment
+  - New instance status endpoint for better session coordination
+- **Wrapper Script**: More robust instance lifecycle management
+  - Automatic UUID generation for unique instance identification
+  - `check_last_event_pending()` function for graceful shutdown coordination
+  - Improved error handling and cleanup during startup/shutdown sequences
+- **Hook Integration**: Automatic instance tracking without user configuration
+  - Environment variable detection for seamless instance identification
+  - Backwards compatible - works with or without instance tracking
+
+### Documentation
+
+- **CLAUDE.md Updates**: Enhanced development workflow and API documentation
+  - Updated API examples with instance tracking usage
+  - Improved server lifecycle troubleshooting section
+  - Better structured development testing commands
+
 ## [0.3.1] - 2025-09-06
 
 ### Added

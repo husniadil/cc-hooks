@@ -33,6 +33,11 @@ MIGRATIONS = [
         "description": "Add arguments column for hook parameters",
         "sql": "ALTER TABLE events ADD COLUMN arguments TEXT NULL",
     },
+    {
+        "version": 3,
+        "description": "Add instance_id column for Claude Code instance tracking",
+        "sql": "ALTER TABLE events ADD COLUMN instance_id TEXT NULL",
+    },
 ]
 
 

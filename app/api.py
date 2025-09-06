@@ -5,7 +5,11 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 import logging
 from typing import Dict, Any, Optional
-from app.event_db import queue_event, get_events_status as get_db_events_status
+from app.event_db import (
+    queue_event,
+    get_events_status as get_db_events_status,
+    get_last_event_status_for_instance,
+)
 from app.migrations import get_migration_status
 
 logger = logging.getLogger(__name__)
@@ -16,6 +20,7 @@ class Event(BaseModel):
 
     data: Dict[Any, Any]
     arguments: Optional[Dict[str, Any]] = None
+    instance_id: Optional[str] = None
 
 
 def create_app(lifespan=None) -> FastAPI:
@@ -47,7 +52,11 @@ def create_app(lifespan=None) -> FastAPI:
 
             # Queue event using database module
             event_id = await queue_event(
-                session_id, hook_event_name, event.data, event.arguments
+                session_id,
+                hook_event_name,
+                event.data,
+                event.arguments,
+                event.instance_id,
             )
 
             return {
@@ -84,6 +93,30 @@ def create_app(lifespan=None) -> FastAPI:
             logger.error(f"Error getting migration status: {e}")
             raise HTTPException(
                 status_code=500, detail="Failed to get migration status"
+            )
+
+    @app.get("/instances/{instance_id}/last-event")
+    async def get_instance_last_event_status(instance_id: str):
+        """Get status of last event for a specific instance.
+
+        Useful for graceful shutdown logic to wait for the last event to complete.
+        Returns the status of the most recent event or null if no events exist.
+        """
+        try:
+            status = await get_last_event_status_for_instance(instance_id)
+            has_pending = status in ("pending", "processing") if status else False
+
+            return {
+                "instance_id": instance_id,
+                "last_event_status": status,
+                "has_pending": has_pending,
+            }
+        except Exception as e:
+            logger.error(
+                f"Error getting last event status for instance {instance_id}: {e}"
+            )
+            raise HTTPException(
+                status_code=500, detail="Failed to get last event status for instance"
             )
 
     return app

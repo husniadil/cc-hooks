@@ -17,9 +17,10 @@ import uvicorn
 import asyncio
 import logging
 import sys
+from datetime import datetime, timezone
 from contextlib import asynccontextmanager
 from app.api import create_app
-from app.event_db import init_db
+from app.event_db import init_db, set_server_start_time
 from app.event_processor import process_events
 from app.config import config
 
@@ -31,9 +32,11 @@ logger = logging.getLogger(__name__)
 async def lifespan(app):
     """Manage application lifecycle for startup and shutdown."""
     # Startup
+    server_start_time = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
     await init_db()
+    await set_server_start_time(server_start_time)
     task = asyncio.create_task(process_events())
-    logger.info("Server started successfully")
+    logger.info(f"Server started successfully at {server_start_time}")
     yield
     # Shutdown
     task.cancel()

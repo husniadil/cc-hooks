@@ -4,7 +4,6 @@
 import asyncio
 import json
 import logging
-import subprocess
 from typing import Literal, Optional
 from pathlib import Path
 from app.config import config

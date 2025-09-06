@@ -18,15 +18,16 @@ The system consists of three main components:
    to the API server
 2. **API Server** (`server.py`) - FastAPI server that receives events, queues them in SQLite, and
    runs the background processor
-3. **Claude Wrapper** (`claude.sh`) - Bash script that manages server lifecycle and launches Claude
-   Code with hooks enabled
+3. **Claude Wrapper** (`claude.sh`) - Bash script that manages server lifecycle, instance tracking,
+   and launches Claude Code with hooks enabled
 
 The event flow:
 
 1. Claude Code triggers a hook (PreToolUse, PostToolUse, etc.)
-2. Hook script receives JSON via stdin and posts to API endpoint
-3. API server queues event to SQLite database
+2. Hook script receives JSON via stdin and posts to API endpoint (with instance ID)
+3. API server queues event to SQLite database with instance tracking
 4. Background processor handles events sequentially with retry logic
+5. Optional TTS announcements provide audio feedback for events
 
 ## Development Commands
 
@@ -84,6 +85,14 @@ curl -X POST http://localhost:12345/events \
 curl -X POST http://localhost:12345/events \
   -H "Content-Type: application/json" \
   -d '{"data": {"session_id": "test", "hook_event_name": "PreToolUse"}, "arguments": {"sound_effect": "sound_effect_cetek.mp3", "debug": true}}'
+
+# Submit event with instance ID
+curl -X POST http://localhost:12345/events \
+  -H "Content-Type: application/json" \
+  -d '{"data": {"session_id": "test", "hook_event_name": "SessionEnd"}, "instance_id": "abc-123"}'
+
+# Check instance last event status
+curl http://localhost:12345/instances/abc-123/last-event
 ```
 
 ### Database Management
@@ -92,8 +101,11 @@ curl -X POST http://localhost:12345/events \
 # View events in database
 sqlite3 events.db "SELECT * FROM events ORDER BY created_at DESC LIMIT 10;"
 
-# View events with arguments
-sqlite3 events.db "SELECT id, session_id, hook_event_name, arguments, status FROM events ORDER BY created_at DESC LIMIT 10;"
+# View events with arguments and instance tracking
+sqlite3 events.db "SELECT id, session_id, hook_event_name, arguments, status, instance_id FROM events ORDER BY created_at DESC LIMIT 10;"
+
+# View events for specific instance
+sqlite3 events.db "SELECT * FROM events WHERE instance_id = 'your-instance-id' ORDER BY created_at DESC;"
 
 # Clear failed events
 sqlite3 events.db "DELETE FROM events WHERE status = 'failed';"
@@ -104,42 +116,18 @@ sqlite3 events.db ".schema events"
 
 ### Development Workflow
 
-#### Before Every Commit
-
-Always follow this workflow before committing changes:
+#### Code Formatting
 
 ```bash
-# 1. Format all code (Python + Prettier)
+# Format all code (Python with Black, JS/JSON with Prettier)
 npm run format
 
-# 2. Update changelog and version (REQUIRED)
-# - Add changes to CHANGELOG.md [Unreleased] section
-# - Move [Unreleased] changes to new [X.Y.Z] section with date
-# - Increment version in package.json to match changelog version
-# - Ensure changelog version section header format: ## [X.Y.Z] - YYYY-MM-DD
-# - Verify both files appear in git diff
+# Format Python code only
+npm run format:py  # or: black . --line-length 88
 
-# 3. Verify changes are ready
-git status  # Should show CHANGELOG.md, package.json, and formatted files
-git diff   # Should show changelog and version updates
-
-# 4. Standard commit workflow
-git add .
-git commit -m "Your commit message"
-
-# 5. Optional: Run integration test after commit
-./claude.sh  # Verify system still works
+# Format JS/JSON/MD only
+npm run format:prettier  # or: prettier --write .
 ```
-
-**IMPORTANT**: CHANGELOG.md and package.json MUST be updated and appear in git diff before every
-commit. This ensures proper version tracking and release management.
-
-**CRITICAL CHANGELOG WORKFLOW**:
-
-1. First add changes to [Unreleased] section
-2. **Then immediately** move those changes to new versioned section: `## [X.Y.Z] - 2025-MM-DD`
-3. Leave [Unreleased] section empty for future changes
-4. **NEVER commit with changes still in [Unreleased]** - they must be in a proper version section
 
 #### Development Testing
 
@@ -155,48 +143,6 @@ npm run start  # Start server + Claude Code wrapper
 
 # Manual hook testing
 echo '{"session_id": "test", "hook_event_name": "Test"}' | uv run hooks.py --sound-effect=sound_effect_tek.mp3
-```
-
-### Changelog and Release Management
-
-The project follows semantic versioning and maintains a detailed changelog:
-
-```bash
-# Development workflow (no changelog needed)
-# - Bug fixes and improvements during active development
-# - Update documentation as needed
-# - Commit changes without changelog entries
-
-# Pre-release workflow (update CHANGELOG.md)
-# 1. Review all changes since last version
-git log --oneline v0.1.0..HEAD
-
-# 2. Update CHANGELOG.md [Unreleased] section with:
-#    - Added: new features
-#    - Changed: modifications to existing functionality
-#    - Deprecated: features marked for removal
-#    - Removed: deleted features
-#    - Fixed: bug fixes
-#    - Security: vulnerability fixes
-
-# 3. Test thoroughly before release
-npm run format
-./claude.sh  # Integration test
-
-# Release workflow
-# 1. Move [Unreleased] changes to new version section in CHANGELOG.md
-#    Format: ## [X.Y.Z] - YYYY-MM-DD (always include date!)
-#    Leave [Unreleased] section empty after moving content
-# 2. Update package.json version to match changelog version exactly
-# 3. Verify both files have matching version numbers
-# 4. Commit and tag release
-git add CHANGELOG.md package.json
-git commit -m "Release v0.x.x"
-git tag v0.x.x
-
-# Version strategy:
-# - 0.x.x: Development phase (current)
-# - 1.x.x: Production ready (stable API, full testing, deployment docs)
 ```
 
 ### Server Lifecycle Troubleshooting
@@ -240,6 +186,7 @@ The system includes an automatic migration system for database schema updates:
 - **Current Migrations**:
   - Version 1: Initial schema with events table
   - Version 2: Added `arguments` column for hook parameters
+  - Version 3: Added `instance_id` column for Claude Code instance tracking
 
 Migration status can be checked via the `/migrations` API endpoint or by querying the database
 directly.
@@ -269,6 +216,8 @@ The system supports dynamic command-line arguments for hooks:
 
 - **Sound Effects**: `--sound-effect=filename.mp3` triggers audio playback during event processing
 - **Debug Mode**: `--debug` enables additional logging and debugging features
+- **TTS Announcements**: `--announce=<volume>` enables text-to-speech event announcements (volume:
+  0.0-1.0)
 - **Custom Arguments**: Any `--key=value` or `--flag` format is supported for extensibility
 
 Arguments are stored in the database `arguments` column and passed to event processors for custom
@@ -284,6 +233,21 @@ The system includes built-in sound effect processing:
 - Synchronous playback to ensure sequential event processing (no sound overlap)
 - Graceful error handling if sound files are missing or audio system unavailable
 
+#### TTS Announcement System
+
+Intelligent context-aware voice announcements for events:
+
+- **Smart Event Mapping**: Maps 19+ different event contexts to appropriate sounds
+- **Context Extraction**: Analyzes event data (tool names, session types) for precise sound
+  selection
+- **Volume Control**: Configurable volume levels (0.0-1.0) via `--announce` argument
+- **Comprehensive Coverage**: Unique sounds for all Claude Code hook event types:
+  - Session events (startup, resume, clear, logout)
+  - Tool events (running, completed, blocked)
+  - Notification events (general, permission, waiting)
+  - Compact mode events (manual, auto)
+- **Testing**: Standalone testing via `uv run utils/tts_announcer.py <event_name>`
+
 ### Server Lifecycle Management
 
 The cc-hooks system implements sophisticated lifecycle management to handle multiple Claude Code
@@ -291,9 +255,12 @@ instances sharing a single server:
 
 #### Instance Tracking
 
-- Each Claude Code session registers itself with a unique PID in `.claude-instances/`
+- Each Claude Code session registers itself with a unique UUID and PID in `.claude-instances/`
+- Instance ID (`CC_INSTANCE_ID`) is passed to hook scripts via environment variable
+- Events are tracked per instance for better session management
 - The wrapper script tracks active instances and cleans up stale PID files automatically
 - Server is only started if no healthy server exists, and only stopped when the last instance exits
+- Graceful shutdown waits for pending events (up to 10 seconds) before terminating
 
 #### Startup Process
 
@@ -306,10 +273,12 @@ instances sharing a single server:
 
 #### Shutdown Process
 
-1. Unregister current instance first
-2. Count remaining active instances
-3. If other instances exist, keep server running
-4. If this is the last instance:
+1. Check for pending events via `/instances/{instance_id}/last-event` endpoint
+2. Wait up to 10 seconds for last event to complete
+3. Unregister current instance after event completion
+4. Count remaining active instances
+5. If other instances exist, keep server running
+6. If this is the last instance:
    - Gracefully shutdown server with SIGTERM
    - Wait up to 3 seconds for clean shutdown
    - Force kill with SIGKILL if needed
@@ -334,14 +303,17 @@ sessions to share the same event processing server efficiently.
 
 ## Important Files
 
-- `hooks.py`: Entry point for Claude Code hooks with dynamic argument parsing
-- `server.py`: Main FastAPI server with lifecycle management
-- `claude.sh`: Wrapper script for server management
-- `app/api.py`: API endpoints for event submission and status with arguments support
-- `app/event_db.py`: Database operations for event queue including arguments column
+- `hooks.py`: Entry point for Claude Code hooks with dynamic argument parsing and instance tracking
+- `server.py`: Main FastAPI server with lifecycle management and hot reload support
+- `claude.sh`: Wrapper script for server management with graceful shutdown
+- `app/api.py`: API endpoints for event submission, status, and instance tracking
+- `app/event_db.py`: Database operations for event queue with instance support
 - `app/event_processor.py`: Background processor with event handling logic and sound effects
 - `app/config.py`: Configuration management from environment variables
 - `app/migrations.py`: Database schema migrations and setup with version tracking
 - `utils/sound_player.py`: Cross-platform sound effect playback utility
-- `sound/`: Directory for audio files used by sound effects feature
+- `utils/tts_announcer.py`: Intelligent TTS announcement system for events
+- `sound/`: Directory for audio files (19+ event-specific sounds)
 - `status-lines/status_line.py`: Custom Claude Code status line implementation
+- `CHANGELOG.md`: Comprehensive version history following Keep a Changelog format
+- `package.json`: Project metadata and npm scripts for development
