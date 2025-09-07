@@ -7,6 +7,69 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.6.0] - 2025-09-07
+
+### Added
+
+- **Contextual Completion Messages**: AI-powered dynamic completion messages for enhanced user
+  experience
+  - `utils/transcript_parser.py` for extracting conversation context from Claude Code JSONL
+    transcripts
+  - Intelligent parsing of user prompts and Claude responses from conversation history
+  - `ConversationContext` class for structured context management with validation
+  - Support for both string and array content formats from Claude Code transcripts
+- **Enhanced OpenRouter Integration**: Extended AI services beyond translation
+  - New `generate_completion_message_if_available()` function for contextual message generation
+  - Separate system prompts for translation vs completion message tasks
+  - Session-aware completion message generation with conversation context
+  - Multi-language support for completion messages respecting `TTS_LANGUAGE` configuration
+- **Smart TTS Text Preparation**: Centralized text processing for all TTS providers
+  - `_prepare_text_for_event()` function consolidating text determination logic
+  - Special Stop event handling using transcript parser + OpenRouter for dynamic messages
+  - Consistent translation workflow across all TTS providers
+  - Graceful fallback to default messages when context unavailable
+
+### Enhanced
+
+- **TTS Providers Architecture**: Simplified and more efficient text processing
+  - Removed duplicated translation logic from individual providers (`GTTSProvider`,
+    `ElevenLabsProvider`)
+  - Providers now use prepared text from `tts_announcer.py` via `_prepared_text` event data field
+  - Better separation of concerns between text preparation and audio generation
+- **Advanced Caching Strategy**: Context-aware caching for optimal performance
+  - `_no_cache` flag support for dynamic content (contextual completion messages)
+  - Static content cached for performance, dynamic content generates fresh for relevance
+  - Per-event caching control ensuring contextual messages remain current
+- **Stop Event Intelligence**: Context-aware completion announcements
+  - Integration with Claude Code transcript files for real conversation context
+  - Dynamic completion messages based on actual user interactions
+  - Falls back to standard completion messages when transcript unavailable
+  - No-cache strategy ensures completion messages reflect current session context
+
+### Changed
+
+- **OpenRouter Service Architecture**: Improved prompt engineering and service separation
+  - Moved Claude Code context from user prompts to dedicated system prompts
+  - Separate system prompts optimized for translation vs completion message generation
+  - Cleaner prompt templates with better context separation
+  - Enhanced completion message prompts with conversation context formatting
+- **TTS Text Processing Flow**: Streamlined text preparation workflow
+  - Centralized text preparation in `tts_announcer.py` before provider calls
+  - Enhanced event data with `_prepared_text` field for provider consumption
+  - Removed translation logic duplication across multiple provider files
+  - Better error handling and fallback chain for text preparation failures
+
+### Documentation
+
+- **CLAUDE.md Enhancements**: Comprehensive documentation updates for new features
+  - New "Contextual Completion Messages" architectural pattern section
+  - Enhanced OpenRouter configuration documentation covering both translation and completion
+    services
+  - Updated TTS system documentation with contextual completion capabilities
+  - Added practical implementation guide for contextual completion messages
+  - Enhanced testing examples for transcript parser and OpenRouter completion generation
+  - Updated important gotchas with TTS caching strategy and transcript parser limitations
+
 ## [0.5.0] - 2025-09-07
 
 ### Added

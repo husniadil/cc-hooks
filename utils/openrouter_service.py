@@ -36,8 +36,8 @@ except ImportError:
 class OpenRouterService:
     """Generic service for interacting with OpenRouter API."""
 
-    # Base Claude Code context (static)
-    _BASE_CLAUDE_CONTEXT = (
+    # System prompt for translation with Claude Code context (static)
+    _TRANSLATION_SYSTEM_PROMPT = (
         "You are translating user interface text for Claude Code, an AI-powered coding assistant.\n\n"
         "Claude Code context:\n"
         "- Claude Code is an AI assistant that helps users with programming and development tasks\n"
@@ -73,6 +73,23 @@ class OpenRouterService:
         "  * type: Event type classification for more specific translation\n"
         "- Always prioritize user-friendly, contextual text over generic messages\n"
         "- Maintain technical accuracy while being specific and informative\n\n"
+    )
+
+    # System prompt for completion message generation (static)
+    _COMPLETION_SYSTEM_PROMPT = (
+        "You are Claude. You will be given context from your conversation with the user.\n\n"
+        "Your response was a long text.\n\n"
+        "From your response, you must create a short single sentence that you will speak "
+        "to replace your previous response.\n\n"
+        "RULES:\n"
+        "1. ONLY 1 SHORT SENTENCE (maximum 10-12 words)\n"
+        "2. Don't be identical to the original response - change the wording but keep the same meaning\n"
+        "3. DO NOT use emojis, symbols, or backticks at all\n"
+        "4. Avoid commas after names (e.g., 'Hello Hus' not 'Hello, Hus!') - TTS friendly\n"
+        "5. Plain text format only\n"
+        "6. Focus on the main point of your response\n"
+        "7. If too long for 1 sentence, pick the most important part\n\n"
+        "Generate ONLY the spoken text, nothing else."
     )
 
     def __init__(
@@ -174,10 +191,15 @@ class OpenRouterService:
                 + (f" (event: {hook_event_name})" if hook_event_name else "")
             )
 
-            # Make API call
+            # Make API call with system prompt
+            messages = [
+                {"role": "system", "content": self._TRANSLATION_SYSTEM_PROMPT},
+                {"role": "user", "content": prompt},
+            ]
+
             response = self.client.chat.completions.create(
                 model=self.model,
-                messages=[{"role": "user", "content": prompt}],
+                messages=messages,
                 max_tokens=150,  # Allow more tokens for context-aware translations
                 temperature=0.3,  # Slightly creative but consistent
                 extra_headers={
@@ -205,62 +227,80 @@ class OpenRouterService:
             logger.error(f"Translation failed: {e}")
             return None
 
-    def generate_text(self, prompt: str, **kwargs) -> Optional[str]:
+    def generate_completion_message(
+        self,
+        session_id: str,
+        user_prompt: Optional[str] = None,
+        claude_response: Optional[str] = None,
+        target_language: str = "en",
+    ) -> Optional[str]:
         """
-        Generate text using OpenRouter (for future extensibility).
+        Generate a contextual completion message based on conversation context.
 
         Args:
-            prompt (str): Input prompt
-            **kwargs: Additional parameters for the API call
+            session_id (str): Claude Code session ID
+            user_prompt (str, optional): Last user prompt from conversation
+            claude_response (str, optional): Last Claude response from conversation
+            target_language (str): Target language for the message (default: "en")
 
         Returns:
-            str or None: Generated text if successful, None if failed
+            str or None: Generated completion message if successful, None if failed
         """
         if not self.is_available():
-            logger.debug("OpenRouter not available for text generation")
+            logger.debug("OpenRouter not available for completion message generation")
+            return None
+
+        if not user_prompt and not claude_response:
+            logger.debug("No conversation context available for completion message")
             return None
 
         try:
-            # Set default parameters
-            params = {
-                "model": self.model,
-                "messages": [{"role": "user", "content": prompt}],
-                "max_tokens": kwargs.get("max_tokens", 150),
-                "temperature": kwargs.get("temperature", 0.7),
-                "extra_headers": {
+            # Create context-aware completion message prompt
+            prompt = self._create_completion_message_prompt(
+                user_prompt, claude_response, target_language
+            )
+
+            logger.info(
+                f"Generating completion message for session {session_id} in {target_language}"
+            )
+
+            # Make API call with system prompt
+            messages = [
+                {"role": "system", "content": self._COMPLETION_SYSTEM_PROMPT},
+                {"role": "user", "content": prompt},
+            ]
+
+            response = self.client.chat.completions.create(
+                model=self.model,
+                messages=messages,
+                max_tokens=50,  # Short completion messages
+                temperature=0.3,  # Consistent but natural
+                extra_headers={
                     "HTTP-Referer": "https://github.com/husniadil/cc-hooks",
                     "X-Title": "Claude Code Hooks",
                 },
-            }
-
-            # Override with any additional kwargs
-            params.update(kwargs)
-
-            logger.info(f"Generating text with model: {self.model}")
-            response = self.client.chat.completions.create(**params)
+            )
 
             if not response.choices or not response.choices[0].message.content:
-                logger.error("Empty response from OpenRouter")
+                logger.error("Empty response from OpenRouter for completion message")
                 return None
 
-            generated_text = response.choices[0].message.content.strip()
+            completion_message = response.choices[0].message.content.strip()
 
             # Remove surrounding quotes that the LLM might add
-            if generated_text.startswith('"') and generated_text.endswith('"'):
-                generated_text = generated_text[1:-1]
-            elif generated_text.startswith("'") and generated_text.endswith("'"):
-                generated_text = generated_text[1:-1]
+            if completion_message.startswith('"') and completion_message.endswith('"'):
+                completion_message = completion_message[1:-1]
+            elif completion_message.startswith("'") and completion_message.endswith(
+                "'"
+            ):
+                completion_message = completion_message[1:-1]
 
-            logger.info("Text generation successful")
-            return generated_text
+            logger.info(f"Completion message generated: '{completion_message}'")
+            return completion_message
 
         except Exception as e:
-            logger.error(f"Text generation failed: {e}")
+            logger.error(f"Completion message generation failed: {e}")
             return None
-
-    def _get_base_claude_context(self) -> str:
-        """Get the base Claude Code context for translation prompts."""
-        return self._BASE_CLAUDE_CONTEXT
 
     def _build_translation_instruction(
         self, source_lang: str, target_lang: str, is_enhancement: bool = False
@@ -283,12 +323,6 @@ class OpenRouterService:
                 f"Maintain the technical context and user-friendly tone. Return only the translation, no explanations:\n\n"
             )
 
-    def _format_prompt_template(
-        self, context: str, event_context: str, instruction: str, text: str
-    ) -> str:
-        """Format the final translation prompt template."""
-        return f'{context}{event_context}{instruction}"{text}"'
-
     def _create_context_aware_translation_prompt(
         self,
         text: str,
@@ -298,57 +332,52 @@ class OpenRouterService:
         event_data: Optional[dict] = None,
     ) -> str:
         """Create a context-aware translation prompt for Claude Code events."""
-        # Get base context
-        claude_context = self._get_base_claude_context()
-
-        # Get event-specific context if available
-        event_context = ""
-        if hook_event_name and event_data:
-            event_context = self._get_event_context(hook_event_name, event_data)
-
         # Build translation instruction
         is_enhancement = source_lang == target_lang == "en"
         task_instruction = self._build_translation_instruction(
             source_lang, target_lang, is_enhancement
         )
 
-        # Format final prompt
-        return self._format_prompt_template(
-            claude_context, event_context, task_instruction, text
-        )
+        # Format final prompt (without base claude context - now in system prompt)
+        return f'{event_data}{task_instruction}"{text}"'
 
-    def _get_event_context(self, hook_event_name: str, event_data: dict) -> str:
-        """Get simplified event context for translation prompt."""
-        if not hook_event_name:
-            return ""
+    def _create_completion_message_prompt(
+        self,
+        user_prompt: Optional[str] = None,
+        claude_response: Optional[str] = None,
+        target_language: str = "en",
+    ) -> str:
+        """Create a prompt for generating contextual completion messages."""
+        context_lines = []
 
-        context_lines = [f"Current event: {hook_event_name}"]
+        if target_language != "en":
+            context_lines.append(
+                f"Generate the your response in language code '{target_language}' (ISO 639-1/639-2 format)."
+            )
+            context_lines.append("")
 
-        # Add specific event data if available
-        if event_data:
-            # Tool information
-            if "tool_name" in event_data:
-                context_lines.append(f"Tool: {event_data['tool_name']}")
+        # Add conversation context
+        context_lines.append("Conversation context:")
+        if user_prompt:
+            # Truncate very long prompts
+            prompt_preview = (
+                user_prompt[:200] + "..." if len(user_prompt) > 200 else user_prompt
+            )
+            context_lines.append(f"User said: {prompt_preview}")
 
-            # Common context fields from Claude Code hook data (matches mappings.py source_fields)
-            if "source" in event_data:
-                context_lines.append(f"Source: {event_data['source']}")
-            if "reason" in event_data:
-                context_lines.append(f"Reason: {event_data['reason']}")
-            if "trigger" in event_data:
-                context_lines.append(f"Trigger: {event_data['trigger']}")
-            if "action" in event_data:
-                context_lines.append(f"Action: {event_data['action']}")
-            if "type" in event_data:
-                context_lines.append(f"Type: {event_data['type']}")
+        if claude_response:
+            # Truncate very long responses
+            response_preview = (
+                claude_response[:300] + "..."
+                if len(claude_response) > 300
+                else claude_response
+            )
+            context_lines.append(f"You said: {response_preview}")
 
-            # Error and notification information
-            if "error" in event_data:
-                context_lines.append(f"Error: {event_data['error']}")
-            if "message" in event_data:
-                context_lines.append(f"Message: {event_data['message']}")
+        if not user_prompt and not claude_response:
+            context_lines.append("No specific context available.")
 
-        return "\n".join(context_lines) + "\n\n" if context_lines else ""
+        return "\n".join(context_lines)
 
 
 # Global instance that will be initialized by config
@@ -401,3 +430,43 @@ def translate_text_if_available(
         event_data=event_data,
     )
     return translated if translated else text
+
+
+def generate_completion_message_if_available(
+    session_id: str,
+    user_prompt: Optional[str] = None,
+    claude_response: Optional[str] = None,
+    target_language: str = "en",
+    fallback_message: str = "Task completed successfully",
+) -> str:
+    """
+    Convenience function to generate completion message if OpenRouter is available.
+    Falls back to default message if generation fails or service unavailable.
+
+    Args:
+        session_id (str): Claude Code session ID
+        user_prompt (str, optional): Last user prompt from conversation
+        claude_response (str, optional): Last Claude response from conversation
+        target_language (str): Target language for the message (default: "en")
+        fallback_message (str): Default message if generation fails
+
+    Returns:
+        str: Generated contextual completion message or fallback message
+    """
+    service = get_openrouter_service()
+    if not service:
+        logger.debug("OpenRouter not available, using fallback completion message")
+        return fallback_message
+
+    completion_message = service.generate_completion_message(
+        session_id=session_id,
+        user_prompt=user_prompt,
+        claude_response=claude_response,
+        target_language=target_language,
+    )
+
+    if completion_message:
+        return completion_message
+    else:
+        logger.debug("Failed to generate completion message, using fallback")
+        return fallback_message

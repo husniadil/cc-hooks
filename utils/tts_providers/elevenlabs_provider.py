@@ -17,7 +17,6 @@ import logging
 from pathlib import Path
 from typing import Dict, Any, Optional
 from .base import TTSProvider
-from .mappings import get_sound_file_for_event, get_audio_description
 
 logger = logging.getLogger(__name__)
 
@@ -127,20 +126,24 @@ class ElevenLabsProvider(TTSProvider):
                 logger.warning(f"No text found for event: {hook_event_name}")
                 return None
 
+            # Check if caching should be disabled for this event
+            no_cache = event_data.get("_no_cache", False)
+
             # Generate cache key based on text, voice, model, and language
             cache_key = self._generate_cache_key(
                 text, self.voice_id, self.model_id, self.language
             )
             cached_file = self.cache_dir / f"{cache_key}.mp3"
 
-            # Return cached file if it exists
-            if self.cache_enabled and cached_file.exists():
+            # Return cached file if it exists and caching is enabled
+            if self.cache_enabled and not no_cache and cached_file.exists():
                 logger.info(f"Using cached ElevenLabs file: {cached_file.name}")
                 return cached_file
 
             # Generate new TTS file
             logger.info(
                 f"Generating ElevenLabs TTS for text: '{text}' with voice: {self.voice_id}"
+                + (" (no-cache)" if no_cache else "")
             )
 
             # Generate audio using ElevenLabs
@@ -148,7 +151,7 @@ class ElevenLabsProvider(TTSProvider):
                 voice_id=self.voice_id, text=text, model_id=self.model_id
             )
 
-            if self.cache_enabled:
+            if self.cache_enabled and not no_cache:
                 # Save to cache
                 with open(cached_file, "wb") as f:
                     for chunk in audio:
@@ -203,7 +206,7 @@ class ElevenLabsProvider(TTSProvider):
     ) -> Optional[str]:
         """
         Get the text to speak for the given hook event.
-        Includes OpenRouter translation if available and target language is not English.
+        Uses prepared text from event_data if available, falls back to event name.
 
         Args:
             hook_event_name (str): Name of the hook event
@@ -212,29 +215,10 @@ class ElevenLabsProvider(TTSProvider):
         Returns:
             str or None: Text to speak if found, None otherwise
         """
-        # Get sound file name from shared mapping
-        sound_file = get_sound_file_for_event(hook_event_name, event_data)
-
-        # Get base text (English description)
-        base_text = None
-        if sound_file:
-            # Get descriptive text for the sound file
-            description = get_audio_description(sound_file)
-            if description:
-                base_text = description
+        # Check for prepared text from tts_announcer
+        prepared_text = event_data.get("_prepared_text")
+        if prepared_text:
+            return prepared_text
 
         # Fallback: use event name as text
-        if not base_text:
-            base_text = hook_event_name.replace("_", " ")
-
-        # Apply OpenRouter translation if available and needed
-        try:
-            from utils.openrouter_service import translate_text_if_available
-
-            translated_text = translate_text_if_available(
-                base_text, self.language, hook_event_name, event_data
-            )
-            return translated_text
-        except ImportError:
-            # OpenRouter service not available, use original text
-            return base_text
+        return hook_event_name.replace("_", " ")

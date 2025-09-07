@@ -80,6 +80,21 @@ The system uses enum-based event constants for validation:
 - **Validation Functions**: `is_valid_hook_event()` prevents invalid event names
 - **API Integration**: Automatic validation in event submission endpoints
 
+#### Contextual Completion Messages (Stop Event Enhancement)
+
+Special handling for Stop events that generates dynamic completion messages:
+
+- **Transcript Integration**: Uses `utils/transcript_parser.py` to extract conversation context from
+  Claude Code JSONL transcripts
+- **AI-Powered Generation**: OpenRouter integration generates contextual completion messages based
+  on actual user prompts and Claude responses
+- **No-Cache Strategy**: Contextual messages bypass TTS caching to ensure freshness and relevance
+- **Graceful Fallback**: Falls back to standard Stop event messages if transcript parsing or AI
+  generation fails
+- **Multi-Language Support**: Generated messages respect `TTS_LANGUAGE` configuration
+- **Context Requirements**: Requires both `session_id` and `transcript_path` in event data for
+  optimal results
+
 ## Development Commands
 
 ### Running the System
@@ -328,14 +343,18 @@ Configuration is managed through environment variables (`.env` file) with defaul
 - `ELEVENLABS_VOICE_ID`: Voice ID to use (default: "21m00Tcm4TlvDq8ikWAM")
 - `ELEVENLABS_MODEL_ID`: Model to use (default: "eleven_flash_v2_5")
 
-#### OpenRouter Configuration (Translation Services)
+#### OpenRouter Configuration (AI Services)
 
 - `OPENROUTER_ENABLED`: Enable OpenRouter integration (default: false)
 - `OPENROUTER_API_KEY`: Your OpenRouter API key
 - `OPENROUTER_MODEL`: Model to use (default: "openai/gpt-4o-mini")
 
-When `TTS_LANGUAGE` is not "en" and OpenRouter is enabled, event descriptions are automatically
-translated to the target language before being sent to TTS providers.
+OpenRouter provides two main services:
+
+1. **Translation Services**: When `TTS_LANGUAGE` is not "en", event descriptions are automatically
+   translated
+2. **Contextual Completion Messages**: For Stop events, generates dynamic completion messages based
+   on conversation context
 
 See `.env.example` for complete configuration options and examples.
 
@@ -380,7 +399,11 @@ Intelligent context-aware voice announcements for events:
 - **Smart Event Mapping**: Maps 19+ different event contexts to appropriate sounds
 - **Context Extraction**: Analyzes event data (tool names, session types) for precise sound
   selection
+- **Contextual Completion Messages**: Stop events use transcript parser and OpenRouter to generate
+  dynamic completion messages based on actual conversation context
 - **Volume Control**: Configurable volume levels (0.0-1.0) via `--announce` argument
+- **Intelligent Caching**: Generated TTS cached for performance, with no-cache option for dynamic
+  content
 - **Comprehensive Coverage**: Unique sounds for all Claude Code hook event types:
   - Session events (startup, resume, clear, logout)
   - Tool events (running, completed, blocked)
@@ -463,7 +486,9 @@ sessions to share the same event processing server efficiently.
   - `gtts_provider.py`: Google Text-to-Speech integration
   - `elevenlabs_provider.py`: ElevenLabs API integration
   - `mappings.py`: Event-to-text mapping configuration
-- `utils/openrouter_service.py`: OpenRouter API integration for translation and text generation
+- `utils/openrouter_service.py`: OpenRouter API integration for translation and contextual
+  completion messages
+- `utils/transcript_parser.py`: Claude Code transcript parser for extracting conversation context
 - `sound/`: Directory for audio files (19+ event-specific sounds)
 - `status-lines/status_line.py`: Custom Claude Code status line implementation
 - `CHANGELOG.md`: Comprehensive version history following Keep a Changelog format
@@ -541,11 +566,40 @@ TTS_PROVIDERS=elevenlabs uv run utils/tts_announcer.py PreToolUse
 # Test all event mappings
 uv run utils/tts_announcer.py test_all
 
+# Test transcript parser standalone
+uv run utils/transcript_parser.py path/to/transcript.jsonl --format=text
+
 # Check provider availability
 python -c "from utils.tts_providers.factory import TTSProviderFactory; print(TTSProviderFactory.get_available_providers())"
 ```
 
-### Testing Translation Integration
+### Implementing Contextual Completion Messages
+
+For events that need dynamic, conversation-aware completion messages:
+
+1. **Ensure OpenRouter is configured** with valid API key in `.env`
+2. **Access transcript data** in event processing via `event_data.get('transcript_path')`
+3. **Use transcript parser** to extract conversation context:
+   ```python
+   from utils.transcript_parser import extract_conversation_context
+   context = extract_conversation_context(transcript_path)
+   ```
+4. **Generate contextual messages** using OpenRouter service:
+   ```python
+   from utils.openrouter_service import generate_completion_message_if_available
+   message = generate_completion_message_if_available(
+       session_id=session_id,
+       user_prompt=context.last_user_prompt,
+       claude_response=context.last_claude_response,
+       target_language="en"
+   )
+   ```
+5. **Set no-cache flag** in event data to prevent caching dynamic content:
+   ```python
+   event_data["_no_cache"] = True
+   ```
+
+### Testing OpenRouter Integration
 
 ```bash
 # Test OpenRouter translation directly
@@ -559,8 +613,23 @@ else:
     print('OpenRouter not configured')
 "
 
+# Test contextual completion message generation
+python -c "
+from utils.openrouter_service import generate_completion_message_if_available
+result = generate_completion_message_if_available(
+    session_id='test',
+    user_prompt='Help me fix this error',
+    claude_response='I found the issue and fixed it by updating the import statement...',
+    target_language='en'
+)
+print(f'Completion message: {result}')
+"
+
 # Test TTS with translation (requires OpenRouter config)
 TTS_LANGUAGE=id OPENROUTER_ENABLED=true uv run utils/tts_announcer.py SessionStart
+
+# Test Stop event with contextual completion (requires transcript)
+echo '{"session_id": "test", "hook_event_name": "Stop", "transcript_path": "path/to/transcript.jsonl"}' | uv run hooks.py --announce=0.8
 ```
 
 ## Important Gotchas
@@ -592,3 +661,9 @@ TTS_LANGUAGE=id OPENROUTER_ENABLED=true uv run utils/tts_announcer.py SessionSta
 
 9. **Translation Fallback**: If OpenRouter translation fails, the system falls back to English text.
    No translation errors will block TTS generation.
+
+10. **TTS Caching Strategy**: Most TTS content is cached for performance, but contextual completion
+    messages use `_no_cache` flag to ensure freshness and relevance for each session.
+
+11. **Transcript Parser Limitations**: Requires valid JSONL format Claude Code transcript files.
+    Missing transcript or parsing errors will gracefully fall back to default completion messages.

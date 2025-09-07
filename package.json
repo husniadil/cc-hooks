@@ -1,7 +1,7 @@
 {
   "name": "cc-hooks",
-  "version": "0.5.0",
-  "description": "Advanced Claude Code hooks processing system with TTS announcements, multilingual AI translation, and event-driven automation",
+  "version": "0.6.0",
+  "description": "Advanced Claude Code hooks processing system with contextual TTS announcements, AI-powered completion messages, multilingual translation, and event-driven automation",
   "private": true,
   "license": "MIT",
   "repository": {

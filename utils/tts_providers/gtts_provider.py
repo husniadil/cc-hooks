@@ -17,7 +17,6 @@ import logging
 from pathlib import Path
 from typing import Dict, Any, Optional
 from .base import TTSProvider
-from .mappings import get_sound_file_for_event, get_audio_description
 
 logger = logging.getLogger(__name__)
 
@@ -81,20 +80,26 @@ class GTTSProvider(TTSProvider):
                 logger.warning(f"No text found for event: {hook_event_name}")
                 return None
 
+            # Check if caching should be disabled for this event
+            no_cache = event_data.get("_no_cache", False)
+
             # Generate cache key
             cache_key = self._generate_cache_key(text, self.language)
             cached_file = self.cache_dir / f"{cache_key}.mp3"
 
-            # Return cached file if it exists
-            if self.cache_enabled and cached_file.exists():
+            # Return cached file if it exists and caching is enabled
+            if self.cache_enabled and not no_cache and cached_file.exists():
                 logger.info(f"Using cached TTS file: {cached_file.name}")
                 return cached_file
 
             # Generate new TTS file
-            logger.info(f"Generating TTS for text: '{text}'")
+            logger.info(
+                f"Generating TTS for text: '{text}'"
+                + (" (no-cache)" if no_cache else "")
+            )
             tts = gTTS(text=text, lang=self.language)
 
-            if self.cache_enabled:
+            if self.cache_enabled and not no_cache:
                 # Save to cache
                 tts.save(str(cached_file))
                 logger.info(f"Saved TTS to cache: {cached_file.name}")
@@ -141,8 +146,7 @@ class GTTSProvider(TTSProvider):
     ) -> Optional[str]:
         """
         Get the text to speak for the given hook event.
-        Uses OpenRouter service for context-aware text generation and translation.
-        Falls back to static mappings if OpenRouter is unavailable.
+        Uses prepared text from event_data if available, falls back to event name.
 
         Args:
             hook_event_name (str): Name of the hook event
@@ -151,29 +155,10 @@ class GTTSProvider(TTSProvider):
         Returns:
             str or None: Text to speak if found, None otherwise
         """
-        # Get sound file name from shared mapping for fallback text
-        sound_file = get_sound_file_for_event(hook_event_name, event_data)
-        fallback_text = None
+        # Check for prepared text from tts_announcer
+        prepared_text = event_data.get("_prepared_text")
+        if prepared_text:
+            return prepared_text
 
-        if sound_file:
-            # Get descriptive text for the sound file
-            description = get_audio_description(sound_file)
-            if description:
-                fallback_text = description
-
-        # Final fallback: use event name as text
-        if not fallback_text:
-            fallback_text = hook_event_name.replace("_", " ")
-
-        # Apply OpenRouter context-aware generation and translation if available
-        try:
-            from utils.openrouter_service import translate_text_if_available
-
-            # This will use existing context-aware translation prompts
-            translated_text = translate_text_if_available(
-                fallback_text, self.language, hook_event_name, event_data
-            )
-            return translated_text
-        except ImportError:
-            # OpenRouter service not available, use fallback text
-            return fallback_text
+        # Fallback: use event name as text
+        return hook_event_name.replace("_", " ")
