@@ -2,12 +2,22 @@
 # Claude Code Wrapper
 
 # Configuration
-SERVER_PORT=12345
 SERVER_SCRIPT="server.py"
 REPL_COMMAND="claude"
 INSTANCES_DIR=".claude-instances"
 INSTANCE_PID=$$
 INSTANCE_UUID=$(uuidgen | tr '[:upper:]' '[:lower:]')
+
+# Load port from .env file or use default
+SERVER_PORT=12222
+if [ -f ".env" ]; then
+    # Source .env file to get environment variables
+    export $(grep -v '^#' .env | grep -v '^$' | xargs)
+fi
+# Use PORT environment variable if available
+if [ -n "$PORT" ]; then
+    SERVER_PORT=$PORT
+fi
 
 # Function to check if server is responding
 check_server_health() {
@@ -86,7 +96,7 @@ echo "Active Claude Code instances: $active_count"
 
 # Check if cc-hooks server is running
 if check_server_health; then
-    echo "cc-hooks server already running"
+    echo "cc-hooks server already running on port $SERVER_PORT"
 else
     # Kill any existing server processes
     pkill -f "uv run.*$SERVER_SCRIPT" 2>/dev/null || true
@@ -99,7 +109,7 @@ else
     # Wait for server to be ready
     for i in {1..10}; do
         if check_server_health; then
-            echo "cc-hooks server started"
+            echo "cc-hooks server started on port $SERVER_PORT"
             break
         fi
         
@@ -192,4 +202,10 @@ trap cleanup EXIT INT TERM
 
 # Set instance ID environment variable and start Claude Code with all user arguments
 export CC_INSTANCE_ID="$INSTANCE_UUID"
+
+# If original directory was passed, change to it before starting Claude
+if [ -n "$CC_ORIGINAL_DIR" ] && [ -d "$CC_ORIGINAL_DIR" ]; then
+    cd "$CC_ORIGINAL_DIR"
+fi
+
 $REPL_COMMAND "$@"

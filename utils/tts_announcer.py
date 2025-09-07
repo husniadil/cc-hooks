@@ -7,6 +7,7 @@
 #   "openai",
 #   "pygame",
 #   "requests",
+#   "python-dotenv",
 # ]
 # ///
 """
@@ -18,7 +19,15 @@ and future providers like ElevenLabs.
 """
 
 import logging
+import sys
+from pathlib import Path
 from typing import Dict, Optional, Any
+
+# Add parent directory to path for utils imports
+current_dir = Path(__file__).parent
+parent_dir = current_dir.parent
+sys.path.insert(0, str(parent_dir))
+
 from utils.sound_player import play_sound
 from utils.tts_manager import get_tts_manager, initialize_tts_manager
 from utils.tts_providers.mappings import get_sound_file_for_event, get_audio_description

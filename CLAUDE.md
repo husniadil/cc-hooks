@@ -145,40 +145,40 @@ echo '{"session_id": "test", "hook_event_name": "Test"}' | uv run hooks.py --sou
 
 ```bash
 # Check if server is running
-curl http://localhost:12345/health
+curl http://localhost:12222/health
 
 # Check event queue status
-curl http://localhost:12345/events/status
+curl http://localhost:12222/events/status
 
 # Check migration status
-curl http://localhost:12345/migrations
+curl http://localhost:12222/migrations
 ```
 
 ### API Usage Examples
 
 ```bash
 # Submit event without arguments
-curl -X POST http://localhost:12345/events \
+curl -X POST http://localhost:12222/events \
   -H "Content-Type: application/json" \
   -d '{"data": {"session_id": "test", "hook_event_name": "SessionStart"}}'
 
 # Submit event with sound effect argument
-curl -X POST http://localhost:12345/events \
+curl -X POST http://localhost:12222/events \
   -H "Content-Type: application/json" \
   -d '{"data": {"session_id": "test", "hook_event_name": "PostToolUse"}, "arguments": {"sound_effect": "sound_effect_tek.mp3"}}'
 
 # Submit event with multiple arguments
-curl -X POST http://localhost:12345/events \
+curl -X POST http://localhost:12222/events \
   -H "Content-Type: application/json" \
   -d '{"data": {"session_id": "test", "hook_event_name": "PreToolUse"}, "arguments": {"sound_effect": "sound_effect_cetek.mp3", "debug": true}}'
 
 # Submit event with instance ID
-curl -X POST http://localhost:12345/events \
+curl -X POST http://localhost:12222/events \
   -H "Content-Type: application/json" \
   -d '{"data": {"session_id": "test", "hook_event_name": "SessionEnd"}, "instance_id": "abc-123"}'
 
 # Check instance last event status
-curl http://localhost:12345/instances/abc-123/last-event
+curl http://localhost:12222/instances/abc-123/last-event
 ```
 
 ### Database Management
@@ -261,7 +261,7 @@ uv run utils/tts_announcer.py test_all      # Test all event mappings
 
 ```bash
 # Check server status and active instances
-curl http://localhost:12345/health
+curl http://localhost:12222/health
 ls -la .claude-instances/
 
 # Force cleanup if server is stuck
@@ -354,7 +354,7 @@ Configuration is managed through environment variables (`.env` file) with defaul
 
 - `DB_PATH`: SQLite database path (default: "events.db")
 - `HOST`: Server host (default: "0.0.0.0")
-- `PORT`: Server port (default: 12345)
+- `PORT`: Server port (default: 12222) - Automatically loaded from .env file by wrapper script
 - `MAX_RETRY_COUNT`: Event retry attempts (default: 3)
 
 #### TTS Configuration
@@ -483,7 +483,7 @@ instances sharing a single server:
 
 #### Server Health Checks
 
-- Health endpoint: `http://localhost:12345/health`
+- Health endpoint: `http://localhost:12222/health`
 - Connection timeout: 2 seconds
 - Used during startup validation and instance management
 

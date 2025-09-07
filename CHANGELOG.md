@@ -7,6 +7,25 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.7.1] - 2025-09-07
+
+### Changed
+
+- **Default Port Configuration**: Updated default server port from 12345 to 12222 across all components
+  - Updated default port in `config.py` and `.env.example` 
+  - Enhanced `claude.sh` wrapper with dynamic port loading from environment
+  - Improved port configuration with .env file integration and fallback handling
+- **Enhanced Wrapper Script**: Improved `claude.sh` with better configuration management
+  - Added CC_ORIGINAL_DIR support for directory context preservation
+  - Enhanced status messages to display actual port being used
+  - Better environment variable loading from .env files
+- **Dependency Management**: Added python-dotenv to hooks.py script dependencies for better environment handling
+
+### Fixed
+
+- **Port Consistency**: Ensured all components use the same configurable port instead of hardcoded values
+- **Environment Loading**: Improved environment variable handling in wrapper script
+
 ## [0.7.0] - 2025-09-07
 
 ### Added

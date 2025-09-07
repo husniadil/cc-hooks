@@ -4,6 +4,7 @@
 # dependencies = [
 #     "requests",
 #     "elevenlabs",
+#     "openai",
 # ]
 # ///
 """
@@ -17,9 +18,21 @@ import json
 import os
 import subprocess
 import shutil
-from config import config
+from pathlib import Path
 from datetime import datetime
 import re
+
+# Add parent directory to path for config import
+current_dir = Path(__file__).parent
+parent_dir = current_dir.parent
+sys.path.insert(0, str(parent_dir))
+
+try:
+    from config import config
+except ImportError:
+    # Fallback if config module still can't be imported
+    print("Warning: Could not import config module", file=sys.stderr)
+    config = None
 
 
 class StatusLine:
@@ -199,10 +212,19 @@ class StatusLine:
 
     def _get_cc_hooks_health(self):
         """Get cc-hooks server health status"""
+        # Get port from config or use default
+        port = 12222
+        if config is not None:
+            try:
+                port = config.port
+            except AttributeError:
+                # Fallback if config doesn't have port attribute
+                pass
+        
         try:
             import requests
 
-            response = requests.get("http://localhost:12345/health", timeout=2)
+            response = requests.get(f"http://localhost:{port}/health", timeout=2)
             if response.status_code == 200:
                 return True, "✅", "online"
             else:
@@ -254,8 +276,8 @@ class StatusLine:
 
             # Get cost information
             cost_usd = active_block.get("costUSD", "")
-            burn_rate = active_block.get("burnRate", {})
-            cost_per_hour = burn_rate.get("costPerHour", "")
+            burn_rate = active_block.get("burnRate") or {}
+            cost_per_hour = burn_rate.get("costPerHour", "") if isinstance(burn_rate, dict) else ""
 
             # Session time calculation
             reset_time_str = active_block.get(
@@ -295,6 +317,10 @@ class StatusLine:
 
         # Check if ElevenLabs is configured by checking TTS providers and API key
         try:
+            if config is None:
+                self._debug_log("config module not available")
+                return elevenlabs_info, elevenlabs_enabled
+                
             # Check if elevenlabs is in TTS_PROVIDERS list
             tts_providers_list = config.get_tts_providers_list()
             has_elevenlabs_provider = "elevenlabs" in tts_providers_list
@@ -311,11 +337,18 @@ class StatusLine:
         except ImportError:
             self._debug_log("python-dotenv not available for ElevenLabs check")
             return elevenlabs_info, elevenlabs_enabled
+        except Exception as e:
+            self._debug_log(f"Error accessing config: {e}")
+            return elevenlabs_info, elevenlabs_enabled
 
         if not elevenlabs_enabled:
             self._debug_log("ElevenLabs not properly configured")
             return elevenlabs_info, elevenlabs_enabled
 
+        if config is None:
+            self._debug_log("config module not available for API key check")
+            return elevenlabs_info, elevenlabs_enabled
+            
         api_key = config.elevenlabs_api_key
         if not api_key:
             self._debug_log("ElevenLabs API key not found")
@@ -413,7 +446,7 @@ class StatusLine:
         git_branch, git_status = self._get_git_info()
 
         # CC-Hooks health check
-        cc_hooks_healthy, cc_hooks_emoji, cc_hooks_status = self._get_cc_hooks_health()
+        _, cc_hooks_emoji, _ = self._get_cc_hooks_health()
 
         # Usage information
         session_txt, session_pct, session_bar, cost_usd, cost_per_hour = (

@@ -15,7 +15,7 @@ class Config:
 
     db_path: str = "events.db"
     host: str = "0.0.0.0"
-    port: int = 12345
+    port: int = 12222
     max_retry_count: int = 3
 
     # TTS Configuration
@@ -41,7 +41,7 @@ class Config:
         return cls(
             db_path=os.getenv("DB_PATH", "events.db"),
             host=os.getenv("HOST", "0.0.0.0"),
-            port=int(os.getenv("PORT", "12345")),
+            port=int(os.getenv("PORT", "12222")),
             max_retry_count=int(os.getenv("MAX_RETRY_COUNT", "3")),
             # TTS Configuration
             tts_providers=os.getenv("TTS_PROVIDERS", "prerecorded"),

@@ -7,6 +7,7 @@
 #     "gtts",
 #     "elevenlabs",
 #     "pygame",
+#     "python-dotenv",
 # ]
 # ///
 
