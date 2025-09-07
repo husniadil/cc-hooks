@@ -92,11 +92,37 @@ class OpenRouterService:
         "Generate ONLY the spoken text, nothing else."
     )
 
+    # System prompt for PreToolUse message generation (static)
+    _PRE_TOOL_SYSTEM_PROMPT = (
+        "You are Claude. You will be given context from your conversation with the user "
+        "and information about a programming tool you're about to use.\n\n"
+        "Create a short single sentence that describes what you're about to do based on "
+        "the user's request and your planned response.\n\n"
+        "RULES:\n"
+        "1. ONLY 1 SHORT SENTENCE (maximum 10-12 words)\n"
+        "2. Focus on the USER'S REQUEST and what you're doing to fulfill it\n"
+        "3. Make it sound natural, like you're explaining your next action\n"
+        "4. Tool name is supplementary context - don't always mention it explicitly\n"
+        "5. DO NOT use emojis, symbols, or backticks at all\n"
+        "6. Avoid commas after names (e.g., 'Let me check the file' not 'Let me check the file, Hus') - TTS friendly\n"
+        "7. Plain text format only\n"
+        "8. Be action-oriented and conversational\n\n"
+        "Examples of good messages:\n"
+        "- 'Installing the dependencies you requested'\n"
+        "- 'Checking the configuration file you mentioned'\n"
+        "- 'Creating the component you asked for'\n"
+        "- 'Running the build process now'\n"
+        "- 'Let me examine that error for you'\n\n"
+        "Generate ONLY the spoken text, nothing else."
+    )
+
     def __init__(
         self,
         api_key: str,
         model: str = "openai/gpt-4o-mini",
         enabled: bool = True,
+        contextual_stop: bool = False,
+        contextual_pretooluse: bool = False,
     ):
         """
         Initialize OpenRouter service.
@@ -105,10 +131,14 @@ class OpenRouterService:
             api_key (str): OpenRouter API key
             model (str): Default model to use
             enabled (bool): Whether the service is enabled
+            contextual_stop (bool): Whether contextual Stop messages are enabled
+            contextual_pretooluse (bool): Whether contextual PreToolUse messages are enabled
         """
         self.api_key = api_key
         self.model = model
         self.enabled = enabled
+        self.contextual_stop = contextual_stop
+        self.contextual_pretooluse = contextual_pretooluse
         self._client = None
         self._is_available = None
 
@@ -246,6 +276,10 @@ class OpenRouterService:
         Returns:
             str or None: Generated completion message if successful, None if failed
         """
+        if not self.contextual_stop:
+            logger.debug("Contextual Stop messages are disabled")
+            return None
+
         if not self.is_available():
             logger.debug("OpenRouter not available for completion message generation")
             return None
@@ -300,6 +334,85 @@ class OpenRouterService:
 
         except Exception as e:
             logger.error(f"Completion message generation failed: {e}")
+            return None
+
+    def generate_pre_tool_message(
+        self,
+        session_id: str,
+        tool_name: str,
+        user_prompt: Optional[str] = None,
+        claude_response: Optional[str] = None,
+        target_language: str = "en",
+    ) -> Optional[str]:
+        """
+        Generate a contextual PreToolUse message based on conversation context and tool info.
+
+        Args:
+            session_id (str): Claude Code session ID
+            tool_name (str): Name of the tool about to be used
+            user_prompt (str, optional): Last user prompt from conversation
+            claude_response (str, optional): Last Claude response from conversation
+            target_language (str): Target language for the message (default: "en")
+
+        Returns:
+            str or None: Generated PreToolUse message if successful, None if failed
+        """
+        if not self.contextual_pretooluse:
+            logger.debug("Contextual PreToolUse messages are disabled")
+            return None
+
+        if not self.is_available():
+            logger.debug("OpenRouter not available for PreToolUse message generation")
+            return None
+
+        if not user_prompt and not claude_response:
+            logger.debug("No conversation context available for PreToolUse message")
+            return None
+
+        try:
+            # Create context-aware PreToolUse message prompt
+            prompt = self._create_pre_tool_message_prompt(
+                tool_name, user_prompt, claude_response, target_language
+            )
+
+            logger.info(
+                f"Generating PreToolUse message for session {session_id} using {tool_name} in {target_language}"
+            )
+
+            # Make API call with system prompt
+            messages = [
+                {"role": "system", "content": self._PRE_TOOL_SYSTEM_PROMPT},
+                {"role": "user", "content": prompt},
+            ]
+
+            response = self.client.chat.completions.create(
+                model=self.model,
+                messages=messages,
+                max_tokens=50,  # Short action messages
+                temperature=0.3,  # Consistent but natural
+                extra_headers={
+                    "HTTP-Referer": "https://github.com/husniadil/cc-hooks",
+                    "X-Title": "Claude Code Hooks",
+                },
+            )
+
+            if not response.choices or not response.choices[0].message.content:
+                logger.error("Empty response from OpenRouter for PreToolUse message")
+                return None
+
+            pre_tool_message = response.choices[0].message.content.strip()
+
+            # Remove surrounding quotes that the LLM might add
+            if pre_tool_message.startswith('"') and pre_tool_message.endswith('"'):
+                pre_tool_message = pre_tool_message[1:-1]
+            elif pre_tool_message.startswith("'") and pre_tool_message.endswith("'"):
+                pre_tool_message = pre_tool_message[1:-1]
+
+            logger.info(f"PreToolUse message generated: '{pre_tool_message}'")
+            return pre_tool_message
+
+        except Exception as e:
+            logger.error(f"PreToolUse message generation failed: {e}")
             return None
 
     def _build_translation_instruction(
@@ -379,6 +492,49 @@ class OpenRouterService:
 
         return "\n".join(context_lines)
 
+    def _create_pre_tool_message_prompt(
+        self,
+        tool_name: str,
+        user_prompt: Optional[str] = None,
+        claude_response: Optional[str] = None,
+        target_language: str = "en",
+    ) -> str:
+        """Create a prompt for generating contextual PreToolUse messages."""
+        context_lines = []
+
+        if target_language != "en":
+            context_lines.append(
+                f"Generate your response in language code '{target_language}' (ISO 639-1/639-2 format)."
+            )
+            context_lines.append("")
+
+        # Add tool context
+        context_lines.append(f"Tool to be used: {tool_name}")
+        context_lines.append("")
+
+        # Add conversation context
+        context_lines.append("Conversation context:")
+        if user_prompt:
+            # Truncate very long prompts
+            prompt_preview = (
+                user_prompt[:200] + "..." if len(user_prompt) > 200 else user_prompt
+            )
+            context_lines.append(f"User requested: {prompt_preview}")
+
+        if claude_response:
+            # Truncate very long responses
+            response_preview = (
+                claude_response[:300] + "..."
+                if len(claude_response) > 300
+                else claude_response
+            )
+            context_lines.append(f"You are about to: {response_preview}")
+
+        if not user_prompt and not claude_response:
+            context_lines.append("No specific context available.")
+
+        return "\n".join(context_lines)
+
 
 # Global instance that will be initialized by config
 _openrouter_service: Optional[OpenRouterService] = None
@@ -389,11 +545,21 @@ def get_openrouter_service() -> Optional[OpenRouterService]:
     return _openrouter_service
 
 
-def initialize_openrouter_service(api_key: str, model: str, enabled: bool) -> None:
+def initialize_openrouter_service(
+    api_key: str,
+    model: str,
+    enabled: bool,
+    contextual_stop: bool = False,
+    contextual_pretooluse: bool = False,
+) -> None:
     """Initialize the global OpenRouter service instance."""
     global _openrouter_service
     _openrouter_service = OpenRouterService(
-        api_key=api_key, model=model, enabled=enabled
+        api_key=api_key,
+        model=model,
+        enabled=enabled,
+        contextual_stop=contextual_stop,
+        contextual_pretooluse=contextual_pretooluse,
     )
     logger.info("OpenRouter service initialized")
 
@@ -469,4 +635,59 @@ def generate_completion_message_if_available(
         return completion_message
     else:
         logger.debug("Failed to generate completion message, using fallback")
+        return fallback_message
+
+
+def generate_pre_tool_message_if_available(
+    session_id: str,
+    tool_name: str,
+    user_prompt: Optional[str] = None,
+    claude_response: Optional[str] = None,
+    target_language: str = "en",
+    fallback_message: Optional[str] = None,
+) -> str:
+    """
+    Convenience function to generate PreToolUse message if OpenRouter is available.
+    Falls back to default message if generation fails or service unavailable.
+
+    Args:
+        session_id (str): Claude Code session ID
+        tool_name (str): Name of the tool about to be used
+        user_prompt (str, optional): Last user prompt from conversation
+        claude_response (str, optional): Last Claude response from conversation
+        target_language (str): Target language for the message (default: "en")
+        fallback_message (str, optional): Default message if generation fails (auto-generated if None)
+
+    Returns:
+        str: Generated contextual PreToolUse message or fallback message
+    """
+    # Import the tool name shortening function
+    try:
+        from utils.tts_announcer import _shorten_tool_name_for_tts
+
+        short_tool_name = _shorten_tool_name_for_tts(tool_name)
+    except ImportError:
+        short_tool_name = tool_name
+
+    service = get_openrouter_service()
+    if not service:
+        if fallback_message is None:
+            fallback_message = f"Running {short_tool_name} tool"
+        logger.debug("OpenRouter not available, using fallback PreToolUse message")
+        return fallback_message
+
+    pre_tool_message = service.generate_pre_tool_message(
+        session_id=session_id,
+        tool_name=tool_name,
+        user_prompt=user_prompt,
+        claude_response=claude_response,
+        target_language=target_language,
+    )
+
+    if pre_tool_message:
+        return pre_tool_message
+    else:
+        if fallback_message is None:
+            fallback_message = f"Running {short_tool_name} tool"
+        logger.debug("Failed to generate PreToolUse message, using fallback")
         return fallback_message

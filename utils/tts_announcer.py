@@ -27,6 +27,86 @@ from utils.tts_providers.mappings import get_sound_file_for_event, get_audio_des
 logger = logging.getLogger(__name__)
 
 
+def _clean_text_for_tts(text: str) -> str:
+    """
+    Clean text for TTS by removing formatting characters that would be read aloud.
+
+    Args:
+        text: Original text that may contain markdown formatting
+
+    Returns:
+        Cleaned text suitable for TTS
+    """
+    if not text:
+        return text
+
+    import re
+
+    # First handle content inside backticks and other formatting - convert underscores to spaces FIRST
+    def process_content(match):
+        content = match.group(1)
+        return re.sub(r"_", " ", content)
+
+    # Remove backticks and keep content, converting underscores to spaces
+    cleaned = re.sub(r"`([^`]+)`", process_content, text)  # Single backticks
+    cleaned = re.sub(r"```([^`]+)```", process_content, cleaned)  # Triple backticks
+    cleaned = re.sub(r"`", " ", cleaned)  # Any remaining backticks become spaces
+
+    # Remove markdown bold/italic markers but keep content, converting underscores to spaces
+    cleaned = re.sub(r"\*\*([^*]+)\*\*", process_content, cleaned)  # Bold
+    cleaned = re.sub(r"\*([^*]+)\*", process_content, cleaned)  # Italic
+    cleaned = re.sub(
+        r"__(.*?)__", process_content, cleaned
+    )  # Bold underscore (non-greedy)
+    cleaned = re.sub(
+        r"_(.*?)_", process_content, cleaned
+    )  # Italic underscore (non-greedy)
+    cleaned = re.sub(r"~~([^~]+)~~", process_content, cleaned)  # Strikethrough
+
+    # Remove markdown links but keep the text
+    cleaned = re.sub(r"\[([^\]]+)\]\([^\)]+\)", r"\1", cleaned)
+
+    # Convert any remaining underscores to spaces (so they're not pronounced as "underscore")
+    cleaned = re.sub(r"_", " ", cleaned)
+
+    # Remove remaining formatting symbols
+    cleaned = re.sub(r"[#*~]", "", cleaned)
+
+    # Clean up multiple spaces and trim
+    cleaned = re.sub(r"\s+", " ", cleaned).strip()
+
+    return cleaned
+
+
+def _shorten_tool_name_for_tts(tool_name: str, max_length: int = 20) -> str:
+    """
+    Shorten tool name for TTS announcements if too long.
+
+    Args:
+        tool_name: Original tool name
+        max_length: Maximum length for tool name in TTS
+
+    Returns:
+        Shortened tool name suitable for TTS
+    """
+    if not tool_name or len(tool_name) <= max_length:
+        return tool_name
+
+    # Handle MCP tools specially - extract the meaningful part
+    if tool_name.startswith("mcp__"):
+        parts = tool_name.split("__")
+        if len(parts) >= 3:
+            # For mcp__provider__tool pattern, use just the tool name
+            meaningful_part = parts[-1]
+            # If still too long, take first part of tool name
+            if len(meaningful_part) > max_length:
+                return meaningful_part[:max_length].rstrip("_-")
+            return meaningful_part
+
+    # For other long tool names, just truncate
+    return tool_name[:max_length].rstrip("_-")
+
+
 def initialize_tts(providers: Optional[list] = None, **kwargs):
     """
     Initialize the TTS system with ordered provider list.
@@ -161,6 +241,101 @@ def _prepare_text_for_event(
             except ImportError:
                 return fallback_text
 
+    # Special handling for PreToolUse events - use transcript parser for contextual messages
+    if hook_event_name == "PreToolUse":
+        try:
+            from utils.transcript_parser import extract_conversation_context
+            from utils.openrouter_service import (
+                generate_pre_tool_message_if_available,
+            )
+
+            # Get session_id and tool_name from event data
+            session_id = event_data.get("session_id")
+            tool_name = event_data.get("tool_name", "unknown")
+
+            if not session_id:
+                logger.warning(
+                    "No session_id in PreToolUse event data, using fallback message"
+                )
+                short_tool_name = _shorten_tool_name_for_tts(tool_name)
+                fallback_text = f"Running {short_tool_name} tool"
+                # Apply translation to fallback text
+                try:
+                    from utils.openrouter_service import translate_text_if_available
+
+                    return translate_text_if_available(
+                        fallback_text, language, hook_event_name, event_data
+                    )
+                except ImportError:
+                    return fallback_text
+
+            # Get transcript path from event data
+            transcript_path = event_data.get("transcript_path")
+            if not transcript_path:
+                logger.info(
+                    f"No transcript found for session {session_id}, using fallback message"
+                )
+                short_tool_name = _shorten_tool_name_for_tts(tool_name)
+                fallback_text = f"Running {short_tool_name} tool"
+                # Apply translation to fallback text
+                try:
+                    from utils.openrouter_service import translate_text_if_available
+
+                    return translate_text_if_available(
+                        fallback_text, language, hook_event_name, event_data
+                    )
+                except ImportError:
+                    return fallback_text
+
+            # Extract conversation context
+            context = extract_conversation_context(transcript_path)
+            if not context.has_context():
+                logger.info(
+                    "No meaningful conversation context found, using fallback message"
+                )
+                short_tool_name = _shorten_tool_name_for_tts(tool_name)
+                fallback_text = f"Running {short_tool_name} tool"
+                # Apply translation to fallback text
+                try:
+                    from utils.openrouter_service import translate_text_if_available
+
+                    return translate_text_if_available(
+                        fallback_text, language, hook_event_name, event_data
+                    )
+                except ImportError:
+                    return fallback_text
+
+            # Generate contextual PreToolUse message
+            pre_tool_message = generate_pre_tool_message_if_available(
+                session_id=session_id,
+                tool_name=tool_name,
+                user_prompt=context.last_user_prompt,
+                claude_response=context.last_claude_response,
+                target_language=language,
+                fallback_message=f"Running {_shorten_tool_name_for_tts(tool_name)} tool",
+            )
+
+            logger.info(
+                f"Generated contextual PreToolUse message: '{pre_tool_message}'"
+            )
+            return pre_tool_message
+
+        except Exception as e:
+            logger.error(f"Error generating contextual PreToolUse message: {e}")
+            # Fall back to default PreToolUse message
+            tool_name = event_data.get("tool_name", "unknown")
+            short_tool_name = _shorten_tool_name_for_tts(tool_name)
+            fallback_text = f"Running {short_tool_name} tool"
+            # Apply translation to fallback text
+            try:
+                from utils.openrouter_service import translate_text_if_available
+
+                return translate_text_if_available(
+                    fallback_text, language, hook_event_name, event_data
+                )
+            except ImportError:
+                return fallback_text
+
     # For all other events, use existing logic
     # Get sound file name from shared mapping
     sound_file = get_sound_file_for_event(hook_event_name, event_data)
@@ -219,11 +394,14 @@ def announce_event(
         )
 
         if prepared_text:
+            # Clean text for TTS (remove backticks and formatting)
+            cleaned_text = _clean_text_for_tts(prepared_text)
+
             # Add prepared text to event_data for TTS providers
             enhanced_event_data = event_data.copy()
-            enhanced_event_data["_prepared_text"] = prepared_text
+            enhanced_event_data["_prepared_text"] = cleaned_text
             # Mark contextual completion messages as no-cache
-            if hook_event_name == "Stop":
+            if hook_event_name == "Stop" or hook_event_name == "PreToolUse":
                 enhanced_event_data["_no_cache"] = True
         else:
             enhanced_event_data = event_data

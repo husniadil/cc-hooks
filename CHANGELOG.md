@@ -7,6 +7,69 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.7.0] - 2025-09-07
+
+### Added
+
+- **Contextual PreToolUse Messages**: AI-powered action-oriented messages for enhanced tool execution awareness
+  - New `generate_pre_tool_message()` function in `OpenRouterService` for dynamic PreToolUse message generation
+  - Dedicated system prompt optimized for action descriptions rather than tool announcements
+  - Context-first approach describing what Claude will do based on user's request
+  - Natural conversational messages like "Installing the dependencies you requested" instead of "Running Bash tool"
+  - Separate configuration control via `OPENROUTER_CONTEXTUAL_PRETOOLUSE` environment variable
+  - `generate_pre_tool_message_if_available()` convenience function with graceful fallbacks
+- **Enhanced Session Management**: Improved memory management for transcript parsing
+  - Session cleanup logic in `handle_session_end()` and `handle_stop()` event handlers
+  - `clear_last_processed_message()` function for removing session-specific tracking data
+  - `cleanup_old_processed_files()` function for automatic cleanup of old processed files (24 hours+)
+  - Better memory management preventing accumulation of tracking files across sessions
+- **Cost Control Configuration**: Granular control over contextual message features
+  - `OPENROUTER_CONTEXTUAL_STOP` and `OPENROUTER_CONTEXTUAL_PRETOOLUSE` environment variables
+  - Both contextual features disabled by default to prevent unexpected API costs
+  - Independent control allowing users to enable only desired contextual features
+  - Translation services remain available regardless of contextual message settings
+
+### Enhanced
+
+- **OpenRouter Service Architecture**: Extended service capabilities beyond completion messages
+  - Enhanced constructor with `contextual_stop` and `contextual_pretooluse` parameters
+  - Feature-specific enablement checking preventing unnecessary API calls when disabled
+  - Improved prompt engineering with action-oriented system prompts for PreToolUse messages
+  - Better separation between translation, completion, and PreToolUse message generation services
+- **Transcript Parser Integration**: Better handling of conversation context extraction
+  - Enhanced logic for Stop event processing in transcript parsing
+  - Improved message hash tracking system for preventing duplicate processing
+  - Better error handling and graceful fallbacks when transcript parsing fails
+- **Configuration Management**: Extended configuration system for contextual features
+  - New configuration fields in root `config.py` for contextual message control
+  - Proper service initialization with contextual feature flags
+  - Complete `.env.example` updates with contextual message configuration examples
+
+### Changed
+
+- **OpenRouter Service Initialization**: Updated service creation with contextual feature parameters
+  - Modified `initialize_openrouter_service()` function signature to include contextual flags
+  - Updated service instantiation in `config.py` to pass contextual configuration
+  - Better service lifecycle management with feature-specific initialization
+- **Event Processing Cleanup**: Enhanced session lifecycle management
+  - Proactive cleanup in Stop and SessionEnd event handlers
+  - Automatic removal of stale tracking files during session transitions
+  - Improved error handling for cleanup operations with warning-level logging
+
+### Documentation
+
+- **CLAUDE.md Comprehensive Updates**: Complete documentation for contextual PreToolUse messages
+  - New "Contextual PreToolUse Messages" architectural pattern section
+  - Enhanced OpenRouter configuration documentation covering all three service types
+  - Updated testing examples for contextual PreToolUse message generation
+  - Expanded cost control documentation with selective enablement examples
+  - Additional troubleshooting scenarios for contextual message features
+- **Configuration Examples**: Real-world usage scenarios for contextual features
+  - Complete `.env.example` updates with contextual message configuration examples
+  - Multiple configuration scenarios showing different feature combinations
+  - Cost-effective model recommendations for contextual message generation
+  - Testing commands for validating contextual PreToolUse functionality
+
 ## [0.6.0] - 2025-09-07
 
 ### Added

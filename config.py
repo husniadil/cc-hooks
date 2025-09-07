@@ -32,6 +32,8 @@ class Config:
     openrouter_enabled: bool = False
     openrouter_api_key: str = ""
     openrouter_model: str = "openai/gpt-4o-mini"
+    openrouter_contextual_stop: bool = False
+    openrouter_contextual_pretooluse: bool = False
 
     @classmethod
     def from_env(cls) -> "Config":
@@ -56,6 +58,14 @@ class Config:
             == "true",
             openrouter_api_key=os.getenv("OPENROUTER_API_KEY", ""),
             openrouter_model=os.getenv("OPENROUTER_MODEL", "openai/gpt-4o-mini"),
+            openrouter_contextual_stop=os.getenv(
+                "OPENROUTER_CONTEXTUAL_STOP", "false"
+            ).lower()
+            == "true",
+            openrouter_contextual_pretooluse=os.getenv(
+                "OPENROUTER_CONTEXTUAL_PRETOOLUSE", "false"
+            ).lower()
+            == "true",
         )
 
     def get_tts_providers_list(self) -> list:
@@ -75,6 +85,8 @@ try:
         api_key=config.openrouter_api_key,
         model=config.openrouter_model,
         enabled=config.openrouter_enabled,
+        contextual_stop=config.openrouter_contextual_stop,
+        contextual_pretooluse=config.openrouter_contextual_pretooluse,
     )
 except ImportError:
     # OpenRouter service dependencies not available, service will be unavailable

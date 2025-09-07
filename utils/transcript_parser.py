@@ -12,12 +12,98 @@ and extract conversation context for enhanced event processing.
 """
 
 import argparse
+import hashlib
 import json
 import logging
+import os
+import tempfile
 from pathlib import Path
 from typing import Optional, Dict, Any, List
 
 logger = logging.getLogger(__name__)
+
+
+def _get_temp_dir() -> Path:
+    """Get or create temporary directory for transcript tracking."""
+    temp_dir = Path(".claude-instances")
+    temp_dir.mkdir(exist_ok=True)
+    return temp_dir
+
+
+def _get_message_hash(entry: Dict[str, Any]) -> str:
+    """Generate a hash for a message entry to use as unique identifier."""
+    # Use timestamp, type, and content hash as unique identifier
+    timestamp = entry.get("timestamp", "")
+    msg_type = entry.get("type", "")
+    message_content = str(entry.get("message", {}))
+
+    # Create hash from combination of these fields
+    content_to_hash = f"{timestamp}_{msg_type}_{message_content}"
+    return hashlib.sha256(content_to_hash.encode()).hexdigest()[:16]
+
+
+def _get_last_processed_file(session_id: str) -> Path:
+    """Get path to file tracking last processed message for a session."""
+    temp_dir = _get_temp_dir()
+    return temp_dir / f"last-processed-{session_id}.txt"
+
+
+def _save_last_processed_message(session_id: str, message_hash: str) -> None:
+    """Save the hash of the last processed Claude message."""
+    try:
+        last_processed_file = _get_last_processed_file(session_id)
+        with open(last_processed_file, "w") as f:
+            f.write(message_hash)
+        logger.debug(f"Saved last processed message hash: {message_hash}")
+    except Exception as e:
+        logger.warning(f"Failed to save last processed message: {e}")
+
+
+def _get_last_processed_message(session_id: str) -> Optional[str]:
+    """Get the hash of the last processed Claude message."""
+    try:
+        last_processed_file = _get_last_processed_file(session_id)
+        if last_processed_file.exists():
+            with open(last_processed_file, "r") as f:
+                message_hash = f.read().strip()
+                logger.debug(f"Retrieved last processed message hash: {message_hash}")
+                return message_hash
+    except Exception as e:
+        logger.warning(f"Failed to read last processed message: {e}")
+    return None
+
+
+def clear_last_processed_message(session_id: str) -> None:
+    """Clear the last processed message tracking for a session."""
+    try:
+        last_processed_file = _get_last_processed_file(session_id)
+        if last_processed_file.exists():
+            last_processed_file.unlink()
+            logger.debug(f"Cleared last processed message for session {session_id}")
+    except Exception as e:
+        logger.warning(f"Failed to clear last processed message: {e}")
+
+
+def cleanup_old_processed_files(max_age_hours: int = 24) -> None:
+    """Clean up old last-processed files older than max_age_hours."""
+    try:
+        import time
+
+        temp_dir = _get_temp_dir()
+        current_time = time.time()
+        cutoff_time = current_time - (max_age_hours * 3600)
+
+        for file_path in temp_dir.glob("last-processed-*.txt"):
+            try:
+                file_stat = file_path.stat()
+                if file_stat.st_mtime < cutoff_time:
+                    file_path.unlink()
+                    logger.debug(f"Cleaned up old processed file: {file_path}")
+            except Exception as e:
+                logger.warning(f"Failed to clean up file {file_path}: {e}")
+
+    except Exception as e:
+        logger.warning(f"Failed to cleanup old processed files: {e}")
 
 
 class ConversationContext:
@@ -158,6 +244,13 @@ def extract_conversation_context(transcript_path: str) -> ConversationContext:
     Extract conversation context from Claude Code transcript file.
 
     Finds the last user prompt and Claude's response by parsing JSONL backwards.
+    Special handling for Stop events: if there's a Stop event in the same session,
+    only consider user prompts and Claude responses after the last Stop event.
+
+    Logic:
+    1. If no Stop event exists in session -> use last user prompt and Claude response
+    2. If Stop event exists -> only use user prompt and Claude response after the last Stop event
+    3. If Stop event exists but no messages after it -> return empty context (expected behavior)
 
     Args:
         transcript_path: Path to Claude Code JSONL transcript file
@@ -179,14 +272,37 @@ def extract_conversation_context(transcript_path: str) -> ConversationContext:
         last_user_prompt = None
         last_claude_response = None
         session_id = None
+        found_stop_event = False
+        stop_event_index = -1
 
-        # Find last user message and Claude response
-        for entry in entries:
+        # First pass: Extract session ID and find Stop events
+        for i, entry in enumerate(entries):
             try:
                 # Extract session ID if available
                 if not session_id and "sessionId" in entry:
                     session_id = entry["sessionId"]
 
+                # Check for Stop events (hook events with "Stop" name)
+                if entry.get("type") == "hook" and entry.get("hookEventName") == "Stop":
+                    found_stop_event = True
+                    stop_event_index = i
+                    logger.debug(f"Found Stop event at index {i}")
+                    break  # We only care about the most recent Stop event
+
+            except Exception as e:
+                logger.debug(f"Error processing entry in first pass: {e}")
+                continue
+
+        # Second pass: Find user message and Claude response
+        # If Stop event found, only look at entries before the Stop event index
+        search_entries = entries[:stop_event_index] if found_stop_event else entries
+
+        logger.debug(
+            f"Searching {len(search_entries)} entries {'after last Stop event' if found_stop_event else 'from end'}"
+        )
+
+        for entry in search_entries:
+            try:
                 # Skip meta messages and system messages
                 if entry.get("isMeta") or entry.get("type") == "system":
                     continue
@@ -199,15 +315,44 @@ def extract_conversation_context(transcript_path: str) -> ConversationContext:
                         "<command-"
                     ):  # Skip command messages
                         last_user_prompt = content
-                        logger.debug(f"Found user prompt: {content[:50]}...")
+                        logger.debug(
+                            f"Found user prompt {'after Stop event' if found_stop_event else ''}: {content[:50]}..."
+                        )
 
                 # Look for assistant messages
                 if entry.get("type") == "assistant" and not last_claude_response:
                     message = entry.get("message", {})
                     content = extract_message_content(message)
                     if content:
+                        # Check if we've already processed this Claude response
+                        current_message_hash = _get_message_hash(entry)
+                        last_processed_hash = (
+                            _get_last_processed_message(session_id)
+                            if session_id
+                            else None
+                        )
+
+                        if (
+                            last_processed_hash
+                            and current_message_hash == last_processed_hash
+                        ):
+                            logger.debug(
+                                f"Skipping already processed Claude response: {current_message_hash}"
+                            )
+                            # Return empty context to avoid reprocessing
+                            return ConversationContext(session_id=session_id)
+
                         last_claude_response = content
-                        logger.debug(f"Found Claude response: {content[:50]}...")
+
+                        # Save this as the last processed message
+                        if session_id:
+                            _save_last_processed_message(
+                                session_id, current_message_hash
+                            )
+
+                        logger.debug(
+                            f"Found Claude response {'after Stop event' if found_stop_event else ''}: {content[:50]}..."
+                        )
 
                 # Stop if we found both
                 if last_user_prompt and last_claude_response:
@@ -216,6 +361,17 @@ def extract_conversation_context(transcript_path: str) -> ConversationContext:
             except Exception as e:
                 logger.debug(f"Error processing entry: {e}")
                 continue
+
+        # If Stop event was found but no messages after it, that's expected
+        if found_stop_event:
+            if not last_claude_response:
+                logger.debug(
+                    "Stop event found but no Claude response after it - this is expected"
+                )
+            if not last_user_prompt:
+                logger.debug(
+                    "Stop event found but no user prompt after it - this is expected"
+                )
 
         context = ConversationContext(
             last_user_prompt=last_user_prompt,
@@ -226,6 +382,7 @@ def extract_conversation_context(transcript_path: str) -> ConversationContext:
         if context.has_context():
             logger.info(
                 f"Successfully extracted conversation context from {transcript_path}"
+                f"{' (after Stop event)' if found_stop_event else ''}"
             )
         else:
             logger.info("No meaningful conversation context found")

@@ -131,6 +131,12 @@ def extract_source_from_event_data(
         else:
             return "general"
 
+    # Special handling for PreToolUse/PostToolUse events - extract tool name for context
+    if event_name in [HookEvent.PRE_TOOL_USE.value, HookEvent.POST_TOOL_USE.value]:
+        tool_name = event_data.get("tool_name")
+        if tool_name:
+            return tool_name.lower()
+
     # Common source fields in Claude Code hook data
     source_fields = ["source", "reason", "trigger", "action", "type"]
 

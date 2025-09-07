@@ -275,7 +275,25 @@ async def handle_session_start(session_id: str, event_data: dict):
 async def handle_session_end(session_id: str, event_data: dict):
     """Handle SessionEnd event"""
     logger.info(f"Session {session_id} ended")
-    # Add your SessionEnd logic here
+
+    # Clear last processed message tracking for this session
+    try:
+        from utils.transcript_parser import (
+            clear_last_processed_message,
+            cleanup_old_processed_files,
+        )
+
+        clear_last_processed_message(session_id)
+        # Also cleanup old files from other sessions (24 hours+)
+        cleanup_old_processed_files(max_age_hours=24)
+        logger.debug(
+            f"Cleared last processed message tracking for session {session_id} and cleaned up old files"
+        )
+    except Exception as e:
+        logger.warning(
+            f"Failed to clear last processed message for session {session_id}: {e}"
+        )
+
     await asyncio.sleep(DEFAULT_SLEEP_SECONDS)
 
 
@@ -314,7 +332,20 @@ async def handle_user_prompt_submit(session_id: str, event_data: dict):
 async def handle_stop(session_id: str, event_data: dict):
     """Handle Stop event"""
     logger.info(f"Session {session_id}: Stop event received")
-    # Add your Stop logic here
+
+    # Clear last processed message tracking for this session
+    try:
+        from utils.transcript_parser import clear_last_processed_message
+
+        clear_last_processed_message(session_id)
+        logger.debug(
+            f"Cleared last processed message tracking for session {session_id}"
+        )
+    except Exception as e:
+        logger.warning(
+            f"Failed to clear last processed message for session {session_id}: {e}"
+        )
+
     await asyncio.sleep(DEFAULT_SLEEP_SECONDS)
 
 

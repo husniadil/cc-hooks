@@ -95,6 +95,26 @@ Special handling for Stop events that generates dynamic completion messages:
 - **Context Requirements**: Requires both `session_id` and `transcript_path` in event data for
   optimal results
 
+#### Contextual PreToolUse Messages (PreToolUse Event Enhancement)
+
+Special handling for PreToolUse events that generates dynamic action-oriented messages:
+
+- **Context-First Approach**: Messages describe what Claude is about to do based on user's request
+  rather than just announcing tool names
+- **Conversation-Aware**: Uses transcript parser to extract last user prompt and Claude's planned
+  response for context
+- **Tool-Supplemented**: Tool name provides additional context but isn't the primary focus of the
+  message
+- **Action-Oriented**: Messages sound natural and conversational, like "Installing the dependencies
+  you requested" instead of "Running Bash tool"
+- **No-Cache Strategy**: Fresh contextual messages generated for each tool execution to reflect
+  current conversation context
+- **Graceful Fallback**: Falls back to "Running {tool_name} tool" if transcript parsing or AI
+  generation fails
+- **Multi-Language Support**: Generated messages respect `TTS_LANGUAGE` configuration
+- **OpenRouter Integration**: Uses dedicated PreToolUse prompt system optimized for action
+  descriptions
+
 ## Development Commands
 
 ### Running the System
@@ -219,6 +239,12 @@ echo '{"session_id": "test", "hook_event_name": "SessionStart"}' | uv run hooks.
 
 # Test PreToolUse event (tool execution)
 echo '{"session_id": "test", "hook_event_name": "PreToolUse", "tool_name": "Bash"}' | uv run hooks.py
+
+# Test PreToolUse with contextual announcement
+echo '{"session_id": "test", "hook_event_name": "PreToolUse", "tool_name": "Read"}' | uv run hooks.py --announce=0.5
+
+# Test PreToolUse with transcript context (requires valid transcript path)
+echo '{"session_id": "test", "hook_event_name": "PreToolUse", "tool_name": "Write", "transcript_path": "/path/to/transcript.jsonl"}' | uv run hooks.py --announce=0.5
 
 # Test PostToolUse with error
 echo '{"session_id": "test", "hook_event_name": "PostToolUse", "tool_name": "Read", "error": "File not found"}' | uv run hooks.py
@@ -348,13 +374,21 @@ Configuration is managed through environment variables (`.env` file) with defaul
 - `OPENROUTER_ENABLED`: Enable OpenRouter integration (default: false)
 - `OPENROUTER_API_KEY`: Your OpenRouter API key
 - `OPENROUTER_MODEL`: Model to use (default: "openai/gpt-4o-mini")
+- `OPENROUTER_CONTEXTUAL_STOP`: Enable contextual Stop messages (default: false)
+- `OPENROUTER_CONTEXTUAL_PRETOOLUSE`: Enable contextual PreToolUse messages (default: false)
 
-OpenRouter provides two main services:
+OpenRouter provides three main services:
 
 1. **Translation Services**: When `TTS_LANGUAGE` is not "en", event descriptions are automatically
    translated
 2. **Contextual Completion Messages**: For Stop events, generates dynamic completion messages based
-   on conversation context
+   on conversation context (requires `OPENROUTER_CONTEXTUAL_STOP=true`)
+3. **Contextual PreToolUse Messages**: For PreToolUse events, generates action-oriented messages
+   based on conversation context (requires `OPENROUTER_CONTEXTUAL_PRETOOLUSE=true`)
+
+**Cost Control**: Contextual message features are disabled by default to control API costs. Enable
+selectively based on your usage needs and budget. Translation services are always available when
+OpenRouter is enabled.
 
 See `.env.example` for complete configuration options and examples.
 
@@ -625,11 +659,36 @@ result = generate_completion_message_if_available(
 print(f'Completion message: {result}')
 "
 
+# Test contextual PreToolUse message generation
+python -c "
+from utils.openrouter_service import generate_pre_tool_message_if_available
+result = generate_pre_tool_message_if_available(
+    session_id='test',
+    tool_name='Bash',
+    user_prompt='Install the latest dependencies for this project',
+    claude_response='I will run npm install to install all the dependencies listed in package.json',
+    target_language='en'
+)
+print(f'PreToolUse message: {result}')
+"
+
 # Test TTS with translation (requires OpenRouter config)
 TTS_LANGUAGE=id OPENROUTER_ENABLED=true uv run utils/tts_announcer.py SessionStart
 
 # Test Stop event with contextual completion (requires transcript)
 echo '{"session_id": "test", "hook_event_name": "Stop", "transcript_path": "path/to/transcript.jsonl"}' | uv run hooks.py --announce=0.8
+
+# Test with contextual features disabled (default behavior)
+OPENROUTER_CONTEXTUAL_STOP=false OPENROUTER_CONTEXTUAL_PRETOOLUSE=false uv run utils/tts_announcer.py Stop
+
+# Test with only contextual Stop messages enabled
+OPENROUTER_ENABLED=true OPENROUTER_CONTEXTUAL_STOP=true OPENROUTER_CONTEXTUAL_PRETOOLUSE=false echo '{"session_id": "test", "hook_event_name": "Stop", "transcript_path": "path/to/transcript.jsonl"}' | uv run hooks.py --announce=0.8
+
+# Test with only contextual PreToolUse messages enabled
+OPENROUTER_ENABLED=true OPENROUTER_CONTEXTUAL_STOP=false OPENROUTER_CONTEXTUAL_PRETOOLUSE=true echo '{"session_id": "test", "hook_event_name": "PreToolUse", "tool_name": "Bash", "transcript_path": "path/to/transcript.jsonl"}' | uv run hooks.py --announce=0.8
+
+# Test with both contextual features enabled
+OPENROUTER_ENABLED=true OPENROUTER_CONTEXTUAL_STOP=true OPENROUTER_CONTEXTUAL_PRETOOLUSE=true uv run utils/tts_announcer.py test_all
 ```
 
 ## Important Gotchas
@@ -667,3 +726,8 @@ echo '{"session_id": "test", "hook_event_name": "Stop", "transcript_path": "path
 
 11. **Transcript Parser Limitations**: Requires valid JSONL format Claude Code transcript files.
     Missing transcript or parsing errors will gracefully fall back to default completion messages.
+
+12. **Contextual Message Cost Control**: The `OPENROUTER_CONTEXTUAL_STOP` and
+    `OPENROUTER_CONTEXTUAL_PRETOOLUSE` environment variables are disabled by default to prevent
+    unexpected API costs. Enable selectively based on your usage needs and budget. Translation
+    services remain available regardless of these settings when OpenRouter is enabled.
