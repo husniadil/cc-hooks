@@ -7,6 +7,9 @@
 #     "aiosqlite",
 #     "pydantic",
 #     "python-dotenv",
+#     "gtts",
+#     "elevenlabs",
+#     "pygame",
 # ]
 # ///
 
@@ -22,7 +25,8 @@ from contextlib import asynccontextmanager
 from app.api import create_app
 from app.event_db import init_db, set_server_start_time
 from app.event_processor import process_events
-from app.config import config
+from config import config
+from utils.tts_announcer import initialize_tts
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -35,6 +39,22 @@ async def lifespan(app):
     server_start_time = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
     await init_db()
     await set_server_start_time(server_start_time)
+
+    # Initialize TTS system
+    providers = config.get_tts_providers_list()
+    tts_manager = initialize_tts(
+        providers=providers,
+        language=config.tts_language,
+        cache_enabled=config.tts_cache_enabled,
+        api_key=config.elevenlabs_api_key,
+        voice_id=config.elevenlabs_voice_id,
+        model_id=config.elevenlabs_model_id,
+    )
+    if tts_manager:
+        logger.info(f"TTS system initialized with providers: {providers}")
+    else:
+        logger.warning("TTS system initialization failed, continuing without TTS")
+
     task = asyncio.create_task(process_events())
     logger.info(f"Server started successfully at {server_start_time}")
     yield
@@ -44,6 +64,12 @@ async def lifespan(app):
         await task
     except asyncio.CancelledError:
         pass
+
+    # Cleanup TTS system
+    if tts_manager:
+        tts_manager.cleanup()
+        logger.info("TTS system cleaned up")
+
     logger.info("Server shutdown complete")
 
 

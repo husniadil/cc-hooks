@@ -7,6 +7,87 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.4.0] - 2025-09-07
+
+### Added
+
+- **Advanced TTS Provider System**: Comprehensive text-to-speech architecture with provider chain
+  pattern
+  - Abstract base class `TTSProvider` for extensible TTS implementations
+  - Factory pattern for provider registration and parameter filtering in
+    `utils/tts_providers/factory.py`
+  - Three built-in providers: `prerecorded`, `gtts` (Google TTS), and `elevenlabs` (ElevenLabs API)
+  - Smart parameter filtering - providers only receive supported parameters
+  - Context-aware event mapping system analyzing event data beyond just event names
+  - Intelligent fallback chain with configurable priority order (leftmost = highest priority)
+- **TTS Provider Implementations**:
+  - `PrerecordedProvider`: Uses existing sound files from `sound/` directory
+  - `GTTSProvider`: Google Text-to-Speech integration with caching support
+  - `ElevenLabsProvider`: Advanced voice cloning with API integration and rate limit handling
+  - Event-to-text mapping system with 19+ comprehensive event contexts
+- **Enhanced Configuration System**: Root-level configuration management
+  - Moved configuration from `app/config.py` to root-level `config.py` for better organization
+  - Comprehensive `.env.example` with all TTS configuration options and examples
+  - TTS provider priority configuration via `TTS_PROVIDERS` comma-separated list
+  - ElevenLabs-specific settings: API key, voice ID, model selection
+  - Language and caching configuration for TTS generation
+- **Type-Safe Event System**: Enum-based event validation and constants
+  - `utils/hooks_constants.py` with `HookEvent` enum for all supported events
+  - `is_valid_hook_event()` validation function preventing invalid event names
+  - Type-safe event status constants with literal types in `event_db.py`
+  - API integration with automatic event name validation (warning for unknown events)
+
+### Enhanced
+
+- **TTS Manager Integration**: Orchestrated multi-provider TTS system
+  - `utils/tts_manager.py` managing provider chain with automatic fallbacks
+  - Server initialization includes TTS system setup with configured providers
+  - Graceful cleanup during server shutdown to prevent resource leaks
+  - Integration with existing announcement system via `utils/tts_announcer.py`
+- **Event Processing Architecture**: Improved processing with type safety
+  - Event processor uses enum constants instead of string literals
+  - Enhanced validation with graceful handling of unknown events
+  - Better error handling and logging for invalid event types
+  - Maintained backwards compatibility while improving type safety
+- **Cross-Platform Audio System**: Improved sound playback reliability
+  - Enhanced `utils/sound_player.py` with better error handling
+  - Consistent audio backend usage across all TTS providers
+  - Synchronous playback maintained to prevent audio overlap
+- **Documentation**: Comprehensive architectural and development documentation
+  - Major CLAUDE.md updates with architectural patterns and dependencies
+  - TTS provider development guide with examples
+  - Enhanced troubleshooting sections for TTS system
+  - Complete API documentation with TTS configuration examples
+
+### Changed
+
+- **Configuration Architecture**: Centralized configuration management
+  - All components now import from root-level `config.py` instead of `app/config.py`
+  - TTS-related configuration integrated into main config class
+  - Environment variable parsing improved with type safety
+- **Import Structure**: Updated import paths across entire codebase
+  - All `from app.config import config` changed to `from config import config`
+  - Consistent import structure throughout all modules
+  - Better separation of concerns between app logic and configuration
+
+### Documentation
+
+- **Architectural Patterns**: Detailed documentation of key design patterns
+  - Multi-instance server sharing pattern explanation
+  - Provider chain pattern for TTS system architecture
+  - Async/sync bridge pattern for handling different execution contexts
+  - Type-safe event handling pattern with enum usage
+- **Development Workflows**: Enhanced development and testing documentation
+  - TTS provider testing commands and examples
+  - Provider availability checking and debugging
+  - Event-specific testing with different TTS configurations
+  - Step-by-step provider development guide
+- **Configuration Guide**: Complete configuration documentation
+  - All environment variables documented with examples
+  - TTS provider priority configuration explained
+  - ElevenLabs setup guide with API key requirements
+  - Multiple configuration scenarios for different use cases
+
 ## [0.3.2] - 2025-09-06
 
 ### Added

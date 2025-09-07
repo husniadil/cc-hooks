@@ -4,9 +4,9 @@
 import asyncio
 import json
 import logging
-from typing import Literal, Optional
+from typing import Optional
 from pathlib import Path
-from app.config import config
+from config import config
 from app.event_db import (
     get_next_pending_event,
     mark_event_processing,
@@ -14,28 +14,7 @@ from app.event_db import (
     mark_event_failed,
 )
 from utils.tts_announcer import announce_event
-
-# Hook event name literals
-HookEventName = Literal[
-    "SessionStart",
-    "SessionEnd",
-    "PreToolUse",
-    "PostToolUse",
-    "Notification",
-    "UserPromptSubmit",
-    "Stop",
-    "SubagentStop",
-    "PreCompact",
-]
-HOOK_SESSION_START: HookEventName = "SessionStart"
-HOOK_SESSION_END: HookEventName = "SessionEnd"
-HOOK_PRE_TOOL_USE: HookEventName = "PreToolUse"
-HOOK_POST_TOOL_USE: HookEventName = "PostToolUse"
-HOOK_NOTIFICATION: HookEventName = "Notification"
-HOOK_USER_PROMPT_SUBMIT: HookEventName = "UserPromptSubmit"
-HOOK_STOP: HookEventName = "Stop"
-HOOK_SUBAGENT_STOP: HookEventName = "SubagentStop"
-HOOK_PRE_COMPACT: HookEventName = "PreCompact"
+from utils.hooks_constants import HookEvent, is_valid_hook_event
 
 # Constants
 RETRY_DELAY_SECONDS = 0.5
@@ -228,27 +207,37 @@ async def process_single_event(event_data: dict, arguments: Optional[dict] = Non
         logger.info(f"Announcement requested for {hook_event_name} (volume: {volume})")
         await play_announcement_sound(hook_event_name, event_data, volume)
 
-    # Handle different hook event types
-    if hook_event_name == HOOK_SESSION_START:
+    # Check if hook event is valid first
+    if not is_valid_hook_event(hook_event_name):
+        logger.info(
+            f"Skipping processing for unknown hook event: {hook_event_name} (session: {session_id})"
+        )
+        return  # Still process sound effects/announcements but skip event-specific logic
+
+    # Handle different hook event types (all known valid events)
+    if hook_event_name == HookEvent.SESSION_START.value:
         await handle_session_start(session_id, event_data)
-    elif hook_event_name == HOOK_SESSION_END:
+    elif hook_event_name == HookEvent.SESSION_END.value:
         await handle_session_end(session_id, event_data)
-    elif hook_event_name == HOOK_PRE_TOOL_USE:
+    elif hook_event_name == HookEvent.PRE_TOOL_USE.value:
         await handle_pre_tool_use(session_id, event_data)
-    elif hook_event_name == HOOK_POST_TOOL_USE:
+    elif hook_event_name == HookEvent.POST_TOOL_USE.value:
         await handle_post_tool_use(session_id, event_data)
-    elif hook_event_name == HOOK_NOTIFICATION:
+    elif hook_event_name == HookEvent.NOTIFICATION.value:
         await handle_notification(session_id, event_data)
-    elif hook_event_name == HOOK_USER_PROMPT_SUBMIT:
+    elif hook_event_name == HookEvent.USER_PROMPT_SUBMIT.value:
         await handle_user_prompt_submit(session_id, event_data)
-    elif hook_event_name == HOOK_STOP:
+    elif hook_event_name == HookEvent.STOP.value:
         await handle_stop(session_id, event_data)
-    elif hook_event_name == HOOK_SUBAGENT_STOP:
+    elif hook_event_name == HookEvent.SUBAGENT_STOP.value:
         await handle_subagent_stop(session_id, event_data)
-    elif hook_event_name == HOOK_PRE_COMPACT:
+    elif hook_event_name == HookEvent.PRE_COMPACT.value:
         await handle_pre_compact(session_id, event_data)
     else:
-        logger.warning(f"Unknown hook_event_name: {hook_event_name}")
+        # This should not happen if our enum is up to date
+        logger.warning(
+            f"Known hook event not handled in processor: {hook_event_name} (session: {session_id})"
+        )
 
 
 # Handler functions for each event type

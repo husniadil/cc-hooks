@@ -4,11 +4,20 @@
 import aiosqlite
 import json
 import logging
-from typing import Dict, Any, Tuple, Optional
-from app.config import config
+from typing import Dict, Any, Tuple, Optional, Literal
+from config import config
 
 DB_PATH = config.db_path
 RECENT_EVENTS_LIMIT = 10
+
+# Event status type definition
+EventStatus = Literal["pending", "processing", "completed", "failed"]
+
+# Event status constants
+EVENT_STATUS_PENDING: EventStatus = "pending"
+EVENT_STATUS_PROCESSING: EventStatus = "processing"
+EVENT_STATUS_COMPLETED: EventStatus = "completed"
+EVENT_STATUS_FAILED: EventStatus = "failed"
 
 # Global variable to track server start time
 _server_start_time: Optional[str] = None
@@ -132,14 +141,14 @@ async def get_next_pending_event() -> (
             # Only process events created at or after server start time
             cursor = await db.execute(
                 "SELECT id, session_id, hook_event_name, payload, retry_count, arguments FROM events WHERE status = ? AND created_at >= ? ORDER BY id LIMIT 1",
-                ("pending", server_start),
+                (EVENT_STATUS_PENDING, server_start),
             )
         else:
             # Fallback to original behavior if start time not set (shouldn't happen in normal operation)
             logger.warning("Server start time not set, processing all pending events")
             cursor = await db.execute(
                 "SELECT id, session_id, hook_event_name, payload, retry_count, arguments FROM events WHERE status = ? ORDER BY id LIMIT 1",
-                ("pending",),
+                (EVENT_STATUS_PENDING,),
             )
         return await cursor.fetchone()
 
@@ -148,7 +157,8 @@ async def mark_event_processing(event_id: int):
     """Mark an event as currently being processed"""
     async with aiosqlite.connect(DB_PATH) as db:
         await db.execute(
-            "UPDATE events SET status = ? WHERE id = ?", ("processing", event_id)
+            "UPDATE events SET status = ? WHERE id = ?",
+            (EVENT_STATUS_PROCESSING, event_id),
         )
         await db.commit()
 
@@ -161,7 +171,7 @@ async def mark_event_completed(event_id: int, retry_count: int):
         await db.execute(
             "UPDATE events SET status = ?, processed_at = ?, retry_count = ? WHERE id = ?",
             (
-                "completed",
+                EVENT_STATUS_COMPLETED,
                 datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S"),
                 retry_count,
                 event_id,
@@ -178,7 +188,7 @@ async def mark_event_failed(event_id: int, retry_count: int, error_message: str)
         await db.execute(
             "UPDATE events SET status = ?, error_message = ?, retry_count = ?, processed_at = ? WHERE id = ?",
             (
-                "failed",
+                EVENT_STATUS_FAILED,
                 error_message,
                 retry_count,
                 datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S"),
@@ -188,7 +198,7 @@ async def mark_event_failed(event_id: int, retry_count: int, error_message: str)
         await db.commit()
 
 
-async def get_last_event_status_for_instance(instance_id: str) -> Optional[str]:
+async def get_last_event_status_for_instance(instance_id: str) -> Optional[EventStatus]:
     """
     Get status of the last (most recent) event for a specific instance.
     Returns the status of the last event or None if no events found.

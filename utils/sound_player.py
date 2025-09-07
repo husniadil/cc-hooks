@@ -2,6 +2,7 @@
 # /// script
 # requires-python = ">=3.12"
 # dependencies = [
+#     "pygame",
 # ]
 # ///
 """
@@ -12,36 +13,16 @@ Supports automatic sound file discovery, platform detection, and graceful error 
 """
 
 import platform
-import subprocess
 import sys
 from pathlib import Path
 
+try:
+    import pygame
 
-def get_audio_command():
-    """
-    Get the appropriate audio playback command for the current platform.
-
-    Returns:
-        tuple: (command, supports_volume) - command as list and volume support flag
-    """
-    system = platform.system().lower()
-
-    if system == "darwin":  # macOS
-        if subprocess.run(["which", "afplay"], capture_output=True).returncode == 0:
-            return (["afplay"], True)
-
-    elif system == "linux":  # Linux/WSL
-        # Try common Linux audio players in order of preference
-        audio_commands = [
-            (["ffplay", "-nodisp", "-autoexit"], False),  # ffmpeg
-            (["mpg123", "-q"], False),  # mpg123
-        ]
-
-        for cmd, vol_support in audio_commands:
-            if subprocess.run(["which", cmd[0]], capture_output=True).returncode == 0:
-                return (cmd, vol_support)
-
-    return (None, False)
+    PYGAME_AVAILABLE = True
+except ImportError:
+    PYGAME_AVAILABLE = False
+    pygame = None
 
 
 def get_sound_dir():
@@ -81,7 +62,8 @@ def get_available_sound_files():
         if not sound_dir.exists():
             return []
 
-        supported_extensions = {".mp3"}
+        # Pygame supports multiple audio formats
+        supported_extensions = {".mp3", ".wav", ".ogg", ".flac"}
         sound_files = [
             f.name
             for f in sound_dir.iterdir()
@@ -94,7 +76,7 @@ def get_available_sound_files():
 
 def play_sound(sound_file="sound_effect_tek.mp3", volume=0.5):
     """
-    Play a sound effect using cross-platform audio commands.
+    Play a sound effect using pygame for cross-platform compatibility.
 
     Args:
         sound_file (str): Sound file name (default: "sound_effect_tek.mp3")
@@ -103,46 +85,43 @@ def play_sound(sound_file="sound_effect_tek.mp3", volume=0.5):
     Returns:
         bool: True if sound played successfully, False otherwise
     """
-    try:
-        # Get appropriate audio command for platform
-        audio_cmd, supports_volume = get_audio_command()
-        if not audio_cmd:
-            print(
-                f"[DEBUG] No audio playback command available on {platform.system()}",
-                file=sys.stderr,
-            )
-            return False
-
-        # Get sound file path directly from sound directory
-        sound_path = get_sound_file_path(sound_file)
-
-        if not sound_path:
-            return False
-
-        # Build command with platform-specific options
-        cmd = audio_cmd.copy()
-        cmd.append(str(sound_path))
-
-        # Add volume control if supported (currently only afplay)
-        if supports_volume and audio_cmd[0] == "afplay":
-            cmd.extend(["-v", str(volume)])
-
-        # Execute audio playback (blocking - queue manager handles async)
-        subprocess.run(
-            cmd,
-            check=True,
-            capture_output=True,
+    if not PYGAME_AVAILABLE:
+        print(
+            "[DEBUG] pygame not available - install with 'pip install pygame'",
+            file=sys.stderr,
         )
+        return False
 
+    # Get sound file path
+    sound_path = get_sound_file_path(sound_file)
+    if not sound_path:
+        print(f"[DEBUG] Sound file not found: {sound_file}", file=sys.stderr)
+        return False
+
+    try:
+        # Initialize pygame mixer for audio playback
+        pygame.mixer.init()
+
+        # Load and play the audio
+        pygame.mixer.music.load(str(sound_path))
+        pygame.mixer.music.set_volume(volume)
+        pygame.mixer.music.play()
+
+        # Wait for playback to finish (blocking - queue manager handles async)
+        while pygame.mixer.music.get_busy():
+            pygame.time.wait(100)
+
+        # Cleanup
+        pygame.mixer.quit()
         return True
 
-    except subprocess.CalledProcessError as e:
-        # Log subprocess errors for debugging if needed
-        print(f"[DEBUG] Sound player subprocess error: {e}", file=sys.stderr)
-        return False
     except Exception as e:
-        # Log API errors for debugging if needed
-        print(f"[DEBUG] Sound player error: {e}", file=sys.stderr)
+        print(f"[DEBUG] Pygame audio error: {e}", file=sys.stderr)
+        # Cleanup on error
+        try:
+            pygame.mixer.quit()
+        except:
+            pass
         return False
 
 
@@ -189,19 +168,20 @@ def main():
             print("  No sound files found in sound/ directory")
         return
 
-    # Get audio command info for display
-    audio_cmd, supports_volume = get_audio_command()
+    # Display info
     platform_name = platform.system()
 
     print(f"🔊 {platform_name} Sound Player")
     print("=" * 25)
     print(f"🎯 File: {args.sound_file}")
-    if supports_volume:
+
+    if PYGAME_AVAILABLE:
+        print("🎵 Backend: pygame (cross-platform)")
         print(f"🔉 Volume: {args.volume}")
     else:
-        print("🔉 Volume: system default (volume control not supported)")
-    if audio_cmd:
-        print(f"🎵 Command: {' '.join(audio_cmd)}")
+        print("🎵 Backend: pygame not available")
+        print("💡 Install pygame: pip install pygame")
+
     print("🎵 Playing...")
 
     success = play_sound(args.sound_file, args.volume)

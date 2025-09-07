@@ -35,6 +35,9 @@ wheels/
 # Claude instances tracking
 .claude-instances/
 
+# TTS cache (generated files)
+.tts_cache/
+
 # macOS
 .DS_Store
 .DS_Store?

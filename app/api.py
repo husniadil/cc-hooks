@@ -11,6 +11,7 @@ from app.event_db import (
     get_last_event_status_for_instance,
 )
 from app.migrations import get_migration_status
+from utils.hooks_constants import is_valid_hook_event
 
 logger = logging.getLogger(__name__)
 
@@ -48,6 +49,12 @@ def create_app(lifespan=None) -> FastAPI:
                 raise HTTPException(
                     status_code=400,
                     detail="Both session_id and hook_event_name are required",
+                )
+
+            # Validate hook event name (warning only, still process unknown events)
+            if not is_valid_hook_event(hook_event_name):
+                logger.warning(
+                    f"Unknown hook event received: {hook_event_name} (session: {session_id})"
                 )
 
             # Queue event using database module

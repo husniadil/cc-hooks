@@ -4,7 +4,7 @@
 import aiosqlite
 import logging
 from typing import Dict, Any
-from app.config import config
+from config import config
 
 logger = logging.getLogger(__name__)
 

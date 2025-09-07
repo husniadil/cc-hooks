@@ -15,7 +15,7 @@ import os
 import sys
 import requests
 from typing import Dict, Any, Optional
-from app.config import config
+from config import config
 
 
 def read_json_from_stdin() -> Dict[Any, Any]:
@@ -54,7 +54,7 @@ def send_to_api(
         response.raise_for_status()
 
         result = response.json()
-        print(f"Success: Event queued with ID {result.get('event_id')}")
+        # print(f"Success: Event queued with ID {result.get('event_id')}")
         return True
 
     except requests.exceptions.RequestException as e:

@@ -3,7 +3,6 @@
 # requires-python = ">=3.12"
 # dependencies = [
 #     "requests",
-#     "python-dotenv",
 #     "elevenlabs",
 # ]
 # ///
@@ -18,22 +17,24 @@ import json
 import os
 import subprocess
 import shutil
+from config import config
 from datetime import datetime
 import re
 
 
 class StatusLine:
-    def __init__(self, debug=False):
+    def __init__(self, debug=False, no_color=False):
         self.debug = debug
+        self.no_color = no_color
         self.use_color = self._should_use_color()
         if self.debug:
             self._debug_log(
-                f"StatusLine initialized with debug={debug}, use_color={self.use_color}"
+                f"StatusLine initialized with debug={debug}, no_color={no_color}, use_color={self.use_color}"
             )
 
     def _should_use_color(self):
-        """Determine if colors should be used (TTY-aware, respect NO_COLOR)"""
-        if os.getenv("NO_COLOR"):
+        """Determine if colors should be used (TTY-aware, respect no_color flag)"""
+        if self.no_color:
             return False
         return sys.stdout.isatty()
 
@@ -288,28 +289,34 @@ class StatusLine:
         return session_txt, session_pct, session_bar, cost_usd, cost_per_hour
 
     def _get_elevenlabs_info(self):
-        """Get ElevenLabs usage information if enabled"""
+        """Get ElevenLabs usage information if available"""
         elevenlabs_info = ""
         elevenlabs_enabled = False
 
-        # Check if ElevenLabs is enabled in .env
+        # Check if ElevenLabs is configured by checking TTS providers and API key
         try:
-            from dotenv import load_dotenv
+            # Check if elevenlabs is in TTS_PROVIDERS list
+            tts_providers_list = config.get_tts_providers_list()
+            has_elevenlabs_provider = "elevenlabs" in tts_providers_list
 
-            load_dotenv(os.path.expanduser("~/.claude/.env"))
-            elevenlabs_enabled = (
-                os.getenv("ELEVENLABS_ENABLED", "false").lower() == "true"
-            )
+            # Check if API key is available
+            api_key = config.elevenlabs_api_key
+            has_api_key = bool(api_key)
+
+            elevenlabs_enabled = has_elevenlabs_provider and has_api_key
+
+            self._debug_log(f"ElevenLabs provider in list: {has_elevenlabs_provider}")
+            self._debug_log(f"ElevenLabs API key available: {has_api_key}")
             self._debug_log(f"ElevenLabs enabled: {elevenlabs_enabled}")
         except ImportError:
             self._debug_log("python-dotenv not available for ElevenLabs check")
             return elevenlabs_info, elevenlabs_enabled
 
         if not elevenlabs_enabled:
-            self._debug_log("ElevenLabs disabled in .env")
+            self._debug_log("ElevenLabs not properly configured")
             return elevenlabs_info, elevenlabs_enabled
 
-        api_key = os.getenv("ELEVENLABS_API_KEY")
+        api_key = config.elevenlabs_api_key
         if not api_key:
             self._debug_log("ElevenLabs API key not found")
             return elevenlabs_info, elevenlabs_enabled
@@ -473,18 +480,25 @@ class StatusLine:
 
 
 def main():
-    debug_env = os.getenv("DEBUG_STATUS", "0")
-    debug = debug_env.lower() in ["1", "true", "yes", "on"]
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Claude Code statusline")
+    parser.add_argument("--debug", action="store_true", help="Enable debug output")
+    parser.add_argument("--no-color", action="store_true", help="Disable color output")
+    args = parser.parse_args()
+
+    debug = args.debug
+    no_color = args.no_color
 
     # Initialize with debug info
     if debug:
         print(
-            f"[DEBUG StatusLine] Environment DEBUG_STATUS='{debug_env}', debug={debug}",
+            f"[DEBUG StatusLine] Debug mode enabled via command line, no_color={no_color}",
             file=sys.stderr,
             flush=True,
         )
 
-    status_line = StatusLine(debug=debug)
+    status_line = StatusLine(debug=debug, no_color=no_color)
 
     # Read input from stdin
     input_data = sys.stdin.read() if not sys.stdin.isatty() else ""

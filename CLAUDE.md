@@ -12,6 +12,8 @@ operations.
 
 ## Architecture
 
+### Core Components
+
 The system consists of three main components:
 
 1. **Hook Script** (`hooks.py`) - Receives hook events from Claude Code via stdin and forwards them
@@ -21,6 +23,8 @@ The system consists of three main components:
 3. **Claude Wrapper** (`claude.sh`) - Bash script that manages server lifecycle, instance tracking,
    and launches Claude Code with hooks enabled
 
+### Event Processing Pipeline
+
 The event flow:
 
 1. Claude Code triggers a hook (PreToolUse, PostToolUse, etc.)
@@ -28,6 +32,53 @@ The event flow:
 3. API server queues event to SQLite database with instance tracking
 4. Background processor handles events sequentially with retry logic
 5. Optional TTS announcements provide audio feedback for events
+
+### Critical Architectural Patterns
+
+#### Multi-Instance Server Sharing Pattern
+
+The system implements sophisticated lifecycle management allowing multiple Claude Code instances to
+share a single API server:
+
+- **Instance Registration**: Each session gets unique UUID and PID file in `.claude-instances/`
+- **Shared Server**: Multiple instances share one server (only starts if needed, stops when last
+  exits)
+- **Graceful Shutdown**: Waits for pending events via `/instances/{id}/last-event` before shutdown
+- **Temporal Filtering**: Only processes events created after server startup (prevents stale events)
+
+#### Non-Blocking Hook Integration
+
+The most critical design decision - hooks immediately return success after queuing, ensuring Claude
+Code never waits for event processing. This **fire-and-forget pattern** maintains Claude Code
+responsiveness regardless of processing complexity.
+
+#### Provider Chain Pattern (TTS System)
+
+The TTS system (`utils/tts_*`) demonstrates flexible provider architecture:
+
+- **Factory Pattern**: Registry-based provider instantiation in `tts_providers/factory.py`
+- **Chain of Responsibility**: Providers tried in priority order until success (leftmost = highest)
+- **Context-Aware Mapping**: Analyzes event data to select appropriate sounds (not just event names)
+- **Smart Parameter Filtering**: Providers receive only supported parameters
+- **Multiple Providers**: Prerecorded, Google TTS (gtts), ElevenLabs API integration
+- **Caching**: Generated TTS files cached for performance
+
+#### Async/Sync Bridge Pattern
+
+Sophisticated handling of async/sync boundaries:
+
+- **Async Database**: `event_db.py` uses `aiosqlite` for non-blocking I/O
+- **Sync Audio**: `sound_player.py` uses synchronous subprocess (prevents sound overlap)
+- **Threading Bridge**: `event_processor.py` uses `loop.run_in_executor()` for sync operations in
+  async context
+
+#### Type-Safe Event Handling
+
+The system uses enum-based event constants for validation:
+
+- **Hook Constants**: `utils/hooks_constants.py` defines `HookEvent` enum
+- **Validation Functions**: `is_valid_hook_event()` prevents invalid event names
+- **API Integration**: Automatic validation in event submission endpoints
 
 ## Development Commands
 
@@ -145,6 +196,26 @@ npm run start  # Start server + Claude Code wrapper
 echo '{"session_id": "test", "hook_event_name": "Test"}' | uv run hooks.py --sound-effect=sound_effect_tek.mp3
 ```
 
+#### Testing Specific Event Types
+
+```bash
+# Test SessionStart event with TTS announcement
+echo '{"session_id": "test", "hook_event_name": "SessionStart"}' | uv run hooks.py --announce=0.5
+
+# Test PreToolUse event (tool execution)
+echo '{"session_id": "test", "hook_event_name": "PreToolUse", "tool_name": "Bash"}' | uv run hooks.py
+
+# Test PostToolUse with error
+echo '{"session_id": "test", "hook_event_name": "PostToolUse", "tool_name": "Read", "error": "File not found"}' | uv run hooks.py
+
+# Test notification events
+echo '{"session_id": "test", "hook_event_name": "NotificationReceived", "notification": {"message": "Permission required"}}' | uv run hooks.py --announce=0.8
+
+# Test TTS announcer standalone
+uv run utils/tts_announcer.py SessionStart  # Test specific event mapping
+uv run utils/tts_announcer.py test_all      # Test all event mappings
+```
+
 ### Server Lifecycle Troubleshooting
 
 ```bash
@@ -166,6 +237,45 @@ tail -f /dev/null  # Or check server logs if available
 
 ## Key Implementation Details
 
+### Cross-Component Dependencies
+
+Understanding these dependencies is crucial for modifications:
+
+#### Configuration Flow
+
+- `config.py` (root level) is the single source of truth, loaded by all components
+- Environment variables in `.env` override defaults (see `.env.example` for complete options)
+- TTS providers list parsed from comma-separated string with priority ordering
+- Server endpoint configuration affects both `hooks.py` and health checks
+- Provider-specific configs (ElevenLabs API keys, voice IDs) loaded conditionally
+
+#### Event Processing Dependencies
+
+```
+hooks.py → api.py → event_db.py → event_processor.py → [sound_player.py, tts_manager.py]
+```
+
+Key interaction points:
+
+- `hooks.py` depends on `CC_INSTANCE_ID` environment variable from `claude.sh`
+- `event_processor.py` orchestrates both sound effects and TTS announcements
+- TTS system requires `utils/sound_player.py` for actual playback
+- Database operations require server start time for temporal filtering
+
+#### Instance Management Chain
+
+- `claude.sh` generates UUID and manages `.claude-instances/` directory
+- Instance ID propagated through environment to `hooks.py`
+- API tracks events per instance via `instance_id` column
+- Graceful shutdown queries `/instances/{id}/last-event` endpoint
+
+#### Migration System Dependencies
+
+- `app/migrations.py` runs automatically during server startup
+- Migrations must be idempotent (safe to run multiple times)
+- New columns must have defaults for existing rows
+- Migration version tracking prevents re-execution
+
 ### Dependencies
 
 This project uses `uv` for Python dependency management. Dependencies are declared inline in script
@@ -175,6 +285,9 @@ headers using PEP 723 format. The main dependencies are:
 - aiosqlite for async database operations
 - requests for HTTP client in hooks
 - python-dotenv for environment configuration
+- pygame for cross-platform audio playback
+- gtts (Google Text-to-Speech) for TTS generation
+- elevenlabs for advanced TTS with voice cloning
 
 ### Database Migrations
 
@@ -195,10 +308,26 @@ directly.
 
 Configuration is managed through environment variables (`.env` file) with defaults:
 
+#### Core Settings
+
 - `DB_PATH`: SQLite database path (default: "events.db")
 - `HOST`: Server host (default: "0.0.0.0")
 - `PORT`: Server port (default: 12345)
 - `MAX_RETRY_COUNT`: Event retry attempts (default: 3)
+
+#### TTS Configuration
+
+- `TTS_PROVIDERS`: Comma-separated list with priority (default: "prerecorded,gtts,elevenlabs")
+- `TTS_CACHE_DIR`: Directory for cached TTS files (default: ".tts_cache")
+- `TTS_LANGUAGE`: Language for TTS generation (default: "en")
+
+#### ElevenLabs Configuration
+
+- `ELEVENLABS_API_KEY`: Your ElevenLabs API key
+- `ELEVENLABS_VOICE_ID`: Voice ID to use (default: "21m00Tcm4TlvDq8ikWAM")
+- `ELEVENLABS_MODEL_ID`: Model to use (default: "eleven_flash_v2_5")
+
+See `.env.example` for complete configuration options and examples.
 
 ### Event Processing
 
@@ -306,14 +435,127 @@ sessions to share the same event processing server efficiently.
 - `hooks.py`: Entry point for Claude Code hooks with dynamic argument parsing and instance tracking
 - `server.py`: Main FastAPI server with lifecycle management and hot reload support
 - `claude.sh`: Wrapper script for server management with graceful shutdown
+- `config.py`: Root-level configuration management from environment variables
+- `.env.example`: Complete configuration template with all available options
 - `app/api.py`: API endpoints for event submission, status, and instance tracking
 - `app/event_db.py`: Database operations for event queue with instance support
 - `app/event_processor.py`: Background processor with event handling logic and sound effects
-- `app/config.py`: Configuration management from environment variables
 - `app/migrations.py`: Database schema migrations and setup with version tracking
+- `utils/hooks_constants.py`: Type-safe event constants with `HookEvent` enum
 - `utils/sound_player.py`: Cross-platform sound effect playback utility
+- `utils/tts_manager.py`: TTS provider orchestration with fallback chain
 - `utils/tts_announcer.py`: Intelligent TTS announcement system for events
+- `utils/tts_providers/`: Provider implementations:
+  - `base.py`: Abstract base class for TTS providers
+  - `factory.py`: Provider factory with parameter filtering
+  - `prerecorded_provider.py`: Uses local sound files
+  - `gtts_provider.py`: Google Text-to-Speech integration
+  - `elevenlabs_provider.py`: ElevenLabs API integration
+  - `mappings.py`: Event-to-text mapping configuration
 - `sound/`: Directory for audio files (19+ event-specific sounds)
 - `status-lines/status_line.py`: Custom Claude Code status line implementation
 - `CHANGELOG.md`: Comprehensive version history following Keep a Changelog format
 - `package.json`: Project metadata and npm scripts for development
+
+## Common Development Scenarios
+
+### Adding a New Event Handler
+
+To add custom processing for a specific event type:
+
+1. Edit `app/event_processor.py` and add handler in `process_event()` function
+2. Access event data via `event['data']` dictionary
+3. Use `event.get('arguments', {})` for hook arguments
+4. Return success/failure status for retry logic
+
+### Adding a New TTS Provider
+
+1. Create new provider class in `utils/tts_providers/` inheriting from `TTSProvider` base class
+2. Implement required methods: `generate()`, `get_supported_params()`, `is_available()`
+3. Register provider in `utils/tts_providers/factory.py` registry
+4. Add provider name to `TTS_PROVIDERS` environment variable (leftmost = highest priority)
+5. Provider automatically receives filtered parameters based on `get_supported_params()`
+
+Example provider structure:
+
+```python
+from utils.tts_providers.base import TTSProvider
+
+class CustomProvider(TTSProvider):
+    def generate(self, text: str, event_name: str, **kwargs) -> Optional[str]:
+        # Generate audio file, return path if successful
+        pass
+
+    def get_supported_params(self) -> List[str]:
+        return ["custom_param1", "custom_param2"]
+
+    def is_available(self) -> bool:
+        # Check if provider dependencies are met
+        return True
+```
+
+### Extending Hook Arguments
+
+1. Add argument parsing in `hooks.py` (already supports `--key=value` format)
+2. Arguments stored as JSON in database automatically
+3. Access in `event_processor.py` via `event.get('arguments', {})`
+4. No database migration needed - uses JSON column
+
+### Debugging Event Processing
+
+```bash
+# Watch real-time event processing
+sqlite3 events.db "SELECT id, hook_event_name, status, retry_count FROM events ORDER BY created_at DESC LIMIT 10;" -header -column
+
+# Check specific instance events
+sqlite3 events.db "SELECT * FROM events WHERE instance_id = 'your-instance-id' ORDER BY created_at DESC;"
+
+# Monitor server logs with reload
+uv run server.py --dev  # Includes detailed logging
+
+# Test event with debug flag
+echo '{"session_id": "test", "hook_event_name": "Test"}' | uv run hooks.py --debug
+```
+
+### Testing TTS Providers
+
+```bash
+# Test specific TTS provider chain
+TTS_PROVIDERS=gtts,prerecorded uv run utils/tts_announcer.py SessionStart
+
+# Test with ElevenLabs as primary provider
+TTS_PROVIDERS=elevenlabs uv run utils/tts_announcer.py PreToolUse
+
+# Test all event mappings
+uv run utils/tts_announcer.py test_all
+
+# Check provider availability
+python -c "from utils.tts_providers.factory import TTSProviderFactory; print(TTSProviderFactory.get_available_providers())"
+```
+
+## Important Gotchas
+
+1. **Server Start Time Filtering**: Only events created AFTER server startup are processed. This
+   prevents processing stale events but means pre-existing events won't be handled.
+
+2. **Instance ID Propagation**: The `CC_INSTANCE_ID` environment variable MUST be set by `claude.sh`
+   for proper instance tracking. Direct execution of `hooks.py` without this will use "unknown"
+   instance.
+
+3. **Sound Overlap Prevention**: Audio playback is intentionally synchronous to prevent sound
+   overlap. This means long sounds can delay event processing.
+
+4. **Migration Ordering**: Migrations are applied in version order. Never modify existing
+   migrations; always create new ones.
+
+5. **Hot Reload Caveats**: When using `--dev` or `--reload`, the server restarts on file changes but
+   maintains the same start time to preserve event continuity.
+
+6. **Configuration Location**: Configuration moved from `app/config.py` to root-level `config.py`.
+   All imports must be updated accordingly.
+
+7. **TTS Provider Priority**: Provider order in `TTS_PROVIDERS` determines fallback chain. Leftmost
+   provider has highest priority.
+
+8. **ElevenLabs Rate Limits**: Be aware of API rate limits when using ElevenLabs as primary
+   provider. Consider using gtts or prerecorded as fallbacks.
