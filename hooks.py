@@ -3,6 +3,10 @@
 # requires-python = ">=3.12"
 # dependencies = [
 #     "requests",
+#     "openai",
+#     "gtts",
+#     "elevenlabs",
+#     "pygame",
 # ]
 # ///
 

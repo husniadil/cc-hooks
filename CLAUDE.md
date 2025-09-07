@@ -288,6 +288,7 @@ headers using PEP 723 format. The main dependencies are:
 - pygame for cross-platform audio playback
 - gtts (Google Text-to-Speech) for TTS generation
 - elevenlabs for advanced TTS with voice cloning
+- openai SDK for OpenRouter API integration (translation services)
 
 ### Database Migrations
 
@@ -327,6 +328,15 @@ Configuration is managed through environment variables (`.env` file) with defaul
 - `ELEVENLABS_VOICE_ID`: Voice ID to use (default: "21m00Tcm4TlvDq8ikWAM")
 - `ELEVENLABS_MODEL_ID`: Model to use (default: "eleven_flash_v2_5")
 
+#### OpenRouter Configuration (Translation Services)
+
+- `OPENROUTER_ENABLED`: Enable OpenRouter integration (default: false)
+- `OPENROUTER_API_KEY`: Your OpenRouter API key
+- `OPENROUTER_MODEL`: Model to use (default: "openai/gpt-4o-mini")
+
+When `TTS_LANGUAGE` is not "en" and OpenRouter is enabled, event descriptions are automatically
+translated to the target language before being sent to TTS providers.
+
 See `.env.example` for complete configuration options and examples.
 
 ### Event Processing
@@ -359,7 +369,8 @@ The system includes built-in sound effect processing:
 - Sound files should be placed in the `sound/` directory
 - Uses `utils/sound_player.py` for cross-platform audio playback
 - Supports common audio formats (WAV, MP3, etc.)
-- Synchronous playback to ensure sequential event processing (no sound overlap)
+- **Parallel Audio Processing**: Multiple audio tasks (sound effects + TTS announcements) run
+  concurrently for better performance
 - Graceful error handling if sound files are missing or audio system unavailable
 
 #### TTS Announcement System
@@ -452,6 +463,7 @@ sessions to share the same event processing server efficiently.
   - `gtts_provider.py`: Google Text-to-Speech integration
   - `elevenlabs_provider.py`: ElevenLabs API integration
   - `mappings.py`: Event-to-text mapping configuration
+- `utils/openrouter_service.py`: OpenRouter API integration for translation and text generation
 - `sound/`: Directory for audio files (19+ event-specific sounds)
 - `status-lines/status_line.py`: Custom Claude Code status line implementation
 - `CHANGELOG.md`: Comprehensive version history following Keep a Changelog format
@@ -533,6 +545,24 @@ uv run utils/tts_announcer.py test_all
 python -c "from utils.tts_providers.factory import TTSProviderFactory; print(TTSProviderFactory.get_available_providers())"
 ```
 
+### Testing Translation Integration
+
+```bash
+# Test OpenRouter translation directly
+python -c "
+from utils.openrouter_service import get_openrouter_service
+service = get_openrouter_service()
+if service:
+    result = service.translate_text('Session started', 'id')
+    print(f'Translation: {result}')
+else:
+    print('OpenRouter not configured')
+"
+
+# Test TTS with translation (requires OpenRouter config)
+TTS_LANGUAGE=id OPENROUTER_ENABLED=true uv run utils/tts_announcer.py SessionStart
+```
+
 ## Important Gotchas
 
 1. **Server Start Time Filtering**: Only events created AFTER server startup are processed. This
@@ -542,8 +572,8 @@ python -c "from utils.tts_providers.factory import TTSProviderFactory; print(TTS
    for proper instance tracking. Direct execution of `hooks.py` without this will use "unknown"
    instance.
 
-3. **Sound Overlap Prevention**: Audio playback is intentionally synchronous to prevent sound
-   overlap. This means long sounds can delay event processing.
+3. **Parallel Audio Processing**: Multiple audio tasks (sound effects + TTS) now run concurrently
+   for better performance. Individual audio providers still prevent overlap within their own scope.
 
 4. **Migration Ordering**: Migrations are applied in version order. Never modify existing
    migrations; always create new ones.
@@ -559,3 +589,6 @@ python -c "from utils.tts_providers.factory import TTSProviderFactory; print(TTS
 
 8. **ElevenLabs Rate Limits**: Be aware of API rate limits when using ElevenLabs as primary
    provider. Consider using gtts or prerecorded as fallbacks.
+
+9. **Translation Fallback**: If OpenRouter translation fails, the system falls back to English text.
+   No translation errors will block TTS generation.

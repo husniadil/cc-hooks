@@ -141,6 +141,8 @@ class GTTSProvider(TTSProvider):
     ) -> Optional[str]:
         """
         Get the text to speak for the given hook event.
+        Uses OpenRouter service for context-aware text generation and translation.
+        Falls back to static mappings if OpenRouter is unavailable.
 
         Args:
             hook_event_name (str): Name of the hook event
@@ -149,14 +151,29 @@ class GTTSProvider(TTSProvider):
         Returns:
             str or None: Text to speak if found, None otherwise
         """
-        # Get sound file name from shared mapping
+        # Get sound file name from shared mapping for fallback text
         sound_file = get_sound_file_for_event(hook_event_name, event_data)
+        fallback_text = None
 
         if sound_file:
             # Get descriptive text for the sound file
             description = get_audio_description(sound_file)
             if description:
-                return description
+                fallback_text = description
 
-        # Fallback: use event name as text
-        return hook_event_name.replace("_", " ")
+        # Final fallback: use event name as text
+        if not fallback_text:
+            fallback_text = hook_event_name.replace("_", " ")
+
+        # Apply OpenRouter context-aware generation and translation if available
+        try:
+            from utils.openrouter_service import translate_text_if_available
+
+            # This will use existing context-aware translation prompts
+            translated_text = translate_text_if_available(
+                fallback_text, self.language, hook_event_name, event_data
+            )
+            return translated_text
+        except ImportError:
+            # OpenRouter service not available, use fallback text
+            return fallback_text

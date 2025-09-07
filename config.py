@@ -28,6 +28,11 @@ class Config:
     elevenlabs_voice_id: str = "21m00Tcm4TlvDq8ikWAM"  # Rachel voice
     elevenlabs_model_id: str = "eleven_flash_v2_5"
 
+    # OpenRouter Configuration
+    openrouter_enabled: bool = False
+    openrouter_api_key: str = ""
+    openrouter_model: str = "openai/gpt-4o-mini"
+
     @classmethod
     def from_env(cls) -> "Config":
         """Create configuration from environment variables."""
@@ -46,6 +51,11 @@ class Config:
                 "ELEVENLABS_VOICE_ID", "21m00Tcm4TlvDq8ikWAM"
             ),
             elevenlabs_model_id=os.getenv("ELEVENLABS_MODEL_ID", "eleven_flash_v2_5"),
+            # OpenRouter Configuration
+            openrouter_enabled=os.getenv("OPENROUTER_ENABLED", "false").lower()
+            == "true",
+            openrouter_api_key=os.getenv("OPENROUTER_API_KEY", ""),
+            openrouter_model=os.getenv("OPENROUTER_MODEL", "openai/gpt-4o-mini"),
         )
 
     def get_tts_providers_list(self) -> list:
@@ -56,3 +66,16 @@ class Config:
 
 
 config = Config.from_env()
+
+# Initialize OpenRouter service with config
+try:
+    from utils.openrouter_service import initialize_openrouter_service
+
+    initialize_openrouter_service(
+        api_key=config.openrouter_api_key,
+        model=config.openrouter_model,
+        enabled=config.openrouter_enabled,
+    )
+except ImportError:
+    # OpenRouter service dependencies not available, service will be unavailable
+    pass

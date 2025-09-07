@@ -1,8 +1,21 @@
 {
   "name": "cc-hooks",
-  "version": "0.4.0",
-  "description": "Claude Code configuration repository with hooks, agents, and customizations",
+  "version": "0.5.0",
+  "description": "Advanced Claude Code hooks processing system with TTS announcements, multilingual AI translation, and event-driven automation",
   "private": true,
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/husniadil/cc-hooks.git"
+  },
+  "homepage": "https://github.com/husniadil/cc-hooks#readme",
+  "bugs": {
+    "url": "https://github.com/husniadil/cc-hooks/issues"
+  },
+  "engines": {
+    "node": ">=20.19.4",
+    "python": ">=3.12"
+  },
   "scripts": {
     "dev": "uv run server.py --dev",
     "dev:reload": "uv run server.py --reload",
@@ -16,8 +29,18 @@
   },
   "keywords": [
     "claude-code",
-    "configuration",
-    "python-hooks",
+    "hooks",
+    "event-processing",
+    "text-to-speech",
+    "tts",
+    "ai-translation",
+    "multilingual",
+    "automation",
+    "fastapi",
+    "openrouter",
+    "elevenlabs",
+    "gtts",
+    "python",
     "development-tools",
     "productivity"
   ],

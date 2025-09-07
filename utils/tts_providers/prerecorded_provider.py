@@ -45,6 +45,11 @@ class PrerecordedProvider(TTSProvider):
     ) -> Optional[Path]:
         """
         Get the appropriate pre-recorded sound file for the hook event.
+        Only returns a sound file if it actually exists on disk.
+
+        This enforces that prerecorded provider only plays sounds for which
+        we have actual audio files, ensuring fallback to TTS providers
+        when translated text doesn't have corresponding prerecorded sounds.
 
         Args:
             hook_event_name (str): Name of the hook event
@@ -68,7 +73,9 @@ class PrerecordedProvider(TTSProvider):
                 logger.info(f"Found prerecorded sound: {sound_file}")
                 return sound_path
             else:
-                logger.warning(f"Sound file not found: {sound_file}")
+                logger.warning(
+                    f"Sound file not found: {sound_file} - falling back to TTS providers"
+                )
                 return None
 
         except Exception as e:

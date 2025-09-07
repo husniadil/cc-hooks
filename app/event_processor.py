@@ -189,11 +189,14 @@ async def process_single_event(event_data: dict, arguments: Optional[dict] = Non
 
     logger.info(f"Processing {hook_event_name} event for session {session_id}")
 
+    # Prepare audio tasks for parallel execution
+    audio_tasks = []
+
     # Check for sound effect argument (backward compatibility)
     if arguments and "sound_effect" in arguments:
         sound_file = arguments["sound_effect"]
         logger.info(f"Sound effect requested: {sound_file}")
-        await play_sound(sound_file)
+        audio_tasks.append(play_sound(sound_file))
 
     # Check for announcement request (new intelligent mapping)
     if arguments and "announce" in arguments:
@@ -205,7 +208,28 @@ async def process_single_event(event_data: dict, arguments: Optional[dict] = Non
             volume = 0.5  # Default volume for --announce flag
 
         logger.info(f"Announcement requested for {hook_event_name} (volume: {volume})")
-        await play_announcement_sound(hook_event_name, event_data, volume)
+        audio_tasks.append(play_announcement_sound(hook_event_name, event_data, volume))
+
+    # Run all audio tasks in parallel if any exist
+    if audio_tasks:
+        logger.info(f"Running {len(audio_tasks)} audio task(s) in parallel")
+        audio_results = await asyncio.gather(*audio_tasks, return_exceptions=True)
+
+        # Log results for debugging
+        for i, result in enumerate(audio_results):
+            if isinstance(result, Exception):
+                logger.warning(f"Audio task {i+1} failed: {result}")
+            else:
+                logger.info(f"Audio task {i+1} completed: {result}")
+
+        # Check if any audio task failed
+        failed_tasks = [r for r in audio_results if isinstance(r, Exception)]
+        if failed_tasks:
+            logger.warning(
+                f"{len(failed_tasks)}/{len(audio_tasks)} audio task(s) failed"
+            )
+        else:
+            logger.info(f"All {len(audio_tasks)} audio task(s) completed successfully")
 
     # Check if hook event is valid first
     if not is_valid_hook_event(hook_event_name):

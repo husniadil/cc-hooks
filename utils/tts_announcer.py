@@ -4,6 +4,9 @@
 # dependencies = [
 #   "gtts",
 #   "elevenlabs",
+#   "openai",
+#   "pygame",
+#   "requests",
 # ]
 # ///
 """

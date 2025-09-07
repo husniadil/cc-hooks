@@ -7,6 +7,58 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.5.0] - 2025-09-07
+
+### Added
+
+- **OpenRouter API Integration**: AI-powered translation services for multilingual TTS support
+  - `utils/openrouter_service.py` providing generic OpenRouter API interface
+  - Support for multiple LLM providers through OpenRouter (Google Gemini, OpenAI GPT, Claude, etc.)
+  - Automatic translation of TTS text when `TTS_LANGUAGE` is not "en"
+  - Configurable model selection with sensible defaults (`openai/gpt-4o-mini`)
+  - Graceful fallback to original English text if translation fails
+  - Generic service architecture for future AI-powered features beyond translation
+
+### Enhanced
+
+- **TTS Providers with Translation**: Automatic text translation before speech generation
+  - `GTTSProvider` and `ElevenLabsProvider` now support OpenRouter translation integration
+  - Smart language detection - only translates when target language differs from English
+  - Maintains existing functionality when OpenRouter is disabled or unavailable
+  - Seamless fallback chain: AI translation → TTS generation → audio playback
+- **Configuration System**: Extended with OpenRouter settings
+  - New environment variables: `OPENROUTER_ENABLED`, `OPENROUTER_API_KEY`, `OPENROUTER_MODEL`
+  - Centralized service initialization in root-level `config.py`
+  - Complete configuration examples in `.env.example` with multiple scenarios
+- **Parallel Audio Processing**: Concurrent execution of audio tasks for improved performance
+  - Sound effects and TTS announcements now run in parallel using `asyncio.gather()`
+  - Significantly reduced audio processing latency for events with multiple audio tasks
+  - Maintains individual provider error handling while improving overall responsiveness
+  - Graceful handling of mixed success/failure scenarios across concurrent audio tasks
+- **PrerecordedProvider Enforcement**: Stricter validation for sound file existence
+  - Only plays sounds that actually exist on disk
+  - Better fallback to TTS providers when prerecorded sounds unavailable
+  - Improved logging for missing sound file scenarios
+
+### Documentation
+
+- **OpenRouter Integration Guide**: Complete setup and configuration documentation
+  - API key setup instructions with links to OpenRouter dashboard
+  - Model selection guide with recommendations for different use cases
+  - Translation workflow examples for Indonesian, Spanish, and other languages
+  - Testing commands for validating OpenRouter integration
+- **Configuration Examples**: Real-world configuration scenarios
+  - Multi-language TTS with AI translation examples
+  - Provider priority configuration for different language combinations
+  - Troubleshooting guide for translation failures and fallbacks
+
+### Dependencies
+
+- **OpenAI SDK**: Added for OpenRouter API communication
+  - Lazy-loaded dependency - system works without OpenAI SDK installed
+  - Proper error handling when dependencies unavailable
+  - Added to server.py PEP 723 script dependencies
+
 ## [0.4.0] - 2025-09-07
 
 ### Added

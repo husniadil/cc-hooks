@@ -10,6 +10,8 @@
 #     "gtts",
 #     "elevenlabs",
 #     "pygame",
+#     "openai",
+#     "requests",
 # ]
 # ///
 
