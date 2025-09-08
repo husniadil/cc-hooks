@@ -220,7 +220,7 @@ class StatusLine:
             except AttributeError:
                 # Fallback if config doesn't have port attribute
                 pass
-        
+
         try:
             import requests
 
@@ -277,7 +277,9 @@ class StatusLine:
             # Get cost information
             cost_usd = active_block.get("costUSD", "")
             burn_rate = active_block.get("burnRate") or {}
-            cost_per_hour = burn_rate.get("costPerHour", "") if isinstance(burn_rate, dict) else ""
+            cost_per_hour = (
+                burn_rate.get("costPerHour", "") if isinstance(burn_rate, dict) else ""
+            )
 
             # Session time calculation
             reset_time_str = active_block.get(
@@ -320,7 +322,7 @@ class StatusLine:
             if config is None:
                 self._debug_log("config module not available")
                 return elevenlabs_info, elevenlabs_enabled
-                
+
             # Check if elevenlabs is in TTS_PROVIDERS list
             tts_providers_list = config.get_tts_providers_list()
             has_elevenlabs_provider = "elevenlabs" in tts_providers_list
@@ -348,7 +350,7 @@ class StatusLine:
         if config is None:
             self._debug_log("config module not available for API key check")
             return elevenlabs_info, elevenlabs_enabled
-            
+
         api_key = config.elevenlabs_api_key
         if not api_key:
             self._debug_log("ElevenLabs API key not found")

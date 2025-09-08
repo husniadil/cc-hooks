@@ -11,36 +11,43 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
-- **Default Port Configuration**: Updated default server port from 12345 to 12222 across all components
-  - Updated default port in `config.py` and `.env.example` 
+- **Default Port Configuration**: Updated default server port from 12345 to 12222 across all
+  components
+  - Updated default port in `config.py` and `.env.example`
   - Enhanced `claude.sh` wrapper with dynamic port loading from environment
   - Improved port configuration with .env file integration and fallback handling
 - **Enhanced Wrapper Script**: Improved `claude.sh` with better configuration management
   - Added CC_ORIGINAL_DIR support for directory context preservation
   - Enhanced status messages to display actual port being used
   - Better environment variable loading from .env files
-- **Dependency Management**: Added python-dotenv to hooks.py script dependencies for better environment handling
+- **Dependency Management**: Added python-dotenv to hooks.py script dependencies for better
+  environment handling
 
 ### Fixed
 
-- **Port Consistency**: Ensured all components use the same configurable port instead of hardcoded values
+- **Port Consistency**: Ensured all components use the same configurable port instead of hardcoded
+  values
 - **Environment Loading**: Improved environment variable handling in wrapper script
 
 ## [0.7.0] - 2025-09-07
 
 ### Added
 
-- **Contextual PreToolUse Messages**: AI-powered action-oriented messages for enhanced tool execution awareness
-  - New `generate_pre_tool_message()` function in `OpenRouterService` for dynamic PreToolUse message generation
+- **Contextual PreToolUse Messages**: AI-powered action-oriented messages for enhanced tool
+  execution awareness
+  - New `generate_pre_tool_message()` function in `OpenRouterService` for dynamic PreToolUse message
+    generation
   - Dedicated system prompt optimized for action descriptions rather than tool announcements
   - Context-first approach describing what Claude will do based on user's request
-  - Natural conversational messages like "Installing the dependencies you requested" instead of "Running Bash tool"
+  - Natural conversational messages like "Installing the dependencies you requested" instead of
+    "Running Bash tool"
   - Separate configuration control via `OPENROUTER_CONTEXTUAL_PRETOOLUSE` environment variable
   - `generate_pre_tool_message_if_available()` convenience function with graceful fallbacks
 - **Enhanced Session Management**: Improved memory management for transcript parsing
   - Session cleanup logic in `handle_session_end()` and `handle_stop()` event handlers
   - `clear_last_processed_message()` function for removing session-specific tracking data
-  - `cleanup_old_processed_files()` function for automatic cleanup of old processed files (24 hours+)
+  - `cleanup_old_processed_files()` function for automatic cleanup of old processed files (24
+    hours+)
   - Better memory management preventing accumulation of tracking files across sessions
 - **Cost Control Configuration**: Granular control over contextual message features
   - `OPENROUTER_CONTEXTUAL_STOP` and `OPENROUTER_CONTEXTUAL_PRETOOLUSE` environment variables
