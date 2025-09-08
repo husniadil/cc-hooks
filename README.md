@@ -183,6 +183,157 @@ cld
 uv run server.py --dev
 ```
 
+## Hook Command Arguments
+
+The hook script (`hooks.py`) supports various command-line arguments that enhance the event processing experience. These arguments work in synergy with your `.env` configuration.
+
+### Core Arguments
+
+**`--sound-effect=<filename>`**
+- Triggers specific sound effect playback during event processing
+- Sound files should be placed in the `sound/` directory  
+- Supports common audio formats (WAV, MP3, OGG, etc.)
+- Example: `--sound-effect=sound_effect_tek.mp3`
+
+**`--announce[=<volume>]`**
+- Enables TTS (Text-to-Speech) announcements for events
+- Optional volume control: `0.0` (silent) to `1.0` (full volume)
+- Uses TTS providers configured in your `.env` file
+- Example: `--announce=0.5` or just `--announce` (default volume)
+
+**`--debug`**
+- Enables verbose logging and debugging output
+- Helpful for troubleshooting hook processing issues
+
+### How Arguments Sync with Environment Variables
+
+The command-line arguments work alongside your `.env` configuration:
+
+#### TTS Announcements (`--announce`)
+```bash
+# .env configuration affects TTS behavior
+TTS_PROVIDERS=gtts,prerecorded     # Provider priority chain
+TTS_LANGUAGE=en                    # Language for announcements  
+TTS_CACHE_ENABLED=true            # Cache generated audio files
+OPENROUTER_ENABLED=true           # Enable AI translation (if language ≠ en)
+
+# Hook command uses these settings
+"command": "uv run hooks.py --announce=0.8"
+```
+
+#### Sound Effects (`--sound-effect`)
+```bash
+# Sound effects work independently of TTS configuration
+# But can be combined with TTS announcements
+"command": "uv run hooks.py --sound-effect=beep.mp3 --announce"
+```
+
+#### AI-Powered Contextual Messages
+```bash
+# .env configuration for dynamic messages
+OPENROUTER_ENABLED=true
+OPENROUTER_CONTEXTUAL_STOP=true           # AI completion messages
+OPENROUTER_CONTEXTUAL_PRETOOLUSE=true     # AI tool announcements  
+OPENROUTER_API_KEY=your_key_here
+
+# IMPORTANT: --announce is REQUIRED for contextual features to work
+# Without --announce, contextual messages won't be generated
+"command": "uv run hooks.py --announce"
+```
+
+> **⚠️ Critical Requirement**: Contextual AI features (`OPENROUTER_CONTEXTUAL_STOP` and `OPENROUTER_CONTEXTUAL_PRETOOLUSE`) **only work when `--announce` is specified** in your hook commands. Without `--announce`, the system won't trigger TTS processing and thus won't generate contextual messages.
+
+### Practical Configuration Examples
+
+#### Minimal Setup (Sound Effects Only)
+```bash
+# .env - minimal configuration
+TTS_PROVIDERS=prerecorded
+
+# Claude Code settings
+"PreToolUse": [{
+  "hooks": [{"command": "uv run hooks.py --sound-effect=click.mp3"}]
+}]
+```
+
+#### Google TTS with Sound Effects
+```bash
+# .env - Google TTS enabled
+TTS_PROVIDERS=gtts,prerecorded
+TTS_LANGUAGE=en
+TTS_CACHE_ENABLED=true
+
+# Claude Code settings - combines sound + TTS
+"SessionStart": [{
+  "hooks": [{"command": "uv run hooks.py --sound-effect=startup.mp3 --announce=0.7"}]
+}]
+```
+
+#### Premium Setup (ElevenLabs + AI Context)
+```bash
+# .env - full premium configuration
+TTS_PROVIDERS=elevenlabs,gtts,prerecorded
+ELEVENLABS_API_KEY=your_key_here
+OPENROUTER_ENABLED=true
+OPENROUTER_CONTEXTUAL_STOP=true
+OPENROUTER_CONTEXTUAL_PRETOOLUSE=true
+
+# Claude Code settings - AI-powered contextual announcements
+"Stop": [{
+  "hooks": [{"command": "uv run hooks.py --announce"}]
+}],
+"PreToolUse": [{
+  "hooks": [{"command": "uv run hooks.py --sound-effect=tool.mp3 --announce=0.6"}]
+}]
+```
+
+#### Multilingual Setup (Indonesian)
+```bash
+# .env - Indonesian TTS with AI translation  
+TTS_PROVIDERS=gtts,prerecorded
+TTS_LANGUAGE=id                           # Indonesian
+OPENROUTER_ENABLED=true                   # Required for translation
+OPENROUTER_API_KEY=your_key_here
+
+# Hook commands remain the same - translation is automatic
+"SessionStart": [{
+  "hooks": [{"command": "uv run hooks.py --announce"}]
+}]
+```
+
+### Testing Your Configuration
+
+```bash
+# Test specific event with your settings
+echo '{"session_id": "test", "hook_event_name": "SessionStart"}' | uv run hooks.py --announce
+
+# Test sound effect only  
+echo '{"session_id": "test", "hook_event_name": "PreToolUse"}' | uv run hooks.py --sound-effect=click.mp3
+
+# Test combined sound + TTS
+echo '{"session_id": "test", "hook_event_name": "Stop"}' | uv run hooks.py --sound-effect=done.mp3 --announce=0.5
+
+# Test with debug output
+echo '{"session_id": "test", "hook_event_name": "Test"}' | uv run hooks.py --debug --announce
+```
+
+### Common Issues & Troubleshooting
+
+**Contextual AI messages not working?**
+- ✅ Ensure `OPENROUTER_ENABLED=true` in your `.env`
+- ✅ Verify `OPENROUTER_API_KEY` is set correctly
+- ✅ **Most importantly**: Add `--announce` to your hook commands - contextual features require TTS processing to activate
+- ✅ Check that `OPENROUTER_CONTEXTUAL_STOP=true` or `OPENROUTER_CONTEXTUAL_PRETOOLUSE=true` are set
+
+**Example of incorrect configuration:**
+```json
+// ❌ This won't trigger contextual messages (missing --announce)
+"Stop": [{"hooks": [{"command": "uv run hooks.py"}]}]
+
+// ✅ This will trigger contextual messages  
+"Stop": [{"hooks": [{"command": "uv run hooks.py --announce"}]}]
+```
+
 ## API Key Setup
 
 - **OpenRouter**: Get your key at [openrouter.ai/keys](https://openrouter.ai/keys) - enables AI translation and contextual messages
