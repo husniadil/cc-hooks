@@ -75,7 +75,8 @@ if [ -d "$INSTANCES_DIR" ]; then
     stale_count=0
     for pidfile in "$INSTANCES_DIR"/*.pid; do
         if [ -f "$pidfile" ]; then
-            pid=$(cat "$pidfile")
+            # Extract PID from filename (not file contents which contains UUID)
+            pid=$(basename "$pidfile" .pid)
             if ! kill -0 "$pid" 2>/dev/null; then
                 rm -f "$pidfile"
                 stale_count=$((stale_count + 1))

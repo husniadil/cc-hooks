@@ -7,6 +7,14 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.7.2] - 2025-09-09
+
+### Fixed
+
+- **Instance PID Extraction**: Fixed bug in `claude.sh` where PID was incorrectly read from file contents instead of filename
+  - Changed PID extraction logic to use `basename "$pidfile" .pid` to extract PID from filename
+  - Resolves stale process cleanup issues where UUID content was being treated as PID
+
 ## [0.7.1] - 2025-09-07
 
 ### Changed
