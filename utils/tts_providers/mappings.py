@@ -5,11 +5,11 @@ This module contains the common data structures and utility functions
 used by all TTS providers to avoid duplication and ensure consistency.
 """
 
-import logging
 from typing import Dict, Tuple, Optional, Any, Union
 from utils.hooks_constants import HookEvent
+from utils.colored_logger import setup_logger
 
-logger = logging.getLogger(__name__)
+logger = setup_logger(__name__)
 
 # Mapping from event/source to appropriate MP3 files for Claude Code hook data
 # Format: (hook_event_name, source) : "filename.mp3"

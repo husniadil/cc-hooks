@@ -18,7 +18,6 @@ TTS provider architecture that supports pre-recorded sounds, Google TTS,
 and future providers like ElevenLabs.
 """
 
-import logging
 import sys
 from pathlib import Path
 from typing import Dict, Optional, Any
@@ -31,9 +30,10 @@ sys.path.insert(0, str(parent_dir))
 from utils.sound_player import play_sound
 from utils.tts_manager import get_tts_manager, initialize_tts_manager
 from utils.tts_providers.mappings import get_sound_file_for_event, get_audio_description
+from utils.colored_logger import setup_logger, configure_root_logging
 
-# Configure logging
-logger = logging.getLogger(__name__)
+configure_root_logging()
+logger = setup_logger(__name__)
 
 
 def _clean_text_for_tts(text: str) -> str:
@@ -203,21 +203,9 @@ def _prepare_text_for_event(
             context = extract_conversation_context(transcript_path)
             if not context.has_context():
                 logger.info(
-                    "No meaningful conversation context found, using fallback message"
+                    "No meaningful conversation context found, skipping announcement"
                 )
-                fallback_text = (
-                    get_audio_description("stop_task_completed.mp3")
-                    or "Task completed successfully"
-                )
-                # Apply translation to fallback text
-                try:
-                    from utils.openrouter_service import translate_text_if_available
-
-                    return translate_text_if_available(
-                        fallback_text, language, hook_event_name, event_data
-                    )
-                except ImportError:
-                    return fallback_text
+                return None
 
             # Generate contextual completion message
             completion_message = generate_completion_message_if_available(
@@ -300,19 +288,9 @@ def _prepare_text_for_event(
             context = extract_conversation_context(transcript_path)
             if not context.has_context():
                 logger.info(
-                    "No meaningful conversation context found, using fallback message"
+                    "No meaningful conversation context found, skipping announcement"
                 )
-                short_tool_name = _shorten_tool_name_for_tts(tool_name)
-                fallback_text = f"Running {short_tool_name} tool"
-                # Apply translation to fallback text
-                try:
-                    from utils.openrouter_service import translate_text_if_available
-
-                    return translate_text_if_available(
-                        fallback_text, language, hook_event_name, event_data
-                    )
-                except ImportError:
-                    return fallback_text
+                return None
 
             # Generate contextual PreToolUse message
             pre_tool_message = generate_pre_tool_message_if_available(
@@ -401,6 +379,13 @@ def announce_event(
         prepared_text = _prepare_text_for_event(
             hook_event_name, event_data, config.tts_language
         )
+
+        # For contextual events (Stop, PreToolUse), skip announcement if no meaningful context
+        if hook_event_name in ["Stop", "PreToolUse"] and prepared_text is None:
+            logger.info(
+                f"Skipping {hook_event_name} announcement due to no meaningful context"
+            )
+            return False
 
         if prepared_text:
             # Clean text for TTS (remove backticks and formatting)
@@ -512,6 +497,9 @@ def main():
         providers=providers,
         language=config.tts_language,
         cache_enabled=config.tts_cache_enabled,
+        api_key=config.elevenlabs_api_key,
+        voice_id=config.elevenlabs_voice_id,
+        model_id=config.elevenlabs_model_id,
     )
 
     if not manager:

@@ -3,7 +3,6 @@
 
 import asyncio
 import json
-import logging
 from typing import Optional
 from pathlib import Path
 from config import config
@@ -22,8 +21,10 @@ NO_EVENTS_WAIT_SECONDS = 0.1
 ERROR_WAIT_SECONDS = 5
 DEFAULT_SLEEP_SECONDS = 0.01
 
-# Configure logging
-logger = logging.getLogger(__name__)
+from utils.colored_logger import setup_logger, configure_root_logging
+
+configure_root_logging()
+logger = setup_logger(__name__)
 
 
 async def process_events():
@@ -192,12 +193,6 @@ async def process_single_event(event_data: dict, arguments: Optional[dict] = Non
     # Prepare audio tasks for parallel execution
     audio_tasks = []
 
-    # Check for sound effect argument (backward compatibility)
-    if arguments and "sound_effect" in arguments:
-        sound_file = arguments["sound_effect"]
-        logger.info(f"Sound effect requested: {sound_file}")
-        audio_tasks.append(play_sound(sound_file))
-
     # Check for announcement request (new intelligent mapping)
     if arguments and "announce" in arguments:
         # Volume can be specified, default to 0.5
@@ -209,6 +204,12 @@ async def process_single_event(event_data: dict, arguments: Optional[dict] = Non
 
         logger.info(f"Announcement requested for {hook_event_name} (volume: {volume})")
         audio_tasks.append(play_announcement_sound(hook_event_name, event_data, volume))
+
+    # Check for sound effect argument (backward compatibility)
+    if arguments and "sound_effect" in arguments:
+        sound_file = arguments["sound_effect"]
+        logger.info(f"Sound effect requested: {sound_file}")
+        audio_tasks.append(play_sound(sound_file))
 
     # Run all audio tasks in parallel if any exist
     if audio_tasks:

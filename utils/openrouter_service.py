@@ -13,11 +13,12 @@ This service provides a unified interface to OpenRouter's LLM API,
 supporting translation and other text generation tasks for future extensibility.
 """
 
-import logging
 from typing import Optional
 from pathlib import Path
+from utils.colored_logger import setup_logger, configure_root_logging
 
-logger = logging.getLogger(__name__)
+configure_root_logging()
+logger = setup_logger(__name__)
 
 try:
     from openai import OpenAI
@@ -151,9 +152,9 @@ class OpenRouterService:
                     api_key=self.api_key,
                     base_url="https://openrouter.ai/api/v1",
                 )
-                logger.info(f"OpenRouter client initialized with model: {self.model}")
+                logger.info(f"Client initialized with model: {self.model}")
             except Exception as e:
-                logger.error(f"Failed to initialize OpenRouter client: {e}")
+                logger.error(f"Failed to initialize client: {e}")
                 self._client = None
         return self._client
 
@@ -166,11 +167,11 @@ class OpenRouterService:
 
         if not self._is_available:
             if not self.enabled:
-                logger.debug("OpenRouter service is disabled")
+                logger.debug("Service is disabled")
             elif not self.api_key:
-                logger.warning("OpenRouter API key not provided")
+                logger.warning("API key not provided")
             elif not OPENAI_AVAILABLE:
-                logger.warning("OpenAI SDK not available for OpenRouter")
+                logger.warning("OpenAI SDK not available")
 
         return self._is_available
 
@@ -196,7 +197,7 @@ class OpenRouterService:
             str or None: Translated text if successful, None if failed
         """
         if not self.is_available():
-            logger.debug("OpenRouter not available for translation")
+            logger.debug("Service not available for translation")
             return None
 
         if not text or not text.strip():
@@ -217,7 +218,7 @@ class OpenRouterService:
             )
 
             logger.info(
-                f"Translating text from {source_language} to {target_language}: '{text}'"
+                f"Translating from {source_language} to {target_language}: '{text}'"
                 + (f" (event: {hook_event_name})" if hook_event_name else "")
             )
 
@@ -239,7 +240,7 @@ class OpenRouterService:
             )
 
             if not response.choices or not response.choices[0].message.content:
-                logger.error("Empty response from OpenRouter")
+                logger.error("Empty response from API")
                 return None
 
             translated_text = response.choices[0].message.content.strip()
@@ -277,11 +278,11 @@ class OpenRouterService:
             str or None: Generated completion message if successful, None if failed
         """
         if not self.contextual_stop:
-            logger.debug("Contextual Stop messages are disabled")
+            logger.debug("Contextual completion messages are disabled")
             return None
 
         if not self.is_available():
-            logger.debug("OpenRouter not available for completion message generation")
+            logger.debug("Service not available for completion message generation")
             return None
 
         if not user_prompt and not claude_response:
@@ -297,6 +298,9 @@ class OpenRouterService:
             logger.info(
                 f"Generating completion message for session {session_id} in {target_language}"
             )
+            # Debug logging for input context
+            logger.debug(f"User Prompt: {user_prompt}")
+            logger.debug(f"Claude Response: {claude_response}")
 
             # Make API call with system prompt
             messages = [
@@ -316,7 +320,7 @@ class OpenRouterService:
             )
 
             if not response.choices or not response.choices[0].message.content:
-                logger.error("Empty response from OpenRouter for completion message")
+                logger.error("Empty response from API for completion message")
                 return None
 
             completion_message = response.choices[0].message.content.strip()
@@ -329,7 +333,7 @@ class OpenRouterService:
             ):
                 completion_message = completion_message[1:-1]
 
-            logger.info(f"Completion message generated: '{completion_message}'")
+            logger.info(f"Generated completion message: '{completion_message}'")
             return completion_message
 
         except Exception as e:
@@ -362,7 +366,7 @@ class OpenRouterService:
             return None
 
         if not self.is_available():
-            logger.debug("OpenRouter not available for PreToolUse message generation")
+            logger.debug("Service not available for PreToolUse message generation")
             return None
 
         if not user_prompt and not claude_response:
@@ -378,6 +382,10 @@ class OpenRouterService:
             logger.info(
                 f"Generating PreToolUse message for session {session_id} using {tool_name} in {target_language}"
             )
+            # Debug logging for input context
+            logger.debug(f"Tool Name: {tool_name}")
+            logger.debug(f"User Prompt: {user_prompt}")
+            logger.debug(f"Claude Response: {claude_response}")
 
             # Make API call with system prompt
             messages = [
@@ -397,7 +405,7 @@ class OpenRouterService:
             )
 
             if not response.choices or not response.choices[0].message.content:
-                logger.error("Empty response from OpenRouter for PreToolUse message")
+                logger.error("Empty response from API for PreToolUse message")
                 return None
 
             pre_tool_message = response.choices[0].message.content.strip()
@@ -408,7 +416,7 @@ class OpenRouterService:
             elif pre_tool_message.startswith("'") and pre_tool_message.endswith("'"):
                 pre_tool_message = pre_tool_message[1:-1]
 
-            logger.info(f"PreToolUse message generated: '{pre_tool_message}'")
+            logger.info(f"Generated PreToolUse message: '{pre_tool_message}'")
             return pre_tool_message
 
         except Exception as e:
@@ -472,20 +480,10 @@ class OpenRouterService:
         # Add conversation context
         context_lines.append("Conversation context:")
         if user_prompt:
-            # Truncate very long prompts
-            prompt_preview = (
-                user_prompt[:200] + "..." if len(user_prompt) > 200 else user_prompt
-            )
-            context_lines.append(f"User said: {prompt_preview}")
+            context_lines.append(f"User said: {user_prompt}")
 
         if claude_response:
-            # Truncate very long responses
-            response_preview = (
-                claude_response[:300] + "..."
-                if len(claude_response) > 300
-                else claude_response
-            )
-            context_lines.append(f"You said: {response_preview}")
+            context_lines.append(f"You said: {claude_response}")
 
         if not user_prompt and not claude_response:
             context_lines.append("No specific context available.")
@@ -515,20 +513,10 @@ class OpenRouterService:
         # Add conversation context
         context_lines.append("Conversation context:")
         if user_prompt:
-            # Truncate very long prompts
-            prompt_preview = (
-                user_prompt[:200] + "..." if len(user_prompt) > 200 else user_prompt
-            )
-            context_lines.append(f"User requested: {prompt_preview}")
+            context_lines.append(f"User requested: {user_prompt}")
 
         if claude_response:
-            # Truncate very long responses
-            response_preview = (
-                claude_response[:300] + "..."
-                if len(claude_response) > 300
-                else claude_response
-            )
-            context_lines.append(f"You are about to: {response_preview}")
+            context_lines.append(f"You are about to: {claude_response}")
 
         if not user_prompt and not claude_response:
             context_lines.append("No specific context available.")
@@ -561,7 +549,7 @@ def initialize_openrouter_service(
         contextual_stop=contextual_stop,
         contextual_pretooluse=contextual_pretooluse,
     )
-    logger.info("OpenRouter service initialized")
+    logger.info("Service initialized")
 
 
 def translate_text_if_available(
@@ -621,7 +609,7 @@ def generate_completion_message_if_available(
     """
     service = get_openrouter_service()
     if not service:
-        logger.debug("OpenRouter not available, using fallback completion message")
+        logger.debug("Service not available, using fallback completion message")
         return fallback_message
 
     completion_message = service.generate_completion_message(
@@ -673,7 +661,7 @@ def generate_pre_tool_message_if_available(
     if not service:
         if fallback_message is None:
             fallback_message = f"Running {short_tool_name} tool"
-        logger.debug("OpenRouter not available, using fallback PreToolUse message")
+        logger.debug("Service not available, using fallback PreToolUse message")
         return fallback_message
 
     pre_tool_message = service.generate_pre_tool_message(

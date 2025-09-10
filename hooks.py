@@ -14,13 +14,16 @@
 # Claude Code hooks entry point
 # Receives hook events from Claude Code via stdin and forwards them to the API server
 
-import argparse
 import json
 import os
 import sys
 import requests
 from typing import Dict, Any, Optional
 from config import config
+from utils.colored_logger import setup_logger, configure_root_logging
+
+configure_root_logging()
+logger = setup_logger(__name__)
 
 
 def read_json_from_stdin() -> Dict[Any, Any]:
@@ -32,10 +35,10 @@ def read_json_from_stdin() -> Dict[Any, Any]:
 
         return json.loads(data)
     except json.JSONDecodeError as e:
-        print(f"Error: Invalid JSON format - {e}", file=sys.stderr)
+        logger.error(f"Invalid JSON format - {e}")
         sys.exit(1)
     except Exception as e:
-        print(f"Error reading from stdin: {e}", file=sys.stderr)
+        logger.error(f"Error reading from stdin: {e}")
         sys.exit(1)
 
 
@@ -58,15 +61,14 @@ def send_to_api(
         response = requests.post(api_url, json=payload, timeout=30)
         response.raise_for_status()
 
-        result = response.json()
-        # print(f"Success: Event queued with ID {result.get('event_id')}")
+        response.json()  # Validate JSON response
         return True
 
     except requests.exceptions.RequestException as e:
-        print(f"Error sending request to API: {e}", file=sys.stderr)
+        logger.error(f"Error sending request to API: {e}")
         return False
     except Exception as e:
-        print(f"Unexpected error: {e}", file=sys.stderr)
+        logger.error(f"Unexpected error: {e}")
         return False
 
 

@@ -2,11 +2,11 @@
 # Manages schema changes and version tracking for SQLite database
 
 import aiosqlite
-import logging
 from typing import Dict, Any
 from config import config
+from utils.colored_logger import setup_logger
 
-logger = logging.getLogger(__name__)
+logger = setup_logger(__name__)
 
 # Migration definitions
 MIGRATIONS = [

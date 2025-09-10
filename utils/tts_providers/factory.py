@@ -5,14 +5,14 @@ This module handles instantiation of different TTS providers
 and provides a clean interface for provider creation.
 """
 
-import logging
 from typing import Dict, Type, Optional
 from .base import TTSProvider
 from .prerecorded_provider import PrerecordedProvider
 from .gtts_provider import GTTSProvider
 from .elevenlabs_provider import ElevenLabsProvider
+from utils.colored_logger import setup_logger
 
-logger = logging.getLogger(__name__)
+logger = setup_logger(__name__)
 
 # Registry of available providers
 PROVIDER_REGISTRY: Dict[str, Type[TTSProvider]] = {

@@ -7,11 +7,51 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.8.0] - 2025-09-10
+
+### Added
+
+- **Centralized Colored Logging System**: Introduced comprehensive logging system with per-component
+  colored output
+  - New `utils/colored_logger.py` module provides consistent logging configuration across all
+    components
+  - Each component gets distinctively colored log messages for easier debugging and log
+    identification
+  - Centralized root logging configuration prevents duplicate log handlers
+  - Uses `coloredlogs` library for professional, readable log output
+
+### Changed
+
+- **Enhanced Logging Infrastructure**: Migrated all components from standard logging to new colored
+  logging system
+  - Updated `app/api.py`, `app/event_db.py`, `app/event_processor.py`, `app/migrations.py`
+  - Updated `hooks.py`, `server.py`, and all utility modules
+  - Improved debug logging with better context information throughout the system
+- **Audio Processing Order**: Reordered audio task processing to prioritize TTS announcements over
+  sound effects
+  - TTS announcements now processed before sound effects for better user experience
+  - Maintains parallel execution for optimal performance
+- **Enhanced Error Handling**: Improved error messages and debug logging across multiple components
+  - Better context logging in `transcript_parser.py` and `openrouter_service.py`
+  - More descriptive error messages with reduced verbosity in API components
+  - Enhanced debugging capabilities with full context preservation
+
+### Fixed
+
+- **Logging Consistency**: Resolved logging inconsistencies and duplicate handler issues
+  - Prevents log message duplication through centralized configuration
+  - Ensures all components use consistent logging format and colors
+- **Context Preservation**: Enhanced context logging in transcript parsing and OpenRouter
+  integration
+  - Full user prompts and Claude responses preserved in debug logs
+  - Better error context for troubleshooting complex conversation flows
+
 ## [0.7.2] - 2025-09-09
 
 ### Fixed
 
-- **Instance PID Extraction**: Fixed bug in `claude.sh` where PID was incorrectly read from file contents instead of filename
+- **Instance PID Extraction**: Fixed bug in `claude.sh` where PID was incorrectly read from file
+  contents instead of filename
   - Changed PID extraction logic to use `basename "$pidfile" .pid` to extract PID from filename
   - Resolves stale process cleanup issues where UUID content was being treated as PID
 

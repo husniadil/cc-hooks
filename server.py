@@ -20,7 +20,6 @@
 
 import uvicorn
 import asyncio
-import logging
 import sys
 from datetime import datetime, timezone
 from contextlib import asynccontextmanager
@@ -29,9 +28,10 @@ from app.event_db import init_db, set_server_start_time
 from app.event_processor import process_events
 from config import config
 from utils.tts_announcer import initialize_tts
+from utils.colored_logger import setup_logger, configure_root_logging
 
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+configure_root_logging()
+logger = setup_logger(__name__)
 
 
 @asynccontextmanager
@@ -93,4 +93,4 @@ if __name__ == "__main__":
         )
     else:
         # Production mode without reload
-        uvicorn.run(app, host=config.host, port=config.port)
+        uvicorn.run(app, host=config.host, port=config.port, log_level="info")

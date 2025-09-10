@@ -5,13 +5,13 @@ This provider uses pre-recorded MP3 files stored in the sound/ directory,
 providing the original behavior of the TTS announcement system.
 """
 
-import logging
 from pathlib import Path
 from typing import Dict, Any, Optional
 from .base import TTSProvider
 from .mappings import get_sound_file_for_event
+from utils.colored_logger import setup_logger
 
-logger = logging.getLogger(__name__)
+logger = setup_logger(__name__)
 
 
 class PrerecordedProvider(TTSProvider):

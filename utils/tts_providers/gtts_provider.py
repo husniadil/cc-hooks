@@ -13,12 +13,12 @@ the results for better performance and reduced API calls.
 """
 
 import hashlib
-import logging
 from pathlib import Path
 from typing import Dict, Any, Optional
 from .base import TTSProvider
+from utils.colored_logger import setup_logger
 
-logger = logging.getLogger(__name__)
+logger = setup_logger(__name__)
 
 try:
     from gtts import gTTS

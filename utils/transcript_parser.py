@@ -14,19 +14,27 @@ and extract conversation context for enhanced event processing.
 import argparse
 import hashlib
 import json
-import logging
-import os
-import tempfile
 from pathlib import Path
 from typing import Optional, Dict, Any, List
+from utils.colored_logger import setup_logger, configure_root_logging
 
-logger = logging.getLogger(__name__)
+configure_root_logging()
+logger = setup_logger(__name__)
 
 
 def _get_temp_dir() -> Path:
     """Get or create temporary directory for transcript tracking."""
     temp_dir = Path(".claude-instances")
-    temp_dir.mkdir(exist_ok=True)
+    try:
+        temp_dir.mkdir(exist_ok=True)
+    except (PermissionError, OSError) as e:
+        logger.warning(f"Failed to create temp directory {temp_dir}: {e}")
+        # Fallback to system temp directory
+        import tempfile
+
+        temp_dir = Path(tempfile.gettempdir()) / "claude-instances"
+        temp_dir.mkdir(exist_ok=True)
+        logger.info(f"Using fallback temp directory: {temp_dir}")
     return temp_dir
 
 
@@ -145,14 +153,25 @@ def extract_message_content(message_data: Dict[str, Any]) -> Optional[str]:
         Extracted text content or None if not found
     """
     try:
-        if not message_data or "content" not in message_data:
+        if not message_data:
+            logger.debug("extract_message_content: No message data provided")
+            return None
+
+        if "content" not in message_data:
+            logger.debug("extract_message_content: No 'content' field in message data")
             return None
 
         content = message_data["content"]
 
         # Handle string content directly
         if isinstance(content, str):
-            return content.strip() if content.strip() else None
+            stripped_content = content.strip()
+            if not stripped_content:
+                logger.debug(
+                    "extract_message_content: Empty string content after stripping"
+                )
+                return None
+            return stripped_content
 
         # Handle array content (Claude Code format)
         if isinstance(content, list):
@@ -165,11 +184,21 @@ def extract_message_content(message_data: Dict[str, Any]) -> Optional[str]:
 
             if text_parts:
                 return " ".join(text_parts)
+            else:
+                logger.debug(
+                    "extract_message_content: No text content found in array format"
+                )
+                return None
 
+        # Unknown content format
+        logger.info(
+            f"extract_message_content: Unsupported content format: {type(content)}"
+        )
         return None
 
     except Exception as e:
-        logger.warning(f"Error extracting message content: {e}")
+        # Use error level for unexpected exceptions as these indicate real problems
+        logger.error(f"Error extracting message content from data {message_data}: {e}")
         return None
 
 
@@ -197,16 +226,22 @@ def parse_jsonl_line(line: str) -> Optional[Dict[str, Any]]:
 
 
 def read_transcript_backwards(
-    transcript_path: str, max_lines: int = 50
+    transcript_path: str,
+    max_lines: int = 50,
+    start_line: int = None,
+    end_line: int = None,
 ) -> List[Dict[str, Any]]:
     """
     Read JSONL transcript file backwards for efficiency.
 
     Reads from the end of the file to quickly find recent conversation context.
+    Can optionally specify a line range for testing specific portions.
 
     Args:
         transcript_path: Path to JSONL transcript file
-        max_lines: Maximum number of lines to read from end
+        max_lines: Maximum number of lines to read from end (ignored if start_line/end_line specified)
+        start_line: Starting line number (1-indexed, inclusive) for range selection
+        end_line: Ending line number (1-indexed, inclusive) for range selection
 
     Returns:
         List of parsed JSON objects in reverse chronological order
@@ -219,14 +254,27 @@ def read_transcript_backwards(
 
         entries = []
         with open(transcript_file, "r", encoding="utf-8") as f:
-            # Read all lines and take the last max_lines
+            # Read all lines
             all_lines = f.readlines()
-            recent_lines = (
-                all_lines[-max_lines:] if len(all_lines) > max_lines else all_lines
-            )
+
+            # Select lines based on parameters
+            if start_line is not None or end_line is not None:
+                # Use line range if specified (convert to 0-indexed)
+                start_idx = (start_line - 1) if start_line else 0
+                end_idx = end_line if end_line else len(all_lines)
+                selected_lines = all_lines[start_idx:end_idx]
+                logger.debug(
+                    f"Using line range {start_line or 1}-{end_line or len(all_lines)} ({len(selected_lines)} lines)"
+                )
+            else:
+                # Use max_lines from end (original behavior)
+                selected_lines = (
+                    all_lines[-max_lines:] if len(all_lines) > max_lines else all_lines
+                )
+                logger.debug(f"Using last {len(selected_lines)} lines from end")
 
             # Parse lines in reverse order (newest first)
-            for line in reversed(recent_lines):
+            for line in reversed(selected_lines):
                 entry = parse_jsonl_line(line)
                 if entry:
                     entries.append(entry)
@@ -239,7 +287,9 @@ def read_transcript_backwards(
         return []
 
 
-def extract_conversation_context(transcript_path: str) -> ConversationContext:
+def extract_conversation_context(
+    transcript_path: str, start_line: int = None, end_line: int = None
+) -> ConversationContext:
     """
     Extract conversation context from Claude Code transcript file.
 
@@ -254,6 +304,8 @@ def extract_conversation_context(transcript_path: str) -> ConversationContext:
 
     Args:
         transcript_path: Path to Claude Code JSONL transcript file
+        start_line: Starting line number (1-indexed, inclusive) for range selection
+        end_line: Ending line number (1-indexed, inclusive) for range selection
 
     Returns:
         ConversationContext with extracted information
@@ -264,7 +316,9 @@ def extract_conversation_context(transcript_path: str) -> ConversationContext:
             return ConversationContext()
 
         # Read recent entries from transcript
-        entries = read_transcript_backwards(transcript_path)
+        entries = read_transcript_backwards(
+            transcript_path, start_line=start_line, end_line=end_line
+        )
         if not entries:
             logger.info("No entries found in transcript")
             return ConversationContext()
@@ -311,13 +365,13 @@ def extract_conversation_context(transcript_path: str) -> ConversationContext:
                 if entry.get("type") == "user" and not last_user_prompt:
                     message = entry.get("message", {})
                     content = extract_message_content(message)
-                    if content and not content.startswith(
-                        "<command-"
-                    ):  # Skip command messages
+                    if content:
                         last_user_prompt = content
                         logger.debug(
                             f"Found user prompt {'after Stop event' if found_stop_event else ''}: {content[:50]}..."
                         )
+                        # Debug logging for full user prompt
+                        logger.info(f"User Prompt (session: {session_id}): {content}")
 
                 # Look for assistant messages
                 if entry.get("type") == "assistant" and not last_claude_response:
@@ -343,6 +397,11 @@ def extract_conversation_context(transcript_path: str) -> ConversationContext:
                             return ConversationContext(session_id=session_id)
 
                         last_claude_response = content
+
+                        # Debug logging for full Claude response
+                        logger.info(
+                            f"Claude Response (session: {session_id}): {content}"
+                        )
 
                         # Save this as the last processed message
                         if session_id:
@@ -384,8 +443,18 @@ def extract_conversation_context(transcript_path: str) -> ConversationContext:
                 f"Successfully extracted conversation context from {transcript_path}"
                 f"{' (after Stop event)' if found_stop_event else ''}"
             )
+            # Debug logging for final extracted context
+            logger.info(
+                f"Final User Prompt (session: {session_id}): {last_user_prompt}"
+            )
+            logger.info(
+                f"Final Claude Response (session: {session_id}): {last_claude_response}"
+            )
         else:
             logger.info("No meaningful conversation context found")
+            logger.debug(
+                f"No context - User Prompt: {last_user_prompt}, Claude Response: {last_claude_response}"
+            )
 
         return context
 
@@ -411,6 +480,21 @@ def main():
     parser.add_argument(
         "--verbose", "-v", action="store_true", help="Enable verbose logging"
     )
+    parser.add_argument(
+        "--start-line",
+        type=int,
+        help="Starting line number (1-indexed, inclusive) for range selection",
+    )
+    parser.add_argument(
+        "--end-line",
+        type=int,
+        help="Ending line number (1-indexed, inclusive) for range selection",
+    )
+    parser.add_argument(
+        "--skip-duplicate-check",
+        action="store_true",
+        help="Skip duplicate processing check (useful for testing)",
+    )
 
     args = parser.parse_args()
 
@@ -419,7 +503,31 @@ def main():
     logging.basicConfig(level=level, format="%(levelname)s: %(message)s")
 
     # Extract conversation context
-    context = extract_conversation_context(args.transcript_path)
+    if args.skip_duplicate_check:
+        # Temporarily disable duplicate checking by clearing processed files
+        import tempfile
+
+        old_claude_instances = Path(".claude-instances")
+        if old_claude_instances.exists():
+            temp_backup = Path(tempfile.mkdtemp()) / "claude-instances-backup"
+            old_claude_instances.rename(temp_backup)
+
+        try:
+            context = extract_conversation_context(
+                args.transcript_path, start_line=args.start_line, end_line=args.end_line
+            )
+        finally:
+            # Restore backup
+            if "temp_backup" in locals() and temp_backup.exists():
+                if Path(".claude-instances").exists():
+                    import shutil
+
+                    shutil.rmtree(".claude-instances")
+                temp_backup.rename(".claude-instances")
+    else:
+        context = extract_conversation_context(
+            args.transcript_path, start_line=args.start_line, end_line=args.end_line
+        )
 
     # Output results
     if args.format == "json":

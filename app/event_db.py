@@ -3,7 +3,6 @@
 
 import aiosqlite
 import json
-import logging
 from typing import Dict, Any, Tuple, Optional, Literal
 from config import config
 
@@ -23,7 +22,9 @@ EVENT_STATUS_FAILED: EventStatus = "failed"
 _server_start_time: Optional[str] = None
 
 # Configure logging
-logger = logging.getLogger(__name__)
+from utils.colored_logger import setup_logger
+
+logger = setup_logger(__name__)
 
 
 # Server start time management

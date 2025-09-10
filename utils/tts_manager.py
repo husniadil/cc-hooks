@@ -5,12 +5,12 @@ This module provides a unified interface for text-to-speech functionality,
 coordinating between different TTS providers and handling fallbacks.
 """
 
-import logging
 from pathlib import Path
 from typing import Dict, Any, Optional, List
 from .tts_providers import create_provider
+from .colored_logger import setup_logger
 
-logger = logging.getLogger(__name__)
+logger = setup_logger(__name__)
 
 
 class TTSManager:

@@ -3,7 +3,6 @@
 
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
-import logging
 from typing import Dict, Any, Optional
 from app.event_db import (
     queue_event,
@@ -12,8 +11,10 @@ from app.event_db import (
 )
 from app.migrations import get_migration_status
 from utils.hooks_constants import is_valid_hook_event
+from utils.colored_logger import setup_logger, configure_root_logging
 
-logger = logging.getLogger(__name__)
+configure_root_logging()
+logger = setup_logger(__name__)
 
 
 class Event(BaseModel):
