@@ -122,7 +122,7 @@ class TTSManager:
 
                 if provider:
                     self.providers[provider_name] = provider
-                    logger.info(f"Initialized TTS provider: {provider_name}")
+                    logger.debug(f"Initialized TTS provider: {provider_name}")
                 else:
                     logger.warning(
                         f"Failed to initialize TTS provider: {provider_name}"
@@ -188,7 +188,7 @@ def initialize_tts_manager(
 
     tts_manager = TTSManager(providers=providers, **provider_kwargs)
 
-    logger.info(
+    logger.debug(
         f"Initialized global TTS manager with providers: {providers or ['prerecorded']} (primary: {tts_manager.get_primary_provider_name()})"
     )
     return tts_manager

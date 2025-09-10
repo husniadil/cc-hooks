@@ -152,7 +152,7 @@ class OpenRouterService:
                     api_key=self.api_key,
                     base_url="https://openrouter.ai/api/v1",
                 )
-                logger.info(f"Client initialized with model: {self.model}")
+                logger.debug(f"Client initialized with model: {self.model}")
             except Exception as e:
                 logger.error(f"Failed to initialize client: {e}")
                 self._client = None
@@ -549,7 +549,7 @@ def initialize_openrouter_service(
         contextual_stop=contextual_stop,
         contextual_pretooluse=contextual_pretooluse,
     )
-    logger.info("Service initialized")
+    logger.debug("Service initialized")
 
 
 def translate_text_if_available(

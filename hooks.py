@@ -46,7 +46,9 @@ def send_to_api(
     event_data: Dict[Any, Any], arguments: Optional[Dict[str, Any]] = None
 ) -> bool:
     """Send event data to the API endpoint."""
-    api_url = f"http://{config.host}:{config.port}/events"
+    # Use port from environment variable set by claude.sh, fallback to default
+    port = os.getenv("CC_HOOKS_PORT", "12222")
+    api_url = f"http://localhost:{port}/events"
 
     try:
         payload = {"data": event_data}

@@ -20,6 +20,7 @@
 
 import uvicorn
 import asyncio
+import os
 import sys
 from datetime import datetime, timezone
 from contextlib import asynccontextmanager
@@ -53,11 +54,13 @@ async def lifespan(app):
         model_id=config.elevenlabs_model_id,
     )
     if tts_manager:
-        logger.info(f"TTS system initialized with providers: {providers}")
+        logger.debug(f"TTS system initialized with providers: {providers}")
     else:
         logger.warning("TTS system initialization failed, continuing without TTS")
 
-    task = asyncio.create_task(process_events())
+    # Get instance ID for the event processor
+    instance_id = os.getenv("CC_INSTANCE_ID")
+    task = asyncio.create_task(process_events(instance_id))
     logger.info(f"Server started successfully at {server_start_time}")
     yield
     # Shutdown
@@ -81,16 +84,20 @@ if __name__ == "__main__":
     # Check if we're in development mode (with --reload flag or specific argument)
     reload = "--reload" in sys.argv or "--dev" in sys.argv
 
+    # Get port from environment variable (set by claude.sh) or default
+    port = int(os.getenv("PORT", "12222"))
+    host = "0.0.0.0"
+
     if reload:
         # Development mode with hot reload
         uvicorn.run(
             "server:app",  # Use string import for reload to work
-            host=config.host,
-            port=config.port,
+            host=host,
+            port=port,
             reload=True,
             reload_dirs=[".", "app", "utils"],  # Watch these directories
             reload_excludes=["*.db", ".claude-instances", "sound"],  # Ignore these
         )
     else:
         # Production mode without reload
-        uvicorn.run(app, host=config.host, port=config.port, log_level="info")
+        uvicorn.run(app, host=host, port=port, log_level="info")

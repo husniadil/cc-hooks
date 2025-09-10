@@ -27,13 +27,26 @@ configure_root_logging()
 logger = setup_logger(__name__)
 
 
-async def process_events():
+async def process_events(instance_id: Optional[str] = None):
     """Background task for processing events."""
+    # Get current instance ID from parameter or environment
+    if instance_id is None:
+        import os
+
+        instance_id = os.getenv("CC_INSTANCE_ID")
+
+    if not instance_id:
+        logger.warning(
+            "instance_id not provided - event processor will handle all events"
+        )
+    else:
+        logger.info(f"Starting event processor for instance: {instance_id}")
+
     logger.info("Starting event processor")
     while True:
         try:
-            # Get next pending event using database module
-            row = await get_next_pending_event()
+            # Get next pending event using database module with instance filter
+            row = await get_next_pending_event(instance_id)
 
             if row:
                 (

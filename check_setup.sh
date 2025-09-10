@@ -294,11 +294,8 @@ fi
 # Test server health (brief start/stop)
 echo -n "  Testing server startup... "
 
-# Get port from .env file or use default
+# Use default port for testing (actual port is auto-assigned per instance)
 SERVER_PORT=12222
-if [ -f "$ENV_FILE" ] && grep -q "^PORT=" "$ENV_FILE"; then
-    SERVER_PORT=$(grep "^PORT=" "$ENV_FILE" | cut -d= -f2)
-fi
 
 # Check if port is already in use
 if netstat -ln 2>/dev/null | grep -q ":$SERVER_PORT " || ss -ln 2>/dev/null | grep -q ":$SERVER_PORT "; then

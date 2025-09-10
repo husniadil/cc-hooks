@@ -4,6 +4,8 @@
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from typing import Dict, Any, Optional
+import os
+import signal
 from app.event_db import (
     queue_event,
     get_events_status as get_db_events_status,
@@ -126,5 +128,23 @@ def create_app(lifespan=None) -> FastAPI:
             raise HTTPException(
                 status_code=500, detail="Failed to get last event status for instance"
             )
+
+    @app.post("/shutdown")
+    async def shutdown_server():
+        """Shutdown the server gracefully.
+
+        Triggers graceful shutdown sequence via SIGTERM signal.
+        This allows the lifespan context manager to handle cleanup properly.
+        """
+        logger.info("Shutdown requested via API endpoint")
+        try:
+            # Send SIGTERM to current process to trigger graceful shutdown
+            # This will be caught by the lifespan context manager
+            os.kill(os.getpid(), signal.SIGTERM)
+
+            return {"status": "ok", "message": "Server shutdown initiated"}
+        except Exception as e:
+            logger.error(f"Error during shutdown: {e}")
+            raise HTTPException(status_code=500, detail="Failed to shutdown server")
 
     return app

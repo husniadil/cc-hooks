@@ -7,6 +7,57 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.9.0] - 2025-09-10
+
+### Added
+
+- **Dedicated Server Per Instance Architecture**: Complete architectural overhaul for better
+  isolation and performance
+  - Each Claude Code instance now runs its own dedicated server on a unique port
+  - Automatic port discovery starting from 12222, incrementing as needed for multiple instances
+  - New `/shutdown` API endpoint for graceful server termination via API calls
+  - Enhanced instance tracking with port information stored in `.claude-instances/` directory
+- **New Environment Variables**: Introduction of `CC_HOOKS_PORT` alongside existing `CC_INSTANCE_ID`
+  - `CC_HOOKS_PORT` communicates assigned port from wrapper to hook scripts
+  - Automatic port assignment eliminates manual configuration requirements
+  - Environment variables properly propagated through entire event processing pipeline
+- **Enhanced Status Line Integration**: Status line now displays instance-specific port information
+  - Real-time port display format: `🔗 ✅ cc-hooks:12222` (shows actual assigned port)
+  - Port-aware health checks use correct instance-specific endpoints
+  - Dynamic port detection from environment for accurate status reporting
+
+### Changed
+
+- **Server Lifecycle Management**: Complete redesign from shared to dedicated server model
+  - Eliminated shared server approach in favor of per-instance dedicated servers
+  - Each instance manages its own server lifecycle independently
+  - Improved startup process with dedicated server configuration per instance
+  - Enhanced shutdown process stops only the instance-specific server
+- **Instance Event Processing**: Enhanced event filtering with strict instance isolation
+  - Event processor now requires instance ID for proper event filtering
+  - Database queries filter events by both temporal (server start time) and instance criteria
+  - Exit with error code if server start time or instance ID missing (prevents processing stale
+    events)
+- **Configuration Simplification**: Removed manual host/port configuration requirements
+  - `HOST` and `PORT` environment variables no longer required in `.env`
+  - Automatic port management eliminates configuration complexity
+  - Updated `.env.example` to reflect streamlined configuration approach
+- **Improved Logging Levels**: Optimized logging verbosity for production use
+  - Database initialization and TTS provider setup now use debug level instead of info
+  - Reduced log noise while maintaining comprehensive debug capabilities
+  - Better distinction between operational info and debug messages
+
+### Fixed
+
+- **Port Conflict Resolution**: Automatic port discovery prevents conflicts between instances
+  - Robust port availability checking before server startup
+  - Graceful handling of port conflicts with automatic increment
+  - Safety limits prevent infinite loops in port discovery
+- **Instance Isolation**: Complete separation of event processing between Claude Code instances
+  - No cross-contamination of events between different sessions
+  - Instance-specific event queues and processing
+  - Proper cleanup of instance-specific resources during shutdown
+
 ## [0.8.0] - 2025-09-10
 
 ### Added

@@ -212,31 +212,25 @@ class StatusLine:
 
     def _get_cc_hooks_health(self):
         """Get cc-hooks server health status"""
-        # Get port from config or use default
-        port = 12222
-        if config is not None:
-            try:
-                port = config.port
-            except AttributeError:
-                # Fallback if config doesn't have port attribute
-                pass
+        # Get port from environment variable (set by claude.sh), fallback to default
+        port = int(os.getenv("CC_HOOKS_PORT", "12222"))
 
         try:
             import requests
 
             response = requests.get(f"http://localhost:{port}/health", timeout=2)
             if response.status_code == 200:
-                return True, "✅", "online"
+                return True, "✅", "online", port
             else:
-                return False, "❌", "error"
+                return False, "❌", "error", port
         except ImportError:
             self._debug_log("requests package not available for health check")
-            return False, "❓", "no-requests"
+            return False, "❓", "no-requests", port
         except requests.exceptions.RequestException:
-            return False, "🔴", "offline"
+            return False, "🔴", "offline", port
         except Exception as e:
             self._debug_log(f"Unexpected error in health check: {e}")
-            return False, "⚠️", "unknown"
+            return False, "⚠️", "unknown", port
 
     def _get_ccusage_info(self):
         """Get usage information from ccusage command"""
@@ -448,7 +442,7 @@ class StatusLine:
         git_branch, git_status = self._get_git_info()
 
         # CC-Hooks health check
-        _, cc_hooks_emoji, _ = self._get_cc_hooks_health()
+        _, cc_hooks_emoji, _, cc_hooks_port = self._get_cc_hooks_health()
 
         # Usage information
         session_txt, session_pct, session_bar, cost_usd, cost_per_hour = (
@@ -488,7 +482,7 @@ class StatusLine:
             parts.append(f"🏷️ {self.version_color()}{model_version}{self._reset()}")
 
         # CC-Hooks health status
-        parts.append(f"🔗 {cc_hooks_emoji}")
+        parts.append(f"🔗 {cc_hooks_emoji} cc-hooks:{cc_hooks_port}")
 
         # Session information
         if session_txt:

@@ -14,7 +14,7 @@ Code operations. Features include:
 - **Multi-provider TTS system** (prerecorded, Google TTS, ElevenLabs)
 - **Multilingual translation** support
 - **Sound effects** and audio feedback
-- **Multi-instance Claude Code support** with shared server architecture
+- **Multi-instance Claude Code support** with dedicated servers per instance
 
 ## Prerequisites
 
@@ -195,9 +195,9 @@ Configuration is handled through `.env` file. Key variables:
 
 ### Core Settings
 
-- `HOST=0.0.0.0` - Server host
-- `PORT=12222` - Server port
 - `DB_PATH=events.db` - SQLite database path
+- `MAX_RETRY_COUNT=3` - Event retry attempts
+- **Note**: Server host/port are now auto-managed per Claude Code instance
 
 ### TTS Configuration
 

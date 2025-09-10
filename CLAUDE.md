@@ -152,6 +152,9 @@ curl http://localhost:12222/events/status
 
 # Check migration status
 curl http://localhost:12222/migrations
+
+# Shutdown server gracefully
+curl -X POST http://localhost:12222/shutdown
 ```
 
 ### API Usage Examples
@@ -298,10 +301,10 @@ hooks.py → api.py → event_db.py → event_processor.py → [sound_player.py,
 
 Key interaction points:
 
-- `hooks.py` depends on `CC_INSTANCE_ID` environment variable from `claude.sh`
+- `hooks.py` depends on `CC_INSTANCE_ID` and `CC_HOOKS_PORT` environment variables from `claude.sh`
 - `event_processor.py` orchestrates both sound effects and TTS announcements
 - TTS system requires `utils/sound_player.py` for actual playback
-- Database operations require server start time for temporal filtering
+- Database operations require server start time and instance ID for temporal filtering
 
 #### Instance Management Chain
 
@@ -353,9 +356,11 @@ Configuration is managed through environment variables (`.env` file) with defaul
 #### Core Settings
 
 - `DB_PATH`: SQLite database path (default: "events.db")
-- `HOST`: Server host (default: "0.0.0.0")
-- `PORT`: Server port (default: 12222) - Automatically loaded from .env file by wrapper script
 - `MAX_RETRY_COUNT`: Event retry attempts (default: 3)
+
+**Note**: Server host and port are now automatically managed per Claude Code instance. Each instance
+finds an available port starting from 12222 and increments as needed. No manual configuration
+required.
 
 #### TTS Configuration
 
@@ -447,24 +452,34 @@ Intelligent context-aware voice announcements for events:
 
 ### Server Lifecycle Management
 
-The cc-hooks system implements sophisticated lifecycle management to handle multiple Claude Code
-instances sharing a single server:
+The cc-hooks system implements sophisticated lifecycle management where each Claude Code instance
+runs its own dedicated server for optimal isolation and performance:
 
 #### Instance Tracking
 
 - Each Claude Code session registers itself with a unique UUID and PID in `.claude-instances/`
-- Instance ID (`CC_INSTANCE_ID`) is passed to hook scripts via environment variable
-- Events are tracked per instance for better session management
-- The wrapper script tracks active instances and cleans up stale PID files automatically
-- Server is only started if no healthy server exists, and only stopped when the last instance exits
+- Instance ID (`CC_INSTANCE_ID`) and port (`CC_HOOKS_PORT`) are passed to hook scripts via
+  environment
+- Events are tracked per instance with dedicated server handling
+- The wrapper script automatically finds available ports starting from 12222
+- Each instance manages its own server lifecycle independently
 - Graceful shutdown waits for pending events (up to 10 seconds) before terminating
+
+#### Port Management
+
+- **Automatic Port Discovery**: Starting from port 12222, each instance finds the next available
+  port
+- **Per-Instance Servers**: Each Claude Code session runs its own dedicated server
+- **Environment Propagation**: `CC_HOOKS_PORT` environment variable communicates the assigned port
+- **Health Check Awareness**: Status line and health checks use the correct instance port
+- **No Configuration Required**: Port assignment is fully automated
 
 #### Startup Process
 
 1. Clean up any stale instance PID files from previous sessions
-2. Register current instance before starting server
-3. Check if server is already running via health endpoint
-4. If not running, kill any zombie server processes and start fresh
+2. Register current instance with UUID and assigned port
+3. Find available port starting from 12222 (or configured base port)
+4. Start dedicated server on assigned port with instance-specific configuration
 5. Wait up to 10 seconds for server to be ready and responsive
 6. If server fails to start or respond, exit with error
 
@@ -472,31 +487,27 @@ instances sharing a single server:
 
 1. Check for pending events via `/instances/{instance_id}/last-event` endpoint
 2. Wait up to 10 seconds for last event to complete
-3. Unregister current instance after event completion
-4. Count remaining active instances
-5. If other instances exist, keep server running
-6. If this is the last instance:
-   - Gracefully shutdown server with SIGTERM
-   - Wait up to 3 seconds for clean shutdown
-   - Force kill with SIGKILL if needed
-   - Clean up instances directory
+3. Stop the dedicated server for this instance
+4. Unregister current instance after cleanup
+5. Clean up instances directory if no other instances remain
 
 #### Server Health Checks
 
-- Health endpoint: `http://localhost:12222/health`
+- Health endpoint: `http://localhost:{assigned_port}/health`
 - Connection timeout: 2 seconds
 - Used during startup validation and instance management
+- Each instance checks its own dedicated server port
 
 ### Claude Code Integration
 
 The system integrates with Claude Code through its hooks configuration. To use this system:
 
 1. Configure Claude Code hooks to call `hooks.py` in settings
-2. Run Claude Code through `claude.sh` wrapper to ensure server is running
-3. Events will be queued and processed sequentially
+2. Run Claude Code through `claude.sh` wrapper to launch dedicated server
+3. Events will be queued and processed sequentially per instance
 
-The wrapper handles all server lifecycle management automatically, allowing multiple Claude Code
-sessions to share the same event processing server efficiently.
+The wrapper handles all server lifecycle management automatically, with each Claude Code session
+running its own dedicated server for optimal isolation and performance.
 
 ## Important Files
 

@@ -46,7 +46,7 @@ async def init_db():
     from app.migrations import run_migrations
 
     await run_migrations()
-    logger.info("Database initialized")
+    logger.debug("Database initialized")
 
 
 # Event storage functions
@@ -127,30 +127,41 @@ async def get_events_status() -> Dict[str, Any]:
         }
 
 
-async def get_next_pending_event() -> (
-    Optional[Tuple[int, str, str, str, int, Optional[str]]]
-):
+async def get_next_pending_event(
+    instance_id: Optional[str] = None,
+) -> Optional[Tuple[int, str, str, str, int, Optional[str]]]:
     """
-    Get the next pending event from the queue.
-    Only returns events created at or after server start time.
+    Get the next pending event from the queue for a specific instance.
+    Only returns events created at or after server start time and belonging to the specified instance.
     Returns tuple of (event_id, session_id, hook_event_name, payload, retry_count, arguments) or None.
+
+    Exits with code 1 if server_start_time or instance_id is not set, as these are required for proper event filtering.
     """
+    import os
+
     async with aiosqlite.connect(DB_PATH) as db:
         server_start = get_server_start_time()
 
-        if server_start:
-            # Only process events created at or after server start time
-            cursor = await db.execute(
-                "SELECT id, session_id, hook_event_name, payload, retry_count, arguments FROM events WHERE status = ? AND created_at >= ? ORDER BY id LIMIT 1",
-                (EVENT_STATUS_PENDING, server_start),
+        # Enforce strict requirements for server start time and instance ID
+        if not server_start:
+            print(
+                "Server start time not set - cannot process events without temporal filtering",
+                file=os.sys.stderr,
             )
-        else:
-            # Fallback to original behavior if start time not set (shouldn't happen in normal operation)
-            logger.warning("Server start time not set, processing all pending events")
-            cursor = await db.execute(
-                "SELECT id, session_id, hook_event_name, payload, retry_count, arguments FROM events WHERE status = ? ORDER BY id LIMIT 1",
-                (EVENT_STATUS_PENDING,),
+            os._exit(1)
+
+        if not instance_id:
+            print(
+                "Instance ID not provided - cannot process events without instance filtering",
+                file=os.sys.stderr,
             )
+            os._exit(1)
+
+        # Only process events created at or after server start time and for this instance
+        cursor = await db.execute(
+            "SELECT id, session_id, hook_event_name, payload, retry_count, arguments FROM events WHERE status = ? AND created_at >= ? AND instance_id = ? ORDER BY id LIMIT 1",
+            (EVENT_STATUS_PENDING, server_start, instance_id),
+        )
         return await cursor.fetchone()
 
 
