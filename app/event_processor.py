@@ -13,13 +13,8 @@ from app.event_db import (
     mark_event_failed,
 )
 from utils.tts_announcer import announce_event
-from utils.hooks_constants import HookEvent, is_valid_hook_event
-
-# Constants
-RETRY_DELAY_SECONDS = 0.5
-NO_EVENTS_WAIT_SECONDS = 0.1
-ERROR_WAIT_SECONDS = 5
-DEFAULT_SLEEP_SECONDS = 0.01
+from utils.constants import HookEvent, ProcessingConstants
+from utils.hooks_constants import is_valid_hook_event
 
 from utils.colored_logger import setup_logger, configure_root_logging
 
@@ -105,7 +100,7 @@ async def process_events(instance_id: Optional[str] = None):
 
                         if current_retry < config.max_retry_count:
                             # Small delay before retry
-                            await asyncio.sleep(RETRY_DELAY_SECONDS)
+                            await asyncio.sleep(ProcessingConstants.RETRY_DELAY_SECONDS)
 
                 if not success:
                     # Max retries exceeded, mark as failed
@@ -116,11 +111,11 @@ async def process_events(instance_id: Optional[str] = None):
                     await mark_event_failed(event_id, current_retry, error_message)
             else:
                 # No pending events, wait a bit
-                await asyncio.sleep(NO_EVENTS_WAIT_SECONDS)
+                await asyncio.sleep(ProcessingConstants.NO_EVENTS_WAIT_SECONDS)
 
         except Exception as e:
             logger.error(f"Error in event processor: {e}")
-            await asyncio.sleep(ERROR_WAIT_SECONDS)
+            await asyncio.sleep(ProcessingConstants.ERROR_WAIT_SECONDS)
 
 
 # Sound effect processing
@@ -333,4 +328,4 @@ async def handle_generic_event(hook_event_name: str, session_id: str, event_data
         except Exception as e:
             logger.warning(f"Failed to cleanup old processed files: {e}")
 
-    await asyncio.sleep(DEFAULT_SLEEP_SECONDS)
+    await asyncio.sleep(ProcessingConstants.DEFAULT_SLEEP_SECONDS)
