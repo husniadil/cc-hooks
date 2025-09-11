@@ -309,7 +309,15 @@ find_available_port() {
         fi
     fi
     
-    while ss -ln 2>/dev/null | grep -q ":$port " || netstat -ln 2>/dev/null | grep -q ":$port "; do
+    # Find first available port using same logic as claude.sh
+    while true; do
+        if ! curl -s --connect-timeout 1 http://localhost:$port/health >/dev/null 2>&1; then
+            # Check if port is actually free (not just unresponsive server)
+            if ! lsof -i :$port >/dev/null 2>&1; then
+                echo $port
+                return 0
+            fi
+        fi
         port=$((port + 1))
         
         # Safety limit to prevent infinite loop
@@ -318,8 +326,6 @@ find_available_port() {
             return 1
         fi
     done
-    
-    echo $port
 }
 
 # Find available port for testing (just like claude.sh does)
