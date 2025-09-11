@@ -336,8 +336,12 @@ if ! SERVER_PORT=$(find_available_port); then
 else
     print_info "Using available port: $SERVER_PORT"
     
-    # Start server in background with dynamic port
-    PORT=$SERVER_PORT uv run server.py > /tmp/cc-hooks-server-test.log 2>&1 &
+    # Use mock test instance ID
+    TEST_INSTANCE_ID="test-validation-1"
+    print_info "Using test instance ID: $TEST_INSTANCE_ID"
+    
+    # Start server in background with dynamic port and instance ID
+    CC_INSTANCE_ID=$TEST_INSTANCE_ID PORT=$SERVER_PORT uv run server.py > /tmp/cc-hooks-server-test.log 2>&1 &
     SERVER_PID=$!
     
     # Wait longer for server startup (WSL can be slower)
@@ -358,17 +362,6 @@ else
             print_info "Database is accessible"
         fi
     
-    # Test hook script (now that server is running)
-    echo -n "  Testing hook script... "
-    TEST_EVENT='{"session_id": "test", "hook_event_name": "Test"}'
-    if echo "$TEST_EVENT" | uv run hooks.py 2>/dev/null; then
-        echo -e "${GREEN}✓${NC}"
-    else
-        echo -e "${YELLOW}⚠${NC}"
-        ((WARNINGS++))
-        print_info "Hook script may have connection issues"
-    fi
-    
     else
         echo -e "${RED}✗${NC}"
         ((FAILURES++))
@@ -377,11 +370,21 @@ else
             print_info "Server log: $(head -3 /tmp/cc-hooks-server-test.log)"
         fi
         
-        # Skip hook script test since server failed
-        echo -n "  Testing hook script... "
+    fi
+    
+    # Test hook script (regardless of server health check result)
+    echo -n "  Testing hook script... "
+    TEST_EVENT='{"session_id": "test", "hook_event_name": "Test", "instance_id": "'$TEST_INSTANCE_ID'"}'
+    if [ "$SERVER_RUNNING" = true ] && echo "$TEST_EVENT" | CC_HOOKS_PORT=$SERVER_PORT uv run hooks.py 2>/dev/null; then
+        echo -e "${GREEN}✓${NC}"
+    else
         echo -e "${YELLOW}⚠${NC}"
         ((WARNINGS++))
-        print_info "Hook script test skipped (server not running)"
+        if [ "$SERVER_RUNNING" = false ]; then
+            print_info "Hook script test skipped (server not running)"
+        else
+            print_info "Hook script may have connection issues"
+        fi
     fi
     
     # Kill test server if it was started
