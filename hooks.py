@@ -19,7 +19,6 @@ import os
 import sys
 import requests
 from typing import Dict, Any, Optional
-from config import config
 from utils.colored_logger import setup_logger, configure_root_logging
 from utils.constants import NetworkConstants, get_server_url
 

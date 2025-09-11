@@ -7,6 +7,36 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.10.0] - 2025-09-11
+
+### Changed
+
+- **Documentation Streamlining**: Major CLAUDE.md refactoring for better maintainability and clarity
+  - Simplified documentation from 774 to 229 lines, focusing on essential information
+  - Removed verbose architectural explanations, emphasized practical development workflows
+  - Enhanced testing command examples with clear environment variable usage
+  - Better organized component testing sections with comprehensive examples
+  - Improved development experience documentation with more concise, actionable guidance
+
+### Fixed
+
+- **Constants Management**: Comprehensive refactoring to centralize magic numbers and improve
+  maintainability
+  - Extracted all magic numbers from `hooks.py` to centralized constants in `utils/constants.py`
+  - Added consistent constants imports across all components: `app/api.py`, `app/event_db.py`
+  - Centralized HTTP timeout configuration in `utils/openrouter_service.py`
+  - Improved TTS provider consistency with shared timeout constants in `elevenlabs_provider.py` and
+    `gtts_provider.py`
+  - Enhanced error code management with centralized exit codes (CONNECTION_ERROR_EXIT_CODE,
+    INVALID_EVENT_EXIT_CODE)
+  - Better port management with DEFAULT_PORT_START, MAX_PORT_ATTEMPTS constants
+  - Improved instance management with INSTANCE_SHUTDOWN_TIMEOUT, INSTANCE_CLEANUP_DELAY constants
+- **Setup Script Improvements**: Enhanced `check_setup.sh` reliability and consistency
+  - Fixed port detection logic to match claude.sh behavior for better consistency
+  - Improved instance ID handling and structural fixes
+  - Added proper dynamic port assignment support
+  - Better integration with existing Claude Code instance management system
+
 ## [0.9.0] - 2025-09-10
 
 ### Added

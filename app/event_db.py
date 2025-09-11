@@ -73,34 +73,39 @@ async def queue_event(
 
 
 # Event status and monitoring functions
-async def get_events_status() -> Dict[str, Any]:
+async def get_events_status(instance_id: str) -> Dict[str, Any]:
     """
-    Get current status of events in the queue.
-    Returns status summary and recent events.
+    Get current status of events in the queue for a specific instance.
+    Returns status summary and recent events filtered by instance_id.
     """
     async with aiosqlite.connect(DB_PATH) as db:
-        # Get status counts
+        # Get status counts for the specific instance
         cursor = await db.execute(
             """
             SELECT status, COUNT(*) as count 
             FROM events 
+            WHERE instance_id = ?
             GROUP BY status
-        """
+        """,
+            (instance_id,),
         )
         status_counts = await cursor.fetchall()
 
-        cursor = await db.execute(  # get latest events
+        # Get latest events for the specific instance
+        cursor = await db.execute(
             """
             SELECT id, session_id, hook_event_name, status, created_at, processed_at, error_message, instance_id
             FROM events 
+            WHERE instance_id = ?
             ORDER BY id DESC 
             LIMIT ?
         """,
-            (DatabaseConstants.RECENT_EVENTS_LIMIT,),
+            (instance_id, DatabaseConstants.RECENT_EVENTS_LIMIT),
         )
         recent_events = await cursor.fetchall()
 
         return {
+            "instance_id": instance_id,
             "status_summary": {status: count for status, count in status_counts},
             "recent_events": [
                 {

@@ -1,11 +1,3 @@
-#!/usr/bin/env -S uv run --script
-# /// script
-# requires-python = ">=3.12"
-# dependencies = [
-#   "openai",
-#   "requests",
-# ]
-# ///
 """
 Generic OpenRouter service for Claude Code hooks system.
 

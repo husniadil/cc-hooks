@@ -1,10 +1,3 @@
-#!/usr/bin/env -S uv run --script
-# /// script
-# requires-python = ">=3.12"
-# dependencies = [
-#   "elevenlabs",
-# ]
-# ///
 """
 ElevenLabs Text-to-Speech provider for Claude Code hooks TTS system.
 
@@ -135,10 +128,15 @@ class ElevenLabsProvider(TTSProvider):
             )
             cached_file = self.cache_dir / f"{cache_key}.mp3"
 
-            # Return cached file if it exists and caching is enabled
+            # Return cached file if it exists, has valid content, and caching is enabled
             if self.cache_enabled and not no_cache and cached_file.exists():
-                logger.info(f"Using cached ElevenLabs file: {cached_file.name}")
-                return cached_file
+                # Validate cache file has content (not empty/corrupted)
+                if cached_file.stat().st_size > 0:
+                    logger.info(f"Using cached ElevenLabs file: {cached_file.name}")
+                    return cached_file
+                else:
+                    logger.warning(f"Removing corrupted cache file: {cached_file.name}")
+                    cached_file.unlink()  # Remove corrupted empty file
 
             # Generate new TTS file
             logger.info(
@@ -151,20 +149,59 @@ class ElevenLabsProvider(TTSProvider):
                 voice_id=self.voice_id, text=text, model_id=self.model_id
             )
 
+            # Validate API response before processing
+            if not audio:
+                logger.error("ElevenLabs API returned empty response")
+                return None
+
+            # Convert generator to list to validate content
+            audio_chunks = list(audio)
+            if not audio_chunks:
+                logger.error("ElevenLabs API returned no audio data")
+                return None
+
+            # Calculate total size to ensure we have actual content
+            total_size = sum(len(chunk) for chunk in audio_chunks)
+            if total_size == 0:
+                logger.error("ElevenLabs API returned empty audio data")
+                return None
+
+            logger.info(f"Received {total_size} bytes of audio data from ElevenLabs")
+
             if self.cache_enabled and not no_cache:
-                # Save to cache
-                with open(cached_file, "wb") as f:
-                    for chunk in audio:
-                        f.write(chunk)
-                logger.info(f"Saved ElevenLabs TTS to cache: {cached_file.name}")
-                return cached_file
+                # Save to cache with error handling
+                try:
+                    with open(cached_file, "wb") as f:
+                        for chunk in audio_chunks:
+                            f.write(chunk)
+
+                    # Validate written file has content
+                    if cached_file.stat().st_size > 0:
+                        logger.info(
+                            f"Saved ElevenLabs TTS to cache: {cached_file.name}"
+                        )
+                        return cached_file
+                    else:
+                        logger.error(
+                            f"Cache file write resulted in empty file: {cached_file.name}"
+                        )
+                        cached_file.unlink()  # Remove empty file
+                        return None
+
+                except Exception as write_error:
+                    logger.error(
+                        f"Error writing cache file {cached_file.name}: {write_error}"
+                    )
+                    if cached_file.exists():
+                        cached_file.unlink()  # Clean up partial file
+                    return None
             else:
                 # Save to temporary file
                 import tempfile
 
                 temp_file = Path(tempfile.mktemp(suffix=".mp3"))
                 with open(temp_file, "wb") as f:
-                    for chunk in audio:
+                    for chunk in audio_chunks:
                         f.write(chunk)
                 logger.info(f"Generated temporary ElevenLabs TTS file: {temp_file}")
                 return temp_file

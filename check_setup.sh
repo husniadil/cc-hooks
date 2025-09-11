@@ -361,7 +361,7 @@ else
         
         # Test database
         echo -n "  Testing database access... "
-        if curl -s "http://localhost:$SERVER_PORT/events/status" | grep -q "queued\|processing" 2>/dev/null; then
+        if curl -s "http://localhost:$SERVER_PORT/events/status?instance_id=$CC_INSTANCE_ID" | grep -q "queued\|processing" 2>/dev/null; then
             echo -e "${GREEN}✓${NC}"
         else
             echo -e "${GREEN}✓${NC}"

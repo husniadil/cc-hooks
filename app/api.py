@@ -84,15 +84,16 @@ def create_app(lifespan=None) -> FastAPI:
             )
 
     @app.get("/events/status")
-    async def get_events_status():
-        """Get current status of events in the queue.
+    async def get_events_status(instance_id: str):
+        """Get current status of events in the queue for a specific instance.
 
-        Useful for monitoring and debugging.
+        Requires instance_id query parameter.
+        Useful for monitoring and debugging per-instance events.
         """
         try:
-            return await get_db_events_status()
+            return await get_db_events_status(instance_id)
         except Exception as e:
-            logger.error(f"Error getting events status: {e}")
+            logger.error(f"Error getting events status for instance {instance_id}: {e}")
             raise HTTPException(
                 status_code=HTTPStatusConstants.INTERNAL_SERVER_ERROR,
                 detail="Failed to get events status",

@@ -1,45 +1,39 @@
 # cc-hooks
 
-Advanced Claude Code hooks processing system with contextual TTS announcements, AI-powered
-completion messages, multilingual translation, and event-driven automation.
+Enhanced Claude Code hooks system with intelligent audio feedback, TTS announcements, and optional
+AI-powered contextual messages.
 
 ## Overview
 
-cc-hooks acts as a middleware server between Claude Code and your custom event processing logic. It
-queues Claude Code hook events in SQLite and processes them sequentially without blocking Claude
-Code operations. Features include:
+cc-hooks enhances your Claude Code experience with:
 
-- **Contextual TTS announcements** with intelligent event mapping
-- **AI-powered completion messages** using OpenRouter integration
-- **Multi-provider TTS system** (prerecorded, Google TTS, ElevenLabs)
-- **Multilingual translation** support
-- **Sound effects** and audio feedback
-- **Multi-instance Claude Code support** with dedicated servers per instance
+- 🔊 **Smart sound effects** for different Claude Code events
+- 🗣️ **Text-to-speech announcements** with multiple provider options
+- 🤖 **AI-powered contextual messages** that understand your conversation
+- 🌍 **Multilingual support** for international users
+- ⚡ **Multi-instance support** - run multiple Claude Code sessions simultaneously
 
-## Prerequisites
+## Quick Start (Recommended)
+
+Get up and running in 2 minutes with full audio feedback:
+
+### Prerequisites
 
 - Python 3.12+
 - [uv](https://docs.astral.sh/uv/) package manager
 - [Claude Code](https://claude.ai/code) CLI tool
-- SQLite (included with Python)
 
-## Installation & Claude Code Integration
+### Installation
 
-1. **Clone and setup dependencies:**
+1. **Clone and test setup:**
 
    ```bash
    git clone https://github.com/husniadil/cc-hooks.git
    cd cc-hooks
+   ./check_setup.sh
    ```
 
-2. **Configure environment:**
-
-   ```bash
-   cp .env.example .env
-   # Edit .env with your preferences (see Environment Variables section)
-   ```
-
-3. **Add hooks to Claude Code settings:**
+2. **Add hooks to Claude Code settings:**
 
    Edit your Claude Code settings (typically `~/.claude/settings.json`):
 
@@ -54,7 +48,7 @@ Code operations. Features include:
            "hooks": [
              {
                "type": "command",
-               "command": "uv run /path/to/cc-hooks/hooks.py --announce"
+               "command": "uv run /path/to/cc-hooks/hooks.py"
              }
            ]
          }
@@ -65,7 +59,7 @@ Code operations. Features include:
            "hooks": [
              {
                "type": "command",
-               "command": "uv run /path/to/cc-hooks/hooks.py --announce"
+               "command": "uv run /path/to/cc-hooks/hooks.py"
              }
            ]
          }
@@ -98,7 +92,7 @@ Code operations. Features include:
            "hooks": [
              {
                "type": "command",
-               "command": "uv run /path/to/cc-hooks/hooks.py --announce --sound-effect=sound_effect_tung.mp3"
+               "command": "uv run /path/to/cc-hooks/hooks.py --sound-effect=sound_effect_tung.mp3"
              }
            ]
          }
@@ -120,7 +114,7 @@ Code operations. Features include:
            "hooks": [
              {
                "type": "command",
-               "command": "uv run /path/to/cc-hooks/hooks.py --announce"
+               "command": "uv run /path/to/cc-hooks/hooks.py"
              }
            ]
          }
@@ -142,7 +136,7 @@ Code operations. Features include:
            "hooks": [
              {
                "type": "command",
-               "command": "uv run /path/to/cc-hooks/hooks.py --announce"
+               "command": "uv run /path/to/cc-hooks/hooks.py"
              }
            ]
          }
@@ -155,271 +149,189 @@ Code operations. Features include:
    }
    ```
 
-   Replace `/path/to/cc-hooks` with the actual absolute path to your cc-hooks installation.
+   **Replace `/path/to/cc-hooks` with your actual installation path** (find it with `pwd` in the
+   cc-hooks directory).
 
-4. **Validate installation:**
+3. **Create basic configuration:**
 
    ```bash
-   # Basic validation
-   ./check_setup.sh
-
-   # Detailed validation with verbose output
-   ./check_setup.sh --verbose
+   cp .env.example .env
    ```
 
-   The setup script validates:
-   - System dependencies (Python 3.12+, uv, Claude CLI)
-   - Claude Code settings configuration
-   - Environment variables and API keys
-   - File structure and permissions
-   - Functional tests (server startup, hook scripts, TTS)
+   The default settings work perfectly for Quick Start - no editing needed!
 
-## Setup Alias
+4. **Create command alias (recommended):**
 
-Add this alias to your shell config (`.bashrc`, `.zshrc`, etc.):
+   Add this to your shell config (`.bashrc`, `.zshrc`, etc.):
 
-```bash
-cld() {
-    local original_dir="$PWD"
-    (cd /path/to/cc-hooks && CC_ORIGINAL_DIR="$original_dir" ./claude.sh "$@")
-}
-```
+   ```bash
+   cld() {
+       local original_dir="$PWD"
+       (cd /path/to/cc-hooks && CC_ORIGINAL_DIR="$original_dir" ./claude.sh "$@")
+   }
+   ```
 
-This starts both the cc-hooks server and Claude Code with proper lifecycle management while
-preserving your current working directory. Claude Code will run from wherever you execute the `cld`
-command.
+   **Replace `/path/to/cc-hooks` with your actual installation path.**
 
-## Environment Variables
+   This alias allows you to run `cld` from **any directory** on your system - Claude Code will start
+   with all the audio enhancements while working in your current project folder.
 
-Configuration is handled through `.env` file. Key variables:
+5. **Start using:**
 
-### Core Settings
+   ```bash
+   # Use your alias from any directory (recommended)
+   cd ~/my-project
+   cld
 
-- `DB_PATH=events.db` - SQLite database path
-- `MAX_RETRY_COUNT=3` - Event retry attempts
-- **Note**: Server host/port are now auto-managed per Claude Code instance
+   # Or navigate to cc-hooks directory first
+   cd /path/to/cc-hooks && ./claude.sh
+   ```
 
-### TTS Configuration
+You're all set! Claude Code will now have complete audio feedback with sound effects for all events.
+No configuration files needed!
 
-- `TTS_PROVIDERS=prerecorded` - Provider priority (comma-separated)
-- `TTS_LANGUAGE=en` - Language for TTS generation
-- `TTS_CACHE_ENABLED=true` - Enable TTS file caching
+---
 
-### OpenRouter Integration
+## Intermediate Setup (Dynamic Voice Generation)
 
-- `OPENROUTER_ENABLED=false` - Enable AI features
-- `OPENROUTER_API_KEY=` - Your API key ([get here](https://openrouter.ai/keys))
-- `OPENROUTER_MODEL=openai/gpt-4o-mini` - Model for AI requests
-- `OPENROUTER_CONTEXTUAL_STOP=false` - AI completion messages (costs apply!)
-- `OPENROUTER_CONTEXTUAL_PRETOOLUSE=false` - AI tool announcements (costs apply!)
+Want real-time generated voice announcements? Add Google TTS or premium ElevenLabs:
 
-### ElevenLabs Configuration
+### Option A: Google TTS (Free)
 
-- `ELEVENLABS_API_KEY=` - Your API key ([get here](https://elevenlabs.io/app/developers/api-keys))
-- `ELEVENLABS_VOICE_ID=21m00Tcm4TlvDq8ikWAM` - Voice ID (Rachel voice)
-  ([find voices](https://elevenlabs.io/app/voice-lab))
-- `ELEVENLABS_MODEL_ID=eleven_flash_v2_5` - Model for generation
+1. **Edit your existing `.env` file:**
 
-## Quick Start
+   ```bash
+   # Enable Google TTS
+   TTS_PROVIDERS=gtts,prerecorded
+   TTS_LANGUAGE=en
+   TTS_CACHE_ENABLED=true
+   ```
 
-```bash
-# Start server + Claude Code
-./claude.sh
+2. **Add `--announce` to specific hooks** (if you want voice announcements):
 
-# Or use your alias (recommended)
-cld
+   Update your existing hooks from Quick Start by adding `--announce` to these events:
+   - `SessionStart`, `SessionEnd`, `Stop`, `PreCompact` → Add `--announce`
+   - `Notification` → Already has sound effect, add `--announce`
+   - Keep `PreToolUse`, `PostToolUse`, `UserPromptSubmit` as sound-only
 
-# Development server with hot reload
-uv run server.py --dev
-```
+### Option B: ElevenLabs (Premium Quality)
 
-## Hook Command Arguments
+1. **Get your API key** from
+   [elevenlabs.io/app/developers/api-keys](https://elevenlabs.io/app/developers/api-keys)
 
-The hook script (`hooks.py`) supports various command-line arguments that enhance the event
-processing experience. These arguments work in synergy with your `.env` configuration.
+2. **Edit your existing `.env` file:**
 
-### Core Arguments
+   ```bash
+   # Premium ElevenLabs TTS
+   TTS_PROVIDERS=elevenlabs,gtts,prerecorded
+   ELEVENLABS_API_KEY=your_api_key_here
+   ELEVENLABS_VOICE_ID=21m00Tcm4TlvDq8ikWAM  # Rachel voice (default)
+   ```
 
-**`--sound-effect=<filename>`**
+3. **Follow the same hook update steps as Google TTS above**
 
-- Triggers specific sound effect playback during event processing
-- Sound files should be placed in the `sound/` directory
-- Supports common audio formats (WAV, MP3, OGG, etc.)
-- Example: `--sound-effect=sound_effect_tek.mp3`
+---
 
-**`--announce[=<volume>]`**
+## Advanced Setup (AI-Powered Contextual Messages)
 
-- Enables TTS (Text-to-Speech) announcements for events
-- Optional volume control: `0.0` (silent) to `1.0` (full volume)
-- Uses TTS providers configured in your `.env` file
-- Example: `--announce=0.5` or just `--announce` (default volume)
+Get intelligent, context-aware announcements that understand your conversation:
 
-**`--debug`**
+### Requirements
 
-- Enables verbose logging and debugging output
-- Helpful for troubleshooting hook processing issues
+- OpenRouter API account ([get free credits](https://openrouter.ai/keys))
+- Text-to-speech already configured (see Intermediate Setup)
 
-### How Arguments Sync with Environment Variables
+### Configuration
 
-The command-line arguments work alongside your `.env` configuration:
+1. **Add OpenRouter to your `.env`:**
 
-#### TTS Announcements (`--announce`)
+   ```bash
+   # AI Features
+   OPENROUTER_ENABLED=true
+   OPENROUTER_API_KEY=your_openrouter_key
+   OPENROUTER_MODEL=openai/gpt-4o-mini
 
-```bash
-# .env configuration affects TTS behavior
-TTS_PROVIDERS=gtts,prerecorded     # Provider priority chain
-TTS_LANGUAGE=en                    # Language for announcements
-TTS_CACHE_ENABLED=true            # Cache generated audio files
-OPENROUTER_ENABLED=true           # Enable AI translation (if language ≠ en)
+   # Enable contextual messages (costs apply!)
+   OPENROUTER_CONTEXTUAL_STOP=true              # Smart completion messages
+   OPENROUTER_CONTEXTUAL_PRETOOLUSE=true        # Intelligent tool announcements
 
-# Hook command uses these settings
-"command": "uv run hooks.py --announce=0.8"
-```
+   # TTS (required for contextual features)
+   TTS_PROVIDERS=elevenlabs,gtts,prerecorded    # Your choice
+   ```
 
-#### Sound Effects (`--sound-effect`)
+2. **Enable contextual AI for key events:**
 
-```bash
-# Sound effects work independently of TTS configuration
-# But can be combined with TTS announcements
-"command": "uv run hooks.py --sound-effect=beep.mp3 --announce"
-```
+   For AI contextual features, add `--announce` to these important hooks:
+   - **PreToolUse** → `--sound-effect=sound_effect_tek.mp3 --announce`
+   - **Stop** → `--announce`
 
-#### AI-Powered Contextual Messages
+   These are the most valuable events for AI contextual messages. Other hooks can remain as-is from
+   Quick Start.
 
-```bash
-# .env configuration for dynamic messages
-OPENROUTER_ENABLED=true
-OPENROUTER_CONTEXTUAL_STOP=true           # AI completion messages
-OPENROUTER_CONTEXTUAL_PRETOOLUSE=true     # AI tool announcements
-OPENROUTER_API_KEY=your_key_here
+### What You Get
 
-# IMPORTANT: --announce is REQUIRED for contextual features to work
-# Without --announce, contextual messages won't be generated
-"command": "uv run hooks.py --announce"
-```
+- **Smart completion messages**: "I've successfully implemented the user authentication system as
+  requested"
+- **Contextual tool announcements**: "Running tests to validate the login functionality you just
+  built"
+- **Multilingual support**: Automatically translates to your preferred language
+- **Cost-optimized**: Only generates AI messages when needed
 
-> **⚠️ Critical Requirement**: Contextual AI features (`OPENROUTER_CONTEXTUAL_STOP` and
-> `OPENROUTER_CONTEXTUAL_PRETOOLUSE`) **only work when `--announce` is specified** in your hook
-> commands. Without `--announce`, the system won't trigger TTS processing and thus won't generate
-> contextual messages.
+> **⚠️ Important**: Contextual AI features only work when `--announce` is included in your hook
+> commands. Without it, contextual messages won't be generated.
 
-### Practical Configuration Examples
+---
 
-#### Minimal Setup (Sound Effects Only)
+## Configuration Reference
 
-```bash
-# .env - minimal configuration
-TTS_PROVIDERS=prerecorded
+All configuration is done through the `.env` file. Key settings:
 
-# Claude Code settings
-"PreToolUse": [{
-  "hooks": [{"command": "uv run hooks.py --sound-effect=click.mp3"}]
-}]
-```
+### TTS Providers
 
-#### Google TTS with Sound Effects
+- `TTS_PROVIDERS=prerecorded` - Default (sound effects only)
+- `TTS_PROVIDERS=gtts,prerecorded` - Add Google TTS
+- `TTS_PROVIDERS=elevenlabs,gtts,prerecorded` - Premium ElevenLabs + fallbacks
 
-```bash
-# .env - Google TTS enabled
-TTS_PROVIDERS=gtts,prerecorded
-TTS_LANGUAGE=en
-TTS_CACHE_ENABLED=true
+### Languages
 
-# Claude Code settings - combines sound + TTS
-"SessionStart": [{
-  "hooks": [{"command": "uv run hooks.py --sound-effect=startup.mp3 --announce=0.7"}]
-}]
-```
+- `TTS_LANGUAGE=en` - English (default)
+- `TTS_LANGUAGE=id` - Indonesian
+- `TTS_LANGUAGE=es` - Spanish, etc.
 
-#### Premium Setup (ElevenLabs + AI Context)
+### API Keys
+
+- `ELEVENLABS_API_KEY=` - For premium TTS ([get key](https://elevenlabs.io/app/developers/api-keys))
+- `OPENROUTER_API_KEY=` - For AI features ([get key](https://openrouter.ai/keys))
+
+## Troubleshooting
+
+### Validation
+
+Run the setup checker to verify your installation:
 
 ```bash
-# .env - full premium configuration
-TTS_PROVIDERS=elevenlabs,gtts,prerecorded
-ELEVENLABS_API_KEY=your_key_here
-OPENROUTER_ENABLED=true
-OPENROUTER_CONTEXTUAL_STOP=true
-OPENROUTER_CONTEXTUAL_PRETOOLUSE=true
-
-# Claude Code settings - AI-powered contextual announcements
-"Stop": [{
-  "hooks": [{"command": "uv run hooks.py --announce"}]
-}],
-"PreToolUse": [{
-  "hooks": [{"command": "uv run hooks.py --sound-effect=tool.mp3 --announce=0.6"}]
-}]
+./check_setup.sh
 ```
 
-#### Multilingual Setup (Indonesian)
+### Common Issues
 
-```bash
-# .env - Indonesian TTS with AI translation
-TTS_PROVIDERS=gtts,prerecorded
-TTS_LANGUAGE=id                           # Indonesian
-OPENROUTER_ENABLED=true                   # Required for translation
-OPENROUTER_API_KEY=your_key_here
+**Sound effects not playing?**
 
-# Hook commands remain the same - translation is automatic
-"SessionStart": [{
-  "hooks": [{"command": "uv run hooks.py --announce"}]
-}]
-```
+- Check that your audio system is working
+- Verify that sound files exist in the `sound/` directory
 
-### Testing Your Configuration
+**TTS not working?**
 
-```bash
-# Test specific event with your settings
-echo '{"session_id": "test", "hook_event_name": "SessionStart"}' | uv run hooks.py --announce
+- Ensure you have `--announce` in your hook commands
+- Check your `.env` file has correct TTS provider settings
+- For Google TTS: requires internet connection
+- For ElevenLabs: verify your API key is valid
 
-# Test sound effect only
-echo '{"session_id": "test", "hook_event_name": "PreToolUse"}' | uv run hooks.py --sound-effect=click.mp3
+**AI contextual messages not working?**
 
-# Test combined sound + TTS
-echo '{"session_id": "test", "hook_event_name": "Stop"}' | uv run hooks.py --sound-effect=done.mp3 --announce=0.5
-
-# Test with debug output
-echo '{"session_id": "test", "hook_event_name": "Test"}' | uv run hooks.py --debug --announce
-```
-
-### Common Issues & Troubleshooting
-
-**Contextual AI messages not working?**
-
-- ✅ Ensure `OPENROUTER_ENABLED=true` in your `.env`
-- ✅ Verify `OPENROUTER_API_KEY` is set correctly
-- ✅ **Most importantly**: Add `--announce` to your hook commands - contextual features require TTS
-  processing to activate
-- ✅ Check that `OPENROUTER_CONTEXTUAL_STOP=true` or `OPENROUTER_CONTEXTUAL_PRETOOLUSE=true` are set
-
-**Example of incorrect configuration:**
-
-```json
-// ❌ This won't trigger contextual messages (missing --announce)
-"Stop": [{"hooks": [{"command": "uv run hooks.py"}]}]
-
-// ✅ This will trigger contextual messages
-"Stop": [{"hooks": [{"command": "uv run hooks.py --announce"}]}]
-```
-
-## API Key Setup
-
-- **OpenRouter**: Get your key at [openrouter.ai/keys](https://openrouter.ai/keys) - enables AI
-  translation and contextual messages
-- **ElevenLabs**: Get your key at
-  [elevenlabs.io/app/developers/api-keys](https://elevenlabs.io/app/developers/api-keys) - enables
-  premium voice synthesis
-
-## Development
-
-For developers extending the codebase, the system uses centralized constants in `utils/constants.py`
-for better maintainability:
-
-- **Network settings**: `NetworkConstants.DEFAULT_PORT`, `get_server_url()` helper
-- **Date/time formatting**: `DateTimeConstants.ISO_DATETIME_FORMAT`
-- **HTTP status codes**: `HTTPStatusConstants.INTERNAL_SERVER_ERROR`
-- **Event processing**: `ProcessingConstants` for timing and behavior
-
-This ensures consistent values across the codebase and makes updates easier.
+- Verify `OPENROUTER_ENABLED=true` and API key is set
+- **Critical**: Contextual features require `--announce` in hook commands
+- Check that contextual flags are enabled: `OPENROUTER_CONTEXTUAL_STOP=true`
 
 ## Credits
 
