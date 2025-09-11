@@ -533,6 +533,7 @@ running its own dedicated server for optimal isolation and performance.
   - `mappings.py`: Event-to-text mapping configuration
 - `utils/openrouter_service.py`: OpenRouter API integration for translation and contextual
   completion messages
+- `utils/openrouter_prompts.py`: System prompts for OpenRouter AI text generation tasks
 - `utils/transcript_parser.py`: Claude Code transcript parser for extracting conversation context
 - `sound/`: Directory for audio files (19+ event-specific sounds)
 - `status-lines/status_line.py`: Custom Claude Code status line implementation
@@ -545,10 +546,31 @@ running its own dedicated server for optimal isolation and performance.
 
 To add custom processing for a specific event type:
 
-1. Edit `app/event_processor.py` and add handler in `process_event()` function
-2. Access event data via `event['data']` dictionary
-3. Use `event.get('arguments', {})` for hook arguments
-4. Return success/failure status for retry logic
+1. **For simple events**: Add configuration to `EVENT_CONFIGS` dictionary in
+   `app/event_processor.py`:
+
+   ```python
+   EVENT_CONFIGS = {
+       HookEvent.YOUR_NEW_EVENT.value: {
+           "log_message": "Session {session_id}: Your new event triggered",
+           "clear_tracking": False,  # Set to True if event should clear tracking
+           "use_tool_name": False,   # Set to True if event uses tool_name from data
+           "use_message": False,     # Set to True if event uses message from data
+       },
+   }
+   ```
+
+2. **For complex events**: If you need custom logic beyond what `EVENT_CONFIGS` supports:
+   - Modify `handle_generic_event()` function in `app/event_processor.py`
+   - Access event data via `event_data` parameter
+   - Use `arguments` parameter for hook arguments
+   - Add new configuration flags to `EVENT_CONFIGS` as needed
+
+3. **Event data access patterns**:
+   - Session ID: Always available as `session_id` parameter
+   - Tool information: `event_data.get("tool_name", "unknown")`
+   - Messages: `event_data.get("message", "")`
+   - Hook arguments: `arguments.get("your_arg", default_value)`
 
 ### Adding a New TTS Provider
 
@@ -580,8 +602,18 @@ class CustomProvider(TTSProvider):
 
 1. Add argument parsing in `hooks.py` (already supports `--key=value` format)
 2. Arguments stored as JSON in database automatically
-3. Access in `event_processor.py` via `event.get('arguments', {})`
-4. No database migration needed - uses JSON column
+3. Access in `handle_generic_event()` via `arguments.get('your_arg', default_value)`
+4. Configure argument usage in `EVENT_CONFIGS` or handle in custom logic
+5. No database migration needed - uses JSON column
+
+**Example**: Adding a custom behavior flag:
+
+```python
+# In handle_generic_event()
+if arguments and arguments.get('custom_behavior'):
+    logger.info("Custom behavior triggered!")
+    # Your custom logic here
+```
 
 ### Debugging Event Processing
 

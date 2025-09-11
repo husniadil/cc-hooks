@@ -252,126 +252,85 @@ async def process_single_event(event_data: dict, arguments: Optional[dict] = Non
         )
         return  # Still process sound effects/announcements but skip event-specific logic
 
-    # Handle different hook event types (all known valid events)
-    if hook_event_name == HookEvent.SESSION_START.value:
-        await handle_session_start(session_id, event_data)
-    elif hook_event_name == HookEvent.SESSION_END.value:
-        await handle_session_end(session_id, event_data)
-    elif hook_event_name == HookEvent.PRE_TOOL_USE.value:
-        await handle_pre_tool_use(session_id, event_data)
-    elif hook_event_name == HookEvent.POST_TOOL_USE.value:
-        await handle_post_tool_use(session_id, event_data)
-    elif hook_event_name == HookEvent.NOTIFICATION.value:
-        await handle_notification(session_id, event_data)
-    elif hook_event_name == HookEvent.USER_PROMPT_SUBMIT.value:
-        await handle_user_prompt_submit(session_id, event_data)
-    elif hook_event_name == HookEvent.STOP.value:
-        await handle_stop(session_id, event_data)
-    elif hook_event_name == HookEvent.SUBAGENT_STOP.value:
-        await handle_subagent_stop(session_id, event_data)
-    elif hook_event_name == HookEvent.PRE_COMPACT.value:
-        await handle_pre_compact(session_id, event_data)
-    else:
-        # This should not happen if our enum is up to date
-        logger.warning(
-            f"Known hook event not handled in processor: {hook_event_name} (session: {session_id})"
-        )
+    # Handle all hook event types using generic handler
+    await handle_generic_event(hook_event_name, session_id, event_data)
 
 
-# Handler functions for each event type
-async def handle_session_start(session_id: str, event_data: dict):
-    """Handle SessionStart event"""
-    logger.info(f"Session {session_id} started")
-    # Add your SessionStart logic here
-    await asyncio.sleep(DEFAULT_SLEEP_SECONDS)
+# Event-specific configurations for special handling
+EVENT_CONFIGS = {
+    HookEvent.SESSION_START.value: {
+        "log_message": "Session {session_id} started",
+    },
+    HookEvent.SESSION_END.value: {
+        "log_message": "Session {session_id} ended",
+        "clear_tracking": True,
+        "cleanup_old_files": True,
+    },
+    HookEvent.PRE_TOOL_USE.value: {
+        "log_message": "Session {session_id}: Pre-tool use for {tool_name}",
+        "use_tool_name": True,
+    },
+    HookEvent.POST_TOOL_USE.value: {
+        "log_message": "Session {session_id}: Post-tool use for {tool_name}",
+        "use_tool_name": True,
+    },
+    HookEvent.NOTIFICATION.value: {
+        "log_message": "Session {session_id}: Notification - {message}",
+        "use_message": True,
+    },
+    HookEvent.USER_PROMPT_SUBMIT.value: {
+        "log_message": "Session {session_id}: User submitted prompt",
+    },
+    HookEvent.STOP.value: {
+        "log_message": "Session {session_id}: Stop event received",
+        "clear_tracking": True,
+    },
+    HookEvent.SUBAGENT_STOP.value: {
+        "log_message": "Session {session_id}: Subagent stopped",
+    },
+    HookEvent.PRE_COMPACT.value: {
+        "log_message": "Session {session_id}: Pre-compact event",
+    },
+}
 
 
-async def handle_session_end(session_id: str, event_data: dict):
-    """Handle SessionEnd event"""
-    logger.info(f"Session {session_id} ended")
+async def handle_generic_event(hook_event_name: str, session_id: str, event_data: dict):
+    """Generic handler for all event types with configurable behavior."""
+    config = EVENT_CONFIGS.get(hook_event_name, {})
 
-    # Clear last processed message tracking for this session
-    try:
-        from utils.transcript_parser import (
-            clear_last_processed_message,
-            cleanup_old_processed_files,
-        )
+    # Build log message with dynamic parameters
+    log_params = {"session_id": session_id}
+    if config.get("use_tool_name"):
+        log_params["tool_name"] = event_data.get("tool_name", "unknown")
+    if config.get("use_message"):
+        log_params["message"] = event_data.get("message", "")
 
-        clear_last_processed_message(session_id)
-        # Also cleanup old files from other sessions (24 hours+)
-        cleanup_old_processed_files(max_age_hours=24)
-        logger.debug(
-            f"Cleared last processed message tracking for session {session_id} and cleaned up old files"
-        )
-    except Exception as e:
-        logger.warning(
-            f"Failed to clear last processed message for session {session_id}: {e}"
-        )
+    log_message = config.get(
+        "log_message", f"Session {session_id}: {hook_event_name} event"
+    )
+    logger.info(log_message.format(**log_params))
 
-    await asyncio.sleep(DEFAULT_SLEEP_SECONDS)
+    # Handle special behaviors
+    if config.get("clear_tracking"):
+        try:
+            from utils.transcript_parser import clear_last_processed_message
 
+            clear_last_processed_message(session_id)
+            logger.debug(
+                f"Cleared last processed message tracking for session {session_id}"
+            )
+        except Exception as e:
+            logger.warning(
+                f"Failed to clear last processed message for session {session_id}: {e}"
+            )
 
-async def handle_pre_tool_use(session_id: str, event_data: dict):
-    """Handle PreToolUse event"""
-    tool_name = event_data.get("tool_name", "unknown")
-    logger.info(f"Session {session_id}: Pre-tool use for {tool_name}")
-    # Add your PreToolUse logic here
-    await asyncio.sleep(DEFAULT_SLEEP_SECONDS)
+    if config.get("cleanup_old_files"):
+        try:
+            from utils.transcript_parser import cleanup_old_processed_files
 
+            cleanup_old_processed_files(max_age_hours=24)
+            logger.debug("Cleaned up old processed files")
+        except Exception as e:
+            logger.warning(f"Failed to cleanup old processed files: {e}")
 
-async def handle_post_tool_use(session_id: str, event_data: dict):
-    """Handle PostToolUse event"""
-    tool_name = event_data.get("tool_name", "unknown")
-    logger.info(f"Session {session_id}: Post-tool use for {tool_name}")
-    # Add your PostToolUse logic here
-    await asyncio.sleep(DEFAULT_SLEEP_SECONDS)
-
-
-async def handle_notification(session_id: str, event_data: dict):
-    """Handle Notification event"""
-    message = event_data.get("message", "")
-    logger.info(f"Session {session_id}: Notification - {message}")
-    # Add your Notification logic here
-    await asyncio.sleep(DEFAULT_SLEEP_SECONDS)
-
-
-async def handle_user_prompt_submit(session_id: str, event_data: dict):
-    """Handle UserPromptSubmit event"""
-    prompt = event_data.get("prompt", "")
-    logger.info(f"Session {session_id}: User submitted prompt")
-    # Add your UserPromptSubmit logic here
-    await asyncio.sleep(DEFAULT_SLEEP_SECONDS)
-
-
-async def handle_stop(session_id: str, event_data: dict):
-    """Handle Stop event"""
-    logger.info(f"Session {session_id}: Stop event received")
-
-    # Clear last processed message tracking for this session
-    try:
-        from utils.transcript_parser import clear_last_processed_message
-
-        clear_last_processed_message(session_id)
-        logger.debug(
-            f"Cleared last processed message tracking for session {session_id}"
-        )
-    except Exception as e:
-        logger.warning(
-            f"Failed to clear last processed message for session {session_id}: {e}"
-        )
-
-    await asyncio.sleep(DEFAULT_SLEEP_SECONDS)
-
-
-async def handle_subagent_stop(session_id: str, event_data: dict):
-    """Handle SubagentStop event"""
-    logger.info(f"Session {session_id}: Subagent stopped")
-    # Add your SubagentStop logic here
-    await asyncio.sleep(DEFAULT_SLEEP_SECONDS)
-
-
-async def handle_pre_compact(session_id: str, event_data: dict):
-    """Handle PreCompact event"""
-    logger.info(f"Session {session_id}: Pre-compact event")
-    # Add your PreCompact logic here
     await asyncio.sleep(DEFAULT_SLEEP_SECONDS)

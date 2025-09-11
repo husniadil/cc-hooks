@@ -73,17 +73,20 @@ class Config:
 
 config = Config.from_env()
 
-# Initialize OpenRouter service with config
-try:
-    from utils.openrouter_service import initialize_openrouter_service
 
-    initialize_openrouter_service(
-        api_key=config.openrouter_api_key,
-        model=config.openrouter_model,
-        enabled=config.openrouter_enabled,
-        contextual_stop=config.openrouter_contextual_stop,
-        contextual_pretooluse=config.openrouter_contextual_pretooluse,
-    )
-except ImportError:
-    # OpenRouter service dependencies not available, service will be unavailable
-    pass
+def initialize_openrouter_service_lazy():
+    """Initialize OpenRouter service only when needed."""
+    try:
+        from utils.openrouter_service import initialize_openrouter_service
+
+        initialize_openrouter_service(
+            api_key=config.openrouter_api_key,
+            model=config.openrouter_model,
+            enabled=config.openrouter_enabled,
+            contextual_stop=config.openrouter_contextual_stop,
+            contextual_pretooluse=config.openrouter_contextual_pretooluse,
+        )
+        return True
+    except ImportError:
+        # OpenRouter service dependencies not available, service will be unavailable
+        return False
