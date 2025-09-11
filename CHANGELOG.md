@@ -7,6 +7,39 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.11.0] - 2025-09-11
+
+### Added
+
+- **Per-Session Language & Voice Overrides**: New command-line parameters for dynamic TTS
+  configuration
+  - `--language=LANG` parameter to override TTS language per session (e.g.,
+    `./claude.sh --language=id`)
+  - `--elevenlabs-voice-id=ID` parameter to override ElevenLabs voice ID per session
+  - Automatic environment variable setup: `CC_TTS_LANGUAGE` and `CC_ELEVENLABS_VOICE_ID`
+  - Support for multiple concurrent Claude Code sessions with different voice configurations
+  - Configuration precedence: session parameters → environment variables → default values
+  - Comprehensive testing examples with per-session override environment variables
+
+### Changed
+
+- **Configuration System Enhancement**: Updated config loading to prioritize per-session overrides
+  - Modified `config.py` to check `CC_TTS_LANGUAGE` and `CC_ELEVENLABS_VOICE_ID` first
+  - Enhanced `claude.sh` argument parsing to extract cc-hooks specific parameters
+  - Updated documentation with detailed usage examples and configuration precedence
+
+### Fixed
+
+- **Server Startup Environment Variables**: Fixed timing issue where server started before
+  per-session overrides were set
+  - Moved argument parsing to occur before server startup instead of after
+  - Environment variables now properly propagated to server process at startup time
+  - Per-session overrides now correctly override .env configuration
+- **Multi-Session Voice Isolation**: Resolved potential voice configuration conflicts between
+  concurrent sessions
+  - Each session now maintains independent TTS configuration without affecting others
+  - Clean separation between global `.env` configuration and per-session overrides
+
 ## [0.10.0] - 2025-09-11
 
 ### Changed

@@ -114,6 +114,25 @@ if [ -d "$INSTANCES_DIR" ]; then
     fi
 fi
 
+# Parse cc-hooks specific arguments BEFORE starting server
+CC_TTS_LANGUAGE=""
+CC_ELEVENLABS_VOICE_ID=""
+CLAUDE_ARGS=()
+
+for arg in "$@"; do
+    case $arg in
+        --language=*)
+            CC_TTS_LANGUAGE="${arg#*=}"
+            ;;
+        --elevenlabs-voice-id=*)
+            CC_ELEVENLABS_VOICE_ID="${arg#*=}"
+            ;;
+        *)
+            CLAUDE_ARGS+=("$arg")
+            ;;
+    esac
+done
+
 # Register this instance BEFORE starting server
 register_instance
 
@@ -121,12 +140,30 @@ register_instance
 active_count=$(count_active_instances)
 echo "Active Claude Code instances: $active_count"
 
+# Show override information if provided
+if [ -n "$CC_TTS_LANGUAGE" ]; then
+    echo "Using language override: $CC_TTS_LANGUAGE"
+fi
+
+if [ -n "$CC_ELEVENLABS_VOICE_ID" ]; then
+    echo "Using ElevenLabs voice ID override: $CC_ELEVENLABS_VOICE_ID"
+fi
+
 # Each instance gets its own server, so always start one
 echo "Starting dedicated cc-hooks server on port $SERVER_PORT..."
 
+# Prepare environment variables for server startup
+SERVER_ENV="PORT=$SERVER_PORT CC_INSTANCE_ID=$INSTANCE_UUID"
+if [ -n "$CC_TTS_LANGUAGE" ]; then
+    SERVER_ENV="$SERVER_ENV CC_TTS_LANGUAGE=$CC_TTS_LANGUAGE"
+fi
+if [ -n "$CC_ELEVENLABS_VOICE_ID" ]; then
+    SERVER_ENV="$SERVER_ENV CC_ELEVENLABS_VOICE_ID=$CC_ELEVENLABS_VOICE_ID"
+fi
+
 # Start server in background with custom port and instance ID, capture errors
 STARTUP_LOG="/tmp/cc-hooks-startup-$INSTANCE_UUID.log"
-PORT=$SERVER_PORT CC_INSTANCE_ID="$INSTANCE_UUID" uv run "$SERVER_SCRIPT" >"$STARTUP_LOG" 2>&1 &
+env $SERVER_ENV uv run "$SERVER_SCRIPT" >"$STARTUP_LOG" 2>&1 &
 SERVER_PID=$!
 
 # Wait for server to be ready
@@ -223,6 +260,15 @@ trap cleanup EXIT INT TERM
 export CC_INSTANCE_ID="$INSTANCE_UUID"
 export CC_HOOKS_PORT="$SERVER_PORT"
 
+# Export cc-hooks specific environment variables if provided (for hooks.py)
+if [ -n "$CC_TTS_LANGUAGE" ]; then
+    export CC_TTS_LANGUAGE
+fi
+
+if [ -n "$CC_ELEVENLABS_VOICE_ID" ]; then
+    export CC_ELEVENLABS_VOICE_ID
+fi
+
 # If original directory was passed, change to it before starting Claude
 if [ -n "$CC_ORIGINAL_DIR" ] && [ -d "$CC_ORIGINAL_DIR" ]; then
     cd "$CC_ORIGINAL_DIR"
@@ -231,4 +277,4 @@ fi
 echo "Claude Code starting with cc-hooks on port $SERVER_PORT..."
 # Clean up startup log on successful start
 rm -f "$STARTUP_LOG" 2>/dev/null
-$REPL_COMMAND "$@"
+$REPL_COMMAND "${CLAUDE_ARGS[@]}"

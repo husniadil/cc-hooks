@@ -49,12 +49,12 @@ class Config:
             tts_cache_enabled=parse_bool_env(
                 os.getenv("TTS_CACHE_ENABLED", "true"), True
             ),
-            tts_language=os.getenv("TTS_LANGUAGE", "en"),
+            tts_language=os.getenv("CC_TTS_LANGUAGE")
+            or os.getenv("TTS_LANGUAGE", "en"),
             # ElevenLabs Configuration
             elevenlabs_api_key=os.getenv("ELEVENLABS_API_KEY", ""),
-            elevenlabs_voice_id=os.getenv(
-                "ELEVENLABS_VOICE_ID", "21m00Tcm4TlvDq8ikWAM"
-            ),
+            elevenlabs_voice_id=os.getenv("CC_ELEVENLABS_VOICE_ID")
+            or os.getenv("ELEVENLABS_VOICE_ID", "21m00Tcm4TlvDq8ikWAM"),
             elevenlabs_model_id=os.getenv("ELEVENLABS_MODEL_ID", "eleven_flash_v2_5"),
             # OpenRouter Configuration
             openrouter_enabled=parse_bool_env(os.getenv("OPENROUTER_ENABLED", "false")),

@@ -303,6 +303,38 @@ All configuration is done through the `.env` file. Key settings:
 - `ELEVENLABS_API_KEY=` - For premium TTS ([get key](https://elevenlabs.io/app/developers/api-keys))
 - `OPENROUTER_API_KEY=` - For AI features ([get key](https://openrouter.ai/keys))
 
+### Per-Session Language & Voice Overrides
+
+Override language and voice settings for individual Claude Code sessions without modifying your
+`.env` file:
+
+```bash
+# Use Indonesian TTS for this session
+cld --language=id
+
+# Use specific ElevenLabs voice for this session
+cld --elevenlabs-voice-id=pNInz6obpgDQGcFmaJgB
+
+# Combine both for multilingual sessions with custom voice
+cld --language=es --elevenlabs-voice-id=pNInz6obpgDQGcFmaJgB
+
+# Multiple concurrent sessions with different configurations
+cld --language=id    # Session 1: Indonesian
+cld --language=es    # Session 2: Spanish (in another terminal)
+```
+
+**Configuration Precedence** (highest to lowest priority):
+
+1. Session parameters (`--language`, `--elevenlabs-voice-id`)
+2. Environment variables (`TTS_LANGUAGE`, `ELEVENLABS_VOICE_ID`)
+3. Default values
+
+This allows you to:
+
+- Run multiple Claude Code sessions with different languages simultaneously
+- Test different voices without changing your global configuration
+- Switch languages per project without config file modifications
+
 ## Troubleshooting
 
 ### Validation

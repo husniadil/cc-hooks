@@ -35,6 +35,15 @@ contextual AI-powered completion messages.
 # Start server + Claude Code (recommended)
 ./claude.sh
 
+# Start with language override (per-session)
+./claude.sh --language=id
+
+# Start with specific ElevenLabs voice ID (per-session)
+./claude.sh --elevenlabs-voice-id=pNInz6obpgDQGcFmaJgB
+
+# Combine language and voice overrides
+./claude.sh --language=es --elevenlabs-voice-id=pNInz6obpgDQGcFmaJgB
+
 # Development server with hot reload
 npm run dev
 # or: uv run server.py --dev
@@ -68,6 +77,18 @@ echo '{"session_id": "test", "hook_event_name": "Notification", "notification": 
 # Test contextual messages (requires OpenRouter config)
 echo '{"session_id": "test", "hook_event_name": "Stop", "transcript_path": "/path/to/transcript.jsonl"}' | \
   CC_INSTANCE_ID="test-instance-123" CC_HOOKS_PORT=12222 uv run hooks.py --announce=0.8
+
+# Test with language override (Indonesian TTS)
+echo '{"session_id": "test", "hook_event_name": "SessionStart"}' | \
+  CC_INSTANCE_ID="test-instance-123" CC_HOOKS_PORT=12222 CC_TTS_LANGUAGE=id uv run hooks.py --announce=0.5
+
+# Test with ElevenLabs voice ID override
+echo '{"session_id": "test", "hook_event_name": "SessionStart"}' | \
+  CC_INSTANCE_ID="test-instance-123" CC_HOOKS_PORT=12222 CC_ELEVENLABS_VOICE_ID=pNInz6obpgDQGcFmaJgB uv run hooks.py --announce=0.5
+
+# Test with both language and voice override
+echo '{"session_id": "test", "hook_event_name": "SessionStart"}' | \
+  CC_INSTANCE_ID="test-instance-123" CC_HOOKS_PORT=12222 CC_TTS_LANGUAGE=es CC_ELEVENLABS_VOICE_ID=pNInz6obpgDQGcFmaJgB uv run hooks.py --announce=0.5
 
 # Test TTS system standalone (no server needed)
 uv run utils/tts_announcer.py SessionStart
@@ -155,6 +176,15 @@ Configuration via `.env` file (see `.env.example`):
 
 - `ELEVENLABS_API_KEY`: API key
 - `ELEVENLABS_VOICE_ID`: Voice ID (default: "21m00Tcm4TlvDq8ikWAM")
+
+### Per-Session Overrides (via claude.sh)
+
+- `CC_TTS_LANGUAGE`: Override language per session (via `--language=id`)
+- `CC_ELEVENLABS_VOICE_ID`: Override voice ID per session (via `--elevenlabs-voice-id=abc123`)
+
+These environment variables are automatically set by `claude.sh` when using `--language` or
+`--elevenlabs-voice-id` parameters, allowing multiple concurrent sessions with different voice
+configurations without modifying `.env` files.
 
 ## Key Implementation Details
 
