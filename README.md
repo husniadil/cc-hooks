@@ -216,7 +216,7 @@ Configuration is handled through `.env` file. Key variables:
 ### ElevenLabs Configuration
 
 - `ELEVENLABS_API_KEY=` - Your API key ([get here](https://elevenlabs.io/app/developers/api-keys))
-- `ELEVENLABS_VOICE_ID=iWydkXKoiVtvdn4vLKp9` - Voice ID
+- `ELEVENLABS_VOICE_ID=21m00Tcm4TlvDq8ikWAM` - Voice ID (Rachel voice)
   ([find voices](https://elevenlabs.io/app/voice-lab))
 - `ELEVENLABS_MODEL_ID=eleven_flash_v2_5` - Model for generation
 
@@ -408,6 +408,18 @@ echo '{"session_id": "test", "hook_event_name": "Test"}' | uv run hooks.py --deb
 - **ElevenLabs**: Get your key at
   [elevenlabs.io/app/developers/api-keys](https://elevenlabs.io/app/developers/api-keys) - enables
   premium voice synthesis
+
+## Development
+
+For developers extending the codebase, the system uses centralized constants in `utils/constants.py`
+for better maintainability:
+
+- **Network settings**: `NetworkConstants.DEFAULT_PORT`, `get_server_url()` helper
+- **Date/time formatting**: `DateTimeConstants.ISO_DATETIME_FORMAT`
+- **HTTP status codes**: `HTTPStatusConstants.INTERNAL_SERVER_ERROR`
+- **Event processing**: `ProcessingConstants` for timing and behavior
+
+This ensures consistent values across the codebase and makes updates easier.
 
 ## Credits
 

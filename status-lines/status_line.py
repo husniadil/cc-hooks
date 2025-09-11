@@ -22,6 +22,21 @@ from pathlib import Path
 from datetime import datetime
 import re
 
+# Add imports for constants (at the beginning after standard imports)
+try:
+    from utils.constants import NetworkConstants, get_server_url
+except ImportError:
+    # Fallback for when running as standalone script
+    class NetworkConstants:
+        DEFAULT_PORT = 12222
+        LOCALHOST = "localhost"
+
+    def get_server_url(
+        port: int = NetworkConstants.DEFAULT_PORT, endpoint: str = ""
+    ) -> str:
+        return f"http://{NetworkConstants.LOCALHOST}:{port}{endpoint}"
+
+
 # Add parent directory to path for config import
 current_dir = Path(__file__).parent
 parent_dir = current_dir.parent
@@ -213,12 +228,12 @@ class StatusLine:
     def _get_cc_hooks_health(self):
         """Get cc-hooks server health status"""
         # Get port from environment variable (set by claude.sh), fallback to default
-        port = int(os.getenv("CC_HOOKS_PORT", "12222"))
+        port = int(os.getenv("CC_HOOKS_PORT", str(NetworkConstants.DEFAULT_PORT)))
 
         try:
             import requests
 
-            response = requests.get(f"http://localhost:{port}/health", timeout=2)
+            response = requests.get(get_server_url(port, "/health"), timeout=2)
             if response.status_code == 200:
                 return True, "✅", "online", port
             else:

@@ -520,7 +520,8 @@ running its own dedicated server for optimal isolation and performance.
 - `app/event_db.py`: Database operations for event queue with instance support
 - `app/event_processor.py`: Background processor with event handling logic and sound effects
 - `app/migrations.py`: Database schema migrations and setup with version tracking
-- `utils/constants.py`: Centralized system constants including EventStatus enum and processing timing constants
+- `utils/constants.py`: Centralized system constants including EventStatus enum and processing
+  timing constants
 - `utils/hooks_constants.py`: Type-safe event constants with `HookEvent` enum
 - `utils/sound_player.py`: Cross-platform sound effect playback utility
 - `utils/tts_manager.py`: TTS provider orchestration with fallback chain

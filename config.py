@@ -9,6 +9,11 @@ from dotenv import load_dotenv
 load_dotenv()
 
 
+def parse_bool_env(value: str, default: bool = False) -> bool:
+    """Helper function to parse boolean environment variables consistently."""
+    return value.lower() == "true" if value else default
+
+
 @dataclass
 class Config:
     """Configuration settings loaded from environment variables."""
@@ -41,7 +46,9 @@ class Config:
             max_retry_count=int(os.getenv("MAX_RETRY_COUNT", "3")),
             # TTS Configuration
             tts_providers=os.getenv("TTS_PROVIDERS", "prerecorded"),
-            tts_cache_enabled=os.getenv("TTS_CACHE_ENABLED", "true").lower() == "true",
+            tts_cache_enabled=parse_bool_env(
+                os.getenv("TTS_CACHE_ENABLED", "true"), True
+            ),
             tts_language=os.getenv("TTS_LANGUAGE", "en"),
             # ElevenLabs Configuration
             elevenlabs_api_key=os.getenv("ELEVENLABS_API_KEY", ""),
@@ -50,18 +57,15 @@ class Config:
             ),
             elevenlabs_model_id=os.getenv("ELEVENLABS_MODEL_ID", "eleven_flash_v2_5"),
             # OpenRouter Configuration
-            openrouter_enabled=os.getenv("OPENROUTER_ENABLED", "false").lower()
-            == "true",
+            openrouter_enabled=parse_bool_env(os.getenv("OPENROUTER_ENABLED", "false")),
             openrouter_api_key=os.getenv("OPENROUTER_API_KEY", ""),
             openrouter_model=os.getenv("OPENROUTER_MODEL", "openai/gpt-4o-mini"),
-            openrouter_contextual_stop=os.getenv(
-                "OPENROUTER_CONTEXTUAL_STOP", "false"
-            ).lower()
-            == "true",
-            openrouter_contextual_pretooluse=os.getenv(
-                "OPENROUTER_CONTEXTUAL_PRETOOLUSE", "false"
-            ).lower()
-            == "true",
+            openrouter_contextual_stop=parse_bool_env(
+                os.getenv("OPENROUTER_CONTEXTUAL_STOP", "false")
+            ),
+            openrouter_contextual_pretooluse=parse_bool_env(
+                os.getenv("OPENROUTER_CONTEXTUAL_PRETOOLUSE", "false")
+            ),
         )
 
     def get_tts_providers_list(self) -> list:

@@ -5,7 +5,7 @@ import aiosqlite
 import json
 from typing import Dict, Any, Tuple, Optional
 from config import config
-from utils.constants import EventStatus, DatabaseConstants
+from utils.constants import EventStatus, DatabaseConstants, DateTimeConstants
 
 DB_PATH = config.db_path
 
@@ -175,7 +175,9 @@ async def mark_event_completed(event_id: int, retry_count: int):
             "UPDATE events SET status = ?, processed_at = ?, retry_count = ? WHERE id = ?",
             (
                 EventStatus.COMPLETED.value,
-                datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S"),
+                datetime.now(timezone.utc).strftime(
+                    DateTimeConstants.ISO_DATETIME_FORMAT
+                ),
                 retry_count,
                 event_id,
             ),
@@ -194,7 +196,9 @@ async def mark_event_failed(event_id: int, retry_count: int, error_message: str)
                 EventStatus.FAILED.value,
                 error_message,
                 retry_count,
-                datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S"),
+                datetime.now(timezone.utc).strftime(
+                    DateTimeConstants.ISO_DATETIME_FORMAT
+                ),
                 event_id,
             ),
         )

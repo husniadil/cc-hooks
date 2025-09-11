@@ -14,6 +14,7 @@ from app.event_db import (
 from app.migrations import get_migration_status
 from utils.hooks_constants import is_valid_hook_event
 from utils.colored_logger import setup_logger, configure_root_logging
+from utils.constants import HTTPStatusConstants
 
 configure_root_logging()
 logger = setup_logger(__name__)
@@ -50,7 +51,7 @@ def create_app(lifespan=None) -> FastAPI:
             # Reject events with missing required fields
             if not session_id or not hook_event_name:
                 raise HTTPException(
-                    status_code=400,
+                    status_code=HTTPStatusConstants.BAD_REQUEST,
                     detail="Both session_id and hook_event_name are required",
                 )
 
@@ -77,7 +78,10 @@ def create_app(lifespan=None) -> FastAPI:
 
         except Exception as e:
             logger.error(f"Error queuing event: {e}")
-            raise HTTPException(status_code=500, detail="Failed to queue event")
+            raise HTTPException(
+                status_code=HTTPStatusConstants.INTERNAL_SERVER_ERROR,
+                detail="Failed to queue event",
+            )
 
     @app.get("/events/status")
     async def get_events_status():
@@ -89,7 +93,10 @@ def create_app(lifespan=None) -> FastAPI:
             return await get_db_events_status()
         except Exception as e:
             logger.error(f"Error getting events status: {e}")
-            raise HTTPException(status_code=500, detail="Failed to get events status")
+            raise HTTPException(
+                status_code=HTTPStatusConstants.INTERNAL_SERVER_ERROR,
+                detail="Failed to get events status",
+            )
 
     @app.get("/migrations/status")
     async def get_migrations_status():
@@ -102,7 +109,8 @@ def create_app(lifespan=None) -> FastAPI:
         except Exception as e:
             logger.error(f"Error getting migration status: {e}")
             raise HTTPException(
-                status_code=500, detail="Failed to get migration status"
+                status_code=HTTPStatusConstants.INTERNAL_SERVER_ERROR,
+                detail="Failed to get migration status",
             )
 
     @app.get("/instances/{instance_id}/last-event")
@@ -126,7 +134,8 @@ def create_app(lifespan=None) -> FastAPI:
                 f"Error getting last event status for instance {instance_id}: {e}"
             )
             raise HTTPException(
-                status_code=500, detail="Failed to get last event status for instance"
+                status_code=HTTPStatusConstants.INTERNAL_SERVER_ERROR,
+                detail="Failed to get last event status for instance",
             )
 
     @app.post("/shutdown")
@@ -145,6 +154,9 @@ def create_app(lifespan=None) -> FastAPI:
             return {"status": "ok", "message": "Server shutdown initiated"}
         except Exception as e:
             logger.error(f"Error during shutdown: {e}")
-            raise HTTPException(status_code=500, detail="Failed to shutdown server")
+            raise HTTPException(
+                status_code=HTTPStatusConstants.INTERNAL_SERVER_ERROR,
+                detail="Failed to shutdown server",
+            )
 
     return app

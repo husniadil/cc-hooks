@@ -30,6 +30,7 @@ from app.event_processor import process_events
 from config import config
 from utils.tts_announcer import initialize_tts
 from utils.colored_logger import setup_logger, configure_root_logging
+from utils.constants import DateTimeConstants, NetworkConstants
 
 configure_root_logging()
 logger = setup_logger(__name__)
@@ -39,7 +40,9 @@ logger = setup_logger(__name__)
 async def lifespan(app):
     """Manage application lifecycle for startup and shutdown."""
     # Startup
-    server_start_time = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+    server_start_time = datetime.now(timezone.utc).strftime(
+        DateTimeConstants.ISO_DATETIME_FORMAT
+    )
     await init_db()
     await set_server_start_time(server_start_time)
 
@@ -85,7 +88,7 @@ if __name__ == "__main__":
     reload = "--reload" in sys.argv or "--dev" in sys.argv
 
     # Get port from environment variable (set by claude.sh) or default
-    port = int(os.getenv("PORT", "12222"))
+    port = int(os.getenv("PORT", str(NetworkConstants.DEFAULT_PORT)))
     host = "0.0.0.0"
 
     if reload:

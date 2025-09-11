@@ -21,6 +21,7 @@ import requests
 from typing import Dict, Any, Optional
 from config import config
 from utils.colored_logger import setup_logger, configure_root_logging
+from utils.constants import NetworkConstants, get_server_url
 
 configure_root_logging()
 logger = setup_logger(__name__)
@@ -47,8 +48,8 @@ def send_to_api(
 ) -> bool:
     """Send event data to the API endpoint."""
     # Use port from environment variable set by claude.sh, fallback to default
-    port = os.getenv("CC_HOOKS_PORT", "12222")
-    api_url = f"http://localhost:{port}/events"
+    port = int(os.getenv("CC_HOOKS_PORT", str(NetworkConstants.DEFAULT_PORT)))
+    api_url = get_server_url(port, "/events")
 
     try:
         payload = {"data": event_data}

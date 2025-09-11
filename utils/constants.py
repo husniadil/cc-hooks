@@ -11,7 +11,16 @@ from typing import Literal
 # Re-export HookEvent for convenience
 from utils.hooks_constants import HookEvent
 
-__all__ = ["EventStatus", "ProcessingConstants", "DatabaseConstants", "HookEvent"]
+__all__ = [
+    "EventStatus",
+    "ProcessingConstants",
+    "DatabaseConstants",
+    "DateTimeConstants",
+    "NetworkConstants",
+    "HTTPStatusConstants",
+    "HookEvent",
+    "get_server_url",
+]
 
 
 class EventStatus(Enum):
@@ -46,5 +55,45 @@ class DatabaseConstants:
     RECENT_EVENTS_LIMIT = 10
 
 
+class DateTimeConstants:
+    """Constants related to date and time formatting."""
+
+    ISO_DATETIME_FORMAT = "%Y-%m-%d %H:%M:%S"
+
+
+class NetworkConstants:
+    """Constants related to network operations."""
+
+    DEFAULT_PORT = 12222
+    DEFAULT_HOST = "0.0.0.0"
+    LOCALHOST = "localhost"
+
+
+class HTTPStatusConstants:
+    """HTTP status code constants for better maintainability."""
+
+    OK = 200
+    BAD_REQUEST = 400
+    NOT_FOUND = 404
+    INTERNAL_SERVER_ERROR = 500
+
+
 # Type alias for backward compatibility
 EventStatusLiteral = Literal["pending", "processing", "completed", "failed"]
+
+
+# Helper functions
+def get_server_url(
+    port: int = NetworkConstants.DEFAULT_PORT, endpoint: str = ""
+) -> str:
+    """
+    Generate server URL for API calls.
+
+    Args:
+        port: Server port number (defaults to DEFAULT_PORT)
+        endpoint: API endpoint path (should start with / if provided)
+
+    Returns:
+        Complete server URL with endpoint
+    """
+    return f"http://{NetworkConstants.LOCALHOST}:{port}{endpoint}"
