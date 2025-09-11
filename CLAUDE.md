@@ -39,10 +39,10 @@ contextual AI-powered completion messages.
 ./claude.sh --language=id
 
 # Start with specific ElevenLabs voice ID (per-session)
-./claude.sh --elevenlabs-voice-id=pNInz6obpgDQGcFmaJgB
+./claude.sh --elevenlabs-voice-id=21m00Tcm4TlvDq8ikWAM
 
 # Combine language and voice overrides
-./claude.sh --language=es --elevenlabs-voice-id=pNInz6obpgDQGcFmaJgB
+./claude.sh --language=es --elevenlabs-voice-id=21m00Tcm4TlvDq8ikWAM
 
 # Development server with hot reload
 npm run dev
@@ -84,11 +84,11 @@ echo '{"session_id": "test", "hook_event_name": "SessionStart"}' | \
 
 # Test with ElevenLabs voice ID override
 echo '{"session_id": "test", "hook_event_name": "SessionStart"}' | \
-  CC_INSTANCE_ID="test-instance-123" CC_HOOKS_PORT=12222 CC_ELEVENLABS_VOICE_ID=pNInz6obpgDQGcFmaJgB uv run hooks.py --announce=0.5
+  CC_INSTANCE_ID="test-instance-123" CC_HOOKS_PORT=12222 CC_ELEVENLABS_VOICE_ID=21m00Tcm4TlvDq8ikWAM uv run hooks.py --announce=0.5
 
 # Test with both language and voice override
 echo '{"session_id": "test", "hook_event_name": "SessionStart"}' | \
-  CC_INSTANCE_ID="test-instance-123" CC_HOOKS_PORT=12222 CC_TTS_LANGUAGE=es CC_ELEVENLABS_VOICE_ID=pNInz6obpgDQGcFmaJgB uv run hooks.py --announce=0.5
+  CC_INSTANCE_ID="test-instance-123" CC_HOOKS_PORT=12222 CC_TTS_LANGUAGE=es CC_ELEVENLABS_VOICE_ID=21m00Tcm4TlvDq8ikWAM uv run hooks.py --announce=0.5
 
 # Test TTS system standalone (no server needed)
 uv run utils/tts_announcer.py SessionStart

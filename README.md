@@ -228,6 +228,12 @@ Want real-time generated voice announcements? Add Google TTS or premium ElevenLa
    ELEVENLABS_VOICE_ID=21m00Tcm4TlvDq8ikWAM  # Rachel voice (default)
    ```
 
+   **⚠️ Important**: The `ELEVENLABS_VOICE_ID` must be from either:
+   - **My Voices**: https://elevenlabs.io/app/voice-lab (your custom voices)
+   - **Default Voices**: https://elevenlabs.io/app/default-voices (built-in voices)
+
+   Using voice IDs from other sources will fail and automatically fallback to the next TTS provider.
+
 3. **Follow the same hook update steps as Google TTS above**
 
 ---
@@ -313,10 +319,10 @@ Override language and voice settings for individual Claude Code sessions without
 cld --language=id
 
 # Use specific ElevenLabs voice for this session
-cld --elevenlabs-voice-id=pNInz6obpgDQGcFmaJgB
+cld --elevenlabs-voice-id=21m00Tcm4TlvDq8ikWAM
 
 # Combine both for multilingual sessions with custom voice
-cld --language=es --elevenlabs-voice-id=pNInz6obpgDQGcFmaJgB
+cld --language=es --elevenlabs-voice-id=21m00Tcm4TlvDq8ikWAM
 
 # Multiple concurrent sessions with different configurations
 cld --language=id    # Session 1: Indonesian
