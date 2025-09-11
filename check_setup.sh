@@ -294,23 +294,50 @@ fi
 # Test server health (brief start/stop)
 echo -n "  Testing server startup... "
 
-# Use default port for testing (actual port is auto-assigned per instance)
-SERVER_PORT=12222
+# Function to find available port (same logic as claude.sh)
+find_available_port() {
+    local base_port=12222
+    local port=$base_port
+    
+    # Override base port from .env if available
+    if [ -f ".env" ]; then
+        # Source .env file to get environment variables
+        export $(grep -v '^#' .env | grep -v '^$' | xargs) 2>/dev/null || true
+        if [ -n "$PORT" ]; then
+            base_port=$PORT
+            port=$base_port
+        fi
+    fi
+    
+    while ss -ln 2>/dev/null | grep -q ":$port " || netstat -ln 2>/dev/null | grep -q ":$port "; do
+        port=$((port + 1))
+        
+        # Safety limit to prevent infinite loop
+        if [ $port -gt $((base_port + 100)) ]; then
+            echo "Error: Could not find available port in range $base_port-$((base_port + 100))" >&2
+            return 1
+        fi
+    done
+    
+    echo $port
+}
 
-# Check if port is already in use
-if netstat -ln 2>/dev/null | grep -q ":$SERVER_PORT " || ss -ln 2>/dev/null | grep -q ":$SERVER_PORT "; then
-    echo -e "${YELLOW}⚠${NC}"
-    ((WARNINGS++))
-    print_info "Port $SERVER_PORT already in use, skipping server test"
+# Find available port for testing (just like claude.sh does)
+if ! SERVER_PORT=$(find_available_port); then
+    echo -e "${RED}✗${NC}"
+    ((FAILURES++))
+    print_info "Failed to find available port for testing"
     
     # Skip hook script test too
     echo -n "  Testing hook script... "
     echo -e "${YELLOW}⚠${NC}"
     ((WARNINGS++))
-    print_info "Hook script test skipped (port conflict)"
+    print_info "Hook script test skipped (no available port)"
 else
-    # Start server in background
-    uv run server.py > /tmp/cc-hooks-server-test.log 2>&1 &
+    print_info "Using available port: $SERVER_PORT"
+    
+    # Start server in background with dynamic port
+    PORT=$SERVER_PORT uv run server.py > /tmp/cc-hooks-server-test.log 2>&1 &
     SERVER_PID=$!
     
     # Wait longer for server startup (WSL can be slower)
