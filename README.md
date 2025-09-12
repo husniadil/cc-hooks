@@ -1,5 +1,12 @@
 # cc-hooks
 
+![cc-hooks Banner](banner.png)
+
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![DeepWiki](https://img.shields.io/badge/DeepWiki-cc--hooks-blue)](https://deepwiki.com/husniadil/cc-hooks)
+[![Claude Code](https://img.shields.io/badge/Claude%20Code-Enhanced-orange)](https://www.anthropic.com/claude-code)
+[![Audio](https://img.shields.io/badge/Audio-TTS%20%2B%20Sound%20Effects-purple)]()
+
 Enhanced Claude Code hooks system with intelligent audio feedback, TTS announcements, and optional
 AI-powered contextual messages.
 
