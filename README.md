@@ -20,6 +20,15 @@ cc-hooks enhances your Claude Code experience with:
 - 🌍 **Multilingual support** for international users
 - ⚡ **Multi-instance support** - run multiple Claude Code sessions simultaneously
 
+## Demo
+
+<video width="100%" controls>
+  <source src="demo-elevenlabs.mov" type="video/mp4">
+  Your browser does not support the video tag. <a href="demo-elevenlabs.mov">Download the demo video</a>
+</video>
+
+*Watch cc-hooks in action with premium ElevenLabs text-to-speech integration*
+
 ## Quick Start (Recommended)
 
 Get up and running in 2 minutes with full audio feedback:
