@@ -227,7 +227,7 @@ class StatusLine:
 
     def _get_cc_hooks_health(self):
         """Get cc-hooks server health status"""
-        # Get port from environment variable (set by claude.sh), fallback to default
+        # Get port from environment variable (set by claude.sh) or use default
         port = int(os.getenv("CC_HOOKS_PORT", str(NetworkConstants.DEFAULT_PORT)))
 
         try:

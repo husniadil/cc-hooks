@@ -376,7 +376,7 @@ class OpenRouterService:
             source_lang, target_lang, is_enhancement
         )
 
-        # Format final prompt (without base claude context - now in system prompt)
+        # Format final prompt (base claude context is in system prompt)
         return f'{event_data}{task_instruction}"{text}"'
 
     def _create_completion_message_prompt(
