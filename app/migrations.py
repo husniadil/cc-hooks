@@ -38,6 +38,16 @@ MIGRATIONS = [
         "description": "Add instance_id column for Claude Code instance tracking",
         "sql": "ALTER TABLE events ADD COLUMN instance_id TEXT NULL",
     },
+    {
+        "version": 4,
+        "description": "Add database indexes for query optimization",
+        "sql": "CREATE INDEX IF NOT EXISTS idx_events_processing ON events (instance_id, status, created_at, id)",
+    },
+    {
+        "version": 5,
+        "description": "Add session_id index for debugging support",
+        "sql": "CREATE INDEX IF NOT EXISTS idx_events_session ON events (session_id)",
+    },
 ]
 
 

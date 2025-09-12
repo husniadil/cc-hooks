@@ -7,6 +7,24 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.12.0] - 2025-09-12
+
+### Added
+
+- **Database Performance Optimization**: Added critical indexes for query performance
+  - Composite index `idx_events_processing` on `(instance_id, status, created_at, id)` for event processing optimization
+  - Session index `idx_events_session` on `session_id` for debugging and analytics support
+  - Automatic migration system applies indexes on server startup
+  - Significant performance improvement for `get_next_pending_event()` queries as database grows
+
+### Changed
+
+- **Migration System Enhancement**: Split multi-statement migrations to handle SQLite limitations
+  - Fixed "You can only execute one statement at a time" error by separating index creation
+  - Migration v4: Primary composite index for critical event processing queries
+  - Migration v5: Secondary session index for debugging capabilities
+  - Improved database query performance and scalability
+
 ## [0.11.0] - 2025-09-11
 
 ### Added
