@@ -22,10 +22,7 @@ cc-hooks enhances your Claude Code experience with:
 
 ## Demo
 
-<video width="100%" controls>
-  <source src="demo-elevenlabs.mov" type="video/mp4">
-  Your browser does not support the video tag. <a href="demo-elevenlabs.mov">Download the demo video</a>
-</video>
+[![ElevenLabs TTS Demo](https://img.youtube.com/vi/VXkKhgeZ-xU/maxresdefault.jpg)](https://youtu.be/VXkKhgeZ-xU)
 
 *Watch cc-hooks in action with premium ElevenLabs text-to-speech integration*
 
