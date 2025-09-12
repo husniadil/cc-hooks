@@ -7,12 +7,26 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.12.1] - 2025-09-12
+
+### Fixed
+
+- **OpenRouter Language Response**: Fixed issue where model was not returning responses in the
+  target language
+  - Removed conditional language instruction that only applied when target language was not English
+  - Language instruction now always included regardless of target language (English, Indonesian,
+    etc.)
+  - Moved language instruction to end of prompt for better model attention and compliance
+  - Ensures consistent language output across all OpenRouter-powered features (translation,
+    contextual messages)
+
 ## [0.12.0] - 2025-09-12
 
 ### Added
 
 - **Database Performance Optimization**: Added critical indexes for query performance
-  - Composite index `idx_events_processing` on `(instance_id, status, created_at, id)` for event processing optimization
+  - Composite index `idx_events_processing` on `(instance_id, status, created_at, id)` for event
+    processing optimization
   - Session index `idx_events_session` on `session_id` for debugging and analytics support
   - Automatic migration system applies indexes on server startup
   - Significant performance improvement for `get_next_pending_event()` queries as database grows
