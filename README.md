@@ -1,6 +1,6 @@
 # cc-hooks
 
-![cc-hooks Banner](banner.png)
+![cc-hooks Banner](public/banner.png)
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![DeepWiki](https://img.shields.io/badge/DeepWiki-cc--hooks-blue)](https://deepwiki.com/husniadil/cc-hooks)
@@ -22,7 +22,7 @@ cc-hooks enhances your Claude Code experience with:
 
 ## Demo
 
-[![ElevenLabs TTS Demo](thumbnail.png)](https://www.youtube.com/watch?v=VXkKhgeZ-xU)
+[![ElevenLabs TTS Demo](public/thumbnail.png)](https://www.youtube.com/watch?v=VXkKhgeZ-xU)
 
 _Watch cc-hooks in action with premium ElevenLabs text-to-speech integration_
 
@@ -38,15 +38,25 @@ Get up and running in 2 minutes with full audio feedback:
 
 ### Installation
 
-1. **Clone and test setup:**
+1. **Clone and install dependencies:**
 
    ```bash
    git clone https://github.com/husniadil/cc-hooks.git
    cd cc-hooks
-   ./check_setup.sh
+
+   # Optional: Use mise to install Python, uv, and Node.js automatically
+   # mise install
+
+   npm install
    ```
 
-2. **Add hooks to Claude Code settings:**
+2. **Verify setup:**
+
+   ```bash
+   npm run check
+   ```
+
+3. **Add hooks to Claude Code settings:**
 
    Edit your Claude Code settings (typically `~/.claude/settings.json`):
 
@@ -165,7 +175,7 @@ Get up and running in 2 minutes with full audio feedback:
    **Replace `/path/to/cc-hooks` with your actual installation path** (find it with `pwd` in the
    cc-hooks directory).
 
-3. **Create basic configuration:**
+4. **Create basic configuration:**
 
    ```bash
    cp .env.example .env
@@ -173,7 +183,7 @@ Get up and running in 2 minutes with full audio feedback:
 
    The default settings work perfectly for Quick Start - no editing needed!
 
-4. **Create command alias (recommended):**
+5. **Create command alias (recommended):**
 
    Add this to your shell config (`.bashrc`, `.zshrc`, etc.):
 
@@ -189,7 +199,7 @@ Get up and running in 2 minutes with full audio feedback:
    This alias allows you to run `cld` from **any directory** on your system - Claude Code will start
    with all the audio enhancements while working in your current project folder.
 
-5. **Start using:**
+6. **Start using:**
 
    ```bash
    # Use your alias from any directory (recommended)
@@ -364,7 +374,13 @@ This allows you to:
 Run the setup checker to verify your installation:
 
 ```bash
-./check_setup.sh
+npm run check
+```
+
+For detailed validation output:
+
+```bash
+npm run check:verbose
 ```
 
 ### Common Issues

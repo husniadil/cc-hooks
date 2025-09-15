@@ -259,16 +259,23 @@ class StatusLine:
         cost_usd = ""
         cost_per_hour = ""
 
-        # Check if ccusage is available
-        ccusage_path = shutil.which("ccusage")
-        if not ccusage_path:
-            self._debug_log("ccusage command not found in PATH")
-            return session_txt, session_pct, session_bar, cost_usd, cost_per_hour
+        # Try local ccusage first (from project node_modules), then global
+        project_root = Path(__file__).parent.parent
+        local_ccusage = project_root / "node_modules" / ".bin" / "ccusage"
 
-        self._debug_log(f"ccusage found at: {ccusage_path}")
+        if local_ccusage.exists():
+            ccusage_path = str(local_ccusage)
+            self._debug_log(f"Using local ccusage: {ccusage_path}")
+        else:
+            # Fallback to global ccusage
+            ccusage_path = shutil.which("ccusage")
+            if not ccusage_path:
+                self._debug_log("ccusage command not found locally or in PATH")
+                return session_txt, session_pct, session_bar, cost_usd, cost_per_hour
+            self._debug_log(f"Using global ccusage: {ccusage_path}")
 
         # Get blocks output
-        success, output, error = self._run_command(["ccusage", "blocks", "--json"])
+        success, output, error = self._run_command([ccusage_path, "blocks", "--json"])
         if not success or not output:
             self._debug_log(f"ccusage failed or no output: {error}")
             return session_txt, session_pct, session_bar, cost_usd, cost_per_hour

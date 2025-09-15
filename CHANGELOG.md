@@ -7,6 +7,43 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.14.0] - 2025-09-15
+
+### Added
+
+- **ccusage Dependency Integration**: Added ccusage package for enhanced Claude Code usage tracking
+  - New production dependency `ccusage@^16.2.4` for cost and usage monitoring
+  - Enhanced status line integration with local-first ccusage detection
+  - Comprehensive npm script integration: `npm run check` and `npm run check:verbose`
+  - Improved project setup verification workflow
+
+### Enhanced
+
+- **Status Line ccusage Detection**: Smart ccusage binary resolution with local-first priority
+  - Checks project `node_modules/.bin/ccusage` before falling back to global installation
+  - Better debug logging for ccusage path resolution and availability
+  - Improved reliability for projects with local ccusage installations
+  - Maintains backward compatibility with global ccusage installations
+
+- **Project Structure Organization**: Cleaner asset organization and documentation flow
+  - Moved `banner.png` and `thumbnail.png` to `public/` directory for better organization
+  - Updated README.md asset references to reflect new public directory structure
+  - Enhanced installation workflow with separate dependency installation and verification steps
+  - Restructured installation guide from 4 to 6 clear steps for better user experience
+
+### Changed
+
+- **Installation Documentation**: Streamlined setup process with clearer step separation
+  - Split dependency installation from setup verification for better workflow
+  - Added optional mise support for automatic Python, uv, and Node.js installation
+  - Enhanced troubleshooting section with new npm script commands
+  - Better structured installation steps with numbered progression
+
+- **Package Management**: Simplified package configuration
+  - Removed `packageManager` field from package.json for broader compatibility
+  - Updated formatting scripts to use `uvx black` for better uv integration
+  - Enhanced npm scripts for setup checking and validation workflows
+
 ## [0.13.0] - 2025-09-15
 
 ### Added
