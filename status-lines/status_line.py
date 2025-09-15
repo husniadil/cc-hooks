@@ -105,8 +105,11 @@ class StatusLine:
     def cost_color(self):
         return self._color("1;36")  # cyan
 
-    def elevenlabs_color(self):
+    def tts_color(self):
         return self._color("1;33")  # yellow
+
+    def elevenlabs_color(self):
+        return self.tts_color()  # backward compatibility
 
     def session_color(self, session_pct):
         """Dynamic session color based on remaining percentage"""
@@ -321,68 +324,101 @@ class StatusLine:
 
         return session_txt, session_pct, session_bar, cost_usd, cost_per_hour
 
-    def _get_elevenlabs_info(self):
-        """Get ElevenLabs usage information if available"""
-        elevenlabs_info = ""
-        elevenlabs_enabled = False
+    def _get_tts_info(self):
+        """Get TTS provider information if available"""
+        tts_info = ""
+        tts_enabled = False
+        voice_name = ""
 
-        # Check if ElevenLabs is configured by checking TTS providers and API key
         try:
             if config is None:
                 self._debug_log("config module not available")
-                return elevenlabs_info, elevenlabs_enabled
+                return tts_info, tts_enabled, voice_name
 
-            # Check if elevenlabs is in TTS_PROVIDERS list
+            # Get the list of TTS providers in priority order
             tts_providers_list = config.get_tts_providers_list()
-            has_elevenlabs_provider = "elevenlabs" in tts_providers_list
+            self._debug_log(f"TTS providers list: {tts_providers_list}")
 
-            # Check if API key is available
-            api_key = config.elevenlabs_api_key
-            has_api_key = bool(api_key)
+            if not tts_providers_list:
+                return tts_info, tts_enabled, voice_name
 
-            elevenlabs_enabled = has_elevenlabs_provider and has_api_key
+            # Find the first available provider
+            active_provider = None
+            for provider in tts_providers_list:
+                if provider == "elevenlabs":
+                    api_key = config.elevenlabs_api_key
+                    if api_key:
+                        active_provider = "elevenlabs"
+                        break
+                elif provider == "gtts":
+                    # GTTS is always available if specified
+                    active_provider = "gtts"
+                    break
+                elif provider == "prerecorded":
+                    # Prerecorded is always available if specified
+                    active_provider = "prerecorded"
+                    break
 
-            self._debug_log(f"ElevenLabs provider in list: {has_elevenlabs_provider}")
-            self._debug_log(f"ElevenLabs API key available: {has_api_key}")
-            self._debug_log(f"ElevenLabs enabled: {elevenlabs_enabled}")
-        except ImportError:
-            self._debug_log("python-dotenv not available for ElevenLabs check")
-            return elevenlabs_info, elevenlabs_enabled
+            if not active_provider:
+                self._debug_log("No active TTS provider found")
+                return tts_info, tts_enabled, voice_name
+
+            self._debug_log(f"Active TTS provider: {active_provider}")
+            tts_enabled = True
+
+            # Get provider-specific information
+            if active_provider == "elevenlabs":
+                tts_info, voice_name = self._get_elevenlabs_details()
+            elif active_provider == "gtts":
+                language = config.tts_language or os.getenv("CC_TTS_LANGUAGE", "en")
+                tts_info = f"Google TTS ({language.upper()})"
+                voice_name = "Google TTS"
+            elif active_provider == "prerecorded":
+                tts_info = "Prerecorded Audio"
+                voice_name = "Prerecorded"
+
         except Exception as e:
-            self._debug_log(f"Error accessing config: {e}")
-            return elevenlabs_info, elevenlabs_enabled
+            self._debug_log(f"Error getting TTS info: {e}")
+            return tts_info, tts_enabled, voice_name
 
-        if not elevenlabs_enabled:
-            self._debug_log("ElevenLabs not properly configured")
-            return elevenlabs_info, elevenlabs_enabled
+        return tts_info, tts_enabled, voice_name
 
-        if config is None:
-            self._debug_log("config module not available for API key check")
-            return elevenlabs_info, elevenlabs_enabled
-
-        api_key = config.elevenlabs_api_key
-        if not api_key:
-            self._debug_log("ElevenLabs API key not found")
-            return elevenlabs_info, elevenlabs_enabled
+    def _get_elevenlabs_details(self):
+        """Get detailed ElevenLabs information"""
+        elevenlabs_info = ""
+        voice_name = ""
 
         try:
+            api_key = config.elevenlabs_api_key
+            if not api_key:
+                return "ElevenLabs: No API key", ""
+
             from elevenlabs.client import ElevenLabs
 
             client = ElevenLabs(api_key=api_key)
             subscription = client.user.subscription.get()
 
-            self._debug_log(f"ElevenLabs subscription type: {type(subscription)}")
             self._debug_log(f"ElevenLabs subscription: {subscription}")
 
             # Extract subscription info
             char_limit = getattr(subscription, "character_limit", 0)
             char_used = getattr(subscription, "character_count", 0)
-            # For can_do_tts, we'll check if character_count < character_limit
             can_do_tts = char_used < char_limit if char_limit > 0 else True
 
-            self._debug_log(
-                f"ElevenLabs: limit={char_limit}, used={char_used}, can_tts={can_do_tts}"
-            )
+            # Fetch voice name
+            try:
+                voice_id = config.elevenlabs_voice_id or os.getenv(
+                    "CC_ELEVENLABS_VOICE_ID"
+                )
+                if voice_id:
+                    voice = client.voices.get(voice_id)
+                    voice_name = getattr(voice, "name", "ElevenLabs")
+                    self._debug_log(f"ElevenLabs voice name: {voice_name}")
+                else:
+                    voice_name = "ElevenLabs"
+            except Exception as e:
+                self._debug_log(f"Error fetching voice name: {e}")
+                voice_name = "ElevenLabs"
 
             # Format the usage info
             if char_limit > 0:
@@ -392,21 +428,19 @@ class StatusLine:
                     elevenlabs_info += " [LIMIT REACHED]"
             else:
                 elevenlabs_info = (
-                    f"{char_used:,} chars used"
-                    if char_used > 0
-                    else "ElevenLabs: Connected"
+                    f"{char_used:,} chars used" if char_used > 0 else "Connected"
                 )
 
         except ImportError:
             self._debug_log("elevenlabs package not available")
-            elevenlabs_info = "ElevenLabs: Not installed"
+            elevenlabs_info = "Not installed"
+            voice_name = "ElevenLabs"
         except Exception as e:
-            self._debug_log(f"Error fetching ElevenLabs info: {e}")
-            if self.debug:
-                print(f"ELEVENLABS ERROR: {e}", file=sys.stderr)
-            elevenlabs_info = f"ElevenLabs: {type(e).__name__}"
+            self._debug_log(f"Error fetching ElevenLabs details: {e}")
+            elevenlabs_info = f"Error: {type(e).__name__}"
+            voice_name = "ElevenLabs"
 
-        return elevenlabs_info, elevenlabs_enabled
+        return elevenlabs_info, voice_name
 
     def render(self, input_data=None):
         """Render the complete status line"""
@@ -464,8 +498,8 @@ class StatusLine:
             self._get_ccusage_info()
         )
 
-        # ElevenLabs information
-        elevenlabs_info, elevenlabs_enabled = self._get_elevenlabs_info()
+        # TTS information
+        tts_info, tts_enabled, voice_name = self._get_tts_info()
 
         # Start building the status line
         parts = []
@@ -499,6 +533,17 @@ class StatusLine:
         # CC-Hooks health status
         parts.append(f"🔗 {cc_hooks_emoji} cc-hooks:{cc_hooks_port}")
 
+        # TTS information
+        if tts_enabled and tts_info:
+            tts_display = tts_info
+            if (
+                voice_name
+                and voice_name != tts_info
+                and not tts_info.startswith(voice_name)
+            ):
+                tts_display = f"{voice_name}: {tts_info}"
+            parts.append(f"🔊 {self.tts_color()}{tts_display}{self._reset()}")
+
         # Session information
         if session_txt:
             session_col = self.session_color(session_pct)
@@ -512,12 +557,6 @@ class StatusLine:
                 cost_part += f" (${float(cost_per_hour):.2f}/h)"
             cost_part += self._reset()
             parts.append(cost_part)
-
-        # ElevenLabs information
-        if elevenlabs_enabled and elevenlabs_info:
-            parts.append(
-                f"🔊 {self.elevenlabs_color()}{elevenlabs_info}{self._reset()}"
-            )
 
         # Print the final status line
         print("  ".join(parts))

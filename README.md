@@ -24,7 +24,7 @@ cc-hooks enhances your Claude Code experience with:
 
 [![ElevenLabs TTS Demo](thumbnail.png)](https://www.youtube.com/watch?v=VXkKhgeZ-xU)
 
-*Watch cc-hooks in action with premium ElevenLabs text-to-speech integration*
+_Watch cc-hooks in action with premium ElevenLabs text-to-speech integration_
 
 ## Quick Start (Recommended)
 
