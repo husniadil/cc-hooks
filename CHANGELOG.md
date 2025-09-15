@@ -7,6 +7,49 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.13.0] - 2025-09-15
+
+### Added
+
+- **CamelCase-to-Readable Text Conversion**: Enhanced TTS system with intelligent programming
+  identifier conversion
+  - Converts camelCase variables to readable text: `getUserName` → `"get user name"`
+  - Smart pattern detection for camelCase, PascalCase, and mixed alphanumeric identifiers
+  - Preserves common brand names (JavaScript, React, GitHub, etc.) to avoid unwanted splitting
+  - Multi-level fallback protection: returns original text if any conversion step fails
+  - Lowercase normalization for consistent TTS pronunciation across all providers
+  - Integrated into existing TTS text cleaning pipeline for seamless operation
+
+- **TTS Providers Override Parameter**: New `--tts-providers` command-line parameter for per-session
+  provider configuration
+  - Override TTS provider chain per session: `./claude.sh --tts-providers=gtts,prerecorded`
+  - Support for `CC_TTS_PROVIDERS` environment variable override in config system
+  - Enable multiple concurrent Claude Code sessions with different TTS configurations
+  - Comprehensive examples added to `.env.example` with usage patterns
+  - Compatible with existing `--language` and `--elevenlabs-voice-id` parameters
+
+- **Enhanced Status Line TTS Provider Display**: Unified status line system for all TTS providers
+  - Generic TTS provider status display replacing ElevenLabs-specific implementation
+  - Shows active provider name, voice information, and connection status for all providers
+  - Language display consistency: ElevenLabs voices now show language like Google TTS
+    (`"Cahaya (ID)"`)
+  - Provider-specific information display based on available capabilities
+  - Backward compatibility maintained with existing `elevenlabs_color()` method
+
+### Changed
+
+- **TTS Text Processing Pipeline**: Enhanced text cleaning with programming-aware conversions
+  - Added camelCase conversion step after markdown cleanup, before lowercase normalization
+  - Improved None/empty input handling with explicit empty string returns
+  - Robust error handling with detailed logging for debugging conversion issues
+
+### Technical
+
+- **Status Line Architecture**: Refactored from provider-specific to generic TTS provider system
+- **Documentation Updates**: Added `--tts-providers` parameter examples and environment variable
+  documentation
+- **Package Configuration**: Added `packageManager` field specifying pnpm version requirement
+
 ## [0.12.1] - 2025-09-12
 
 ### Fixed

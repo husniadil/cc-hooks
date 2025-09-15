@@ -41,8 +41,14 @@ contextual AI-powered completion messages.
 # Start with specific ElevenLabs voice ID (per-session)
 ./claude.sh --elevenlabs-voice-id=21m00Tcm4TlvDq8ikWAM
 
+# Start with TTS providers override (per-session)
+./claude.sh --tts-providers=gtts,prerecorded
+
 # Combine language and voice overrides
 ./claude.sh --language=es --elevenlabs-voice-id=21m00Tcm4TlvDq8ikWAM
+
+# Combine multiple session overrides
+./claude.sh --language=id --tts-providers=elevenlabs,gtts --elevenlabs-voice-id=21m00Tcm4TlvDq8ikWAM
 
 # Development server with hot reload
 npm run dev
@@ -180,11 +186,13 @@ Configuration via `.env` file (see `.env.example`):
 ### Per-Session Overrides (via claude.sh)
 
 - `CC_TTS_LANGUAGE`: Override language per session (via `--language=id`)
+- `CC_TTS_PROVIDERS`: Override TTS providers chain per session (via
+  `--tts-providers=gtts,prerecorded`)
 - `CC_ELEVENLABS_VOICE_ID`: Override voice ID per session (via `--elevenlabs-voice-id=abc123`)
 
-These environment variables are automatically set by `claude.sh` when using `--language` or
-`--elevenlabs-voice-id` parameters, allowing multiple concurrent sessions with different voice
-configurations without modifying `.env` files.
+These environment variables are automatically set by `claude.sh` when using `--language`,
+`--tts-providers`, or `--elevenlabs-voice-id` parameters, allowing multiple concurrent sessions with
+different voice configurations without modifying `.env` files.
 
 ## Key Implementation Details
 

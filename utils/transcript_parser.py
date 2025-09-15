@@ -137,7 +137,7 @@ class ConversationContext:
 
     def has_context(self) -> bool:
         """Check if we have meaningful conversation context."""
-        return bool(self.last_user_prompt or self.last_claude_response)
+        return bool(self.last_claude_response)
 
 
 def extract_message_content(message_data: Dict[str, Any]) -> Optional[str]:

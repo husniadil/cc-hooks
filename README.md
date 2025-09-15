@@ -322,10 +322,10 @@ All configuration is done through the `.env` file. Key settings:
 - `ELEVENLABS_API_KEY=` - For premium TTS ([get key](https://elevenlabs.io/app/developers/api-keys))
 - `OPENROUTER_API_KEY=` - For AI features ([get key](https://openrouter.ai/keys))
 
-### Per-Session Language & Voice Overrides
+### Per-Session Configuration Overrides
 
-Override language and voice settings for individual Claude Code sessions without modifying your
-`.env` file:
+Override language, voice, and provider settings for individual Claude Code sessions without
+modifying your `.env` file:
 
 ```bash
 # Use Indonesian TTS for this session
@@ -334,18 +334,21 @@ cld --language=id
 # Use specific ElevenLabs voice for this session
 cld --elevenlabs-voice-id=21m00Tcm4TlvDq8ikWAM
 
-# Combine both for multilingual sessions with custom voice
-cld --language=es --elevenlabs-voice-id=21m00Tcm4TlvDq8ikWAM
+# Override TTS providers for this session
+cld --tts-providers=gtts,prerecorded
+
+# Combine all overrides for comprehensive session customization
+cld --language=es --elevenlabs-voice-id=21m00Tcm4TlvDq8ikWAM --tts-providers=elevenlabs,gtts
 
 # Multiple concurrent sessions with different configurations
-cld --language=id    # Session 1: Indonesian
-cld --language=es    # Session 2: Spanish (in another terminal)
+cld --language=id --tts-providers=gtts,prerecorded    # Session 1: Indonesian + Google TTS
+cld --language=es --tts-providers=elevenlabs          # Session 2: Spanish + ElevenLabs only
 ```
 
 **Configuration Precedence** (highest to lowest priority):
 
-1. Session parameters (`--language`, `--elevenlabs-voice-id`)
-2. Environment variables (`TTS_LANGUAGE`, `ELEVENLABS_VOICE_ID`)
+1. Session parameters (`--language`, `--elevenlabs-voice-id`, `--tts-providers`)
+2. Environment variables (`TTS_LANGUAGE`, `ELEVENLABS_VOICE_ID`, `TTS_PROVIDERS`)
 3. Default values
 
 This allows you to:
