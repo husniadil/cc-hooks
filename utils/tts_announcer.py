@@ -36,18 +36,85 @@ configure_root_logging()
 logger = setup_logger(__name__)
 
 
+def _convert_camel_case_words(text: str) -> str:
+    """
+    Convert camelCase words in text to readable format with spaces.
+    Falls back to original text if any error occurs.
+
+    Examples:
+        "getUserName" -> "get User Name"
+        "XMLParser" -> "XML Parser"
+        "I'm using getUserId2" -> "I'm using get User Id 2"
+        "JavaScript" -> "JavaScript" (preserved)
+
+    Args:
+        text: Text that may contain camelCase words
+
+    Returns:
+        Text with camelCase converted to readable format, or original text if error
+    """
+    if not text:
+        return text
+
+    try:
+        import re
+
+        def convert_word(word: str) -> str:
+            """Convert individual word jika memang camelCase pattern"""
+            try:
+                # Check if word contains programming identifier patterns:
+                # 1. lowercase followed by uppercase: camelCase
+                # 2. uppercase sequence followed by lowercase: XMLParser
+                # 3. mix of letters and numbers: userId2, API2Response
+                has_camel_pattern = (
+                    re.search(r"[a-z][A-Z]", word)  # camelCase
+                    or re.search(r"[A-Z]{2,}[a-z]", word)  # XMLParser, HTTPSConnection
+                    or re.search(
+                        r"[a-zA-Z][0-9]|[0-9][a-zA-Z]", word
+                    )  # userId2, API2Response
+                )
+
+                if not has_camel_pattern:
+                    return word
+
+                # Apply conversion: insert spaces at word boundaries
+                converted = re.sub(
+                    r"(?<=[a-z])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z])|(?<=[a-zA-Z])(?=[0-9])|(?<=[0-9])(?=[a-zA-Z])",
+                    " ",
+                    word,
+                )
+
+                return converted
+
+            except Exception:
+                # Fallback: return original word if conversion fails
+                return word
+
+        # Split text into words dan process each one
+        words = text.split()
+        converted_words = [convert_word(word) for word in words]
+
+        return " ".join(converted_words)
+
+    except Exception:
+        # Fallback: return original text if entire function fails
+        logger.warning("camelCase conversion failed, using original text")
+        return text
+
+
 def _clean_text_for_tts(text: str) -> str:
     """
     Clean text for TTS by removing formatting characters that would be read aloud.
+    Includes camelCase conversion, fallback protection, and lowercase normalization.
 
     Args:
         text: Original text that may contain markdown formatting
 
     Returns:
-        Cleaned text suitable for TTS
+        Cleaned text suitable for TTS, or empty string if None/empty input
     """
-    if not text:
-        return text
+    if not text or text is None:
+        return ""
 
     import re
 
@@ -80,6 +147,12 @@ def _clean_text_for_tts(text: str) -> str:
 
     # Remove remaining formatting symbols
     cleaned = re.sub(r"[#*~]", "", cleaned)
+
+    # Convert camelCase variables to readable text with spaces
+    cleaned = _convert_camel_case_words(cleaned)
+
+    # Convert to lowercase for better TTS pronunciation
+    cleaned = cleaned.lower()
 
     # Clean up multiple spaces and trim
     cleaned = re.sub(r"\s+", " ", cleaned).strip()
