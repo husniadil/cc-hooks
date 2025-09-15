@@ -405,6 +405,10 @@ class StatusLine:
             char_used = getattr(subscription, "character_count", 0)
             can_do_tts = char_used < char_limit if char_limit > 0 else True
 
+            # Get language for display
+            language = config.tts_language or os.getenv("CC_TTS_LANGUAGE", "en")
+            language_display = f" ({language.upper()})"
+
             # Fetch voice name
             try:
                 voice_id = config.elevenlabs_voice_id or os.getenv(
@@ -412,13 +416,16 @@ class StatusLine:
                 )
                 if voice_id:
                     voice = client.voices.get(voice_id)
-                    voice_name = getattr(voice, "name", "ElevenLabs")
-                    self._debug_log(f"ElevenLabs voice name: {voice_name}")
+                    base_voice_name = getattr(voice, "name", "ElevenLabs")
+                    voice_name = f"{base_voice_name}{language_display}"
+                    self._debug_log(
+                        f"ElevenLabs voice name with language: {voice_name}"
+                    )
                 else:
-                    voice_name = "ElevenLabs"
+                    voice_name = f"ElevenLabs{language_display}"
             except Exception as e:
                 self._debug_log(f"Error fetching voice name: {e}")
-                voice_name = "ElevenLabs"
+                voice_name = f"ElevenLabs{language_display}"
 
             # Format the usage info
             if char_limit > 0:
@@ -434,11 +441,21 @@ class StatusLine:
         except ImportError:
             self._debug_log("elevenlabs package not available")
             elevenlabs_info = "Not installed"
-            voice_name = "ElevenLabs"
+            language = (
+                config.tts_language or os.getenv("CC_TTS_LANGUAGE", "en")
+                if config
+                else "en"
+            )
+            voice_name = f"ElevenLabs ({language.upper()})"
         except Exception as e:
             self._debug_log(f"Error fetching ElevenLabs details: {e}")
             elevenlabs_info = f"Error: {type(e).__name__}"
-            voice_name = "ElevenLabs"
+            language = (
+                config.tts_language or os.getenv("CC_TTS_LANGUAGE", "en")
+                if config
+                else "en"
+            )
+            voice_name = f"ElevenLabs ({language.upper()})"
 
         return elevenlabs_info, voice_name
 
