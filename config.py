@@ -45,7 +45,8 @@ class Config:
             db_path=os.getenv("DB_PATH", "events.db"),
             max_retry_count=int(os.getenv("MAX_RETRY_COUNT", "3")),
             # TTS Configuration
-            tts_providers=os.getenv("TTS_PROVIDERS", "prerecorded"),
+            tts_providers=os.getenv("CC_TTS_PROVIDERS")
+            or os.getenv("TTS_PROVIDERS", "prerecorded"),
             tts_cache_enabled=parse_bool_env(
                 os.getenv("TTS_CACHE_ENABLED", "true"), True
             ),

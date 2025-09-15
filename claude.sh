@@ -117,6 +117,7 @@ fi
 # Parse cc-hooks specific arguments BEFORE starting server
 CC_TTS_LANGUAGE=""
 CC_ELEVENLABS_VOICE_ID=""
+CC_TTS_PROVIDERS=""
 CLAUDE_ARGS=()
 
 for arg in "$@"; do
@@ -126,6 +127,9 @@ for arg in "$@"; do
             ;;
         --elevenlabs-voice-id=*)
             CC_ELEVENLABS_VOICE_ID="${arg#*=}"
+            ;;
+        --tts-providers=*)
+            CC_TTS_PROVIDERS="${arg#*=}"
             ;;
         *)
             CLAUDE_ARGS+=("$arg")
@@ -149,6 +153,10 @@ if [ -n "$CC_ELEVENLABS_VOICE_ID" ]; then
     echo "Using ElevenLabs voice ID override: $CC_ELEVENLABS_VOICE_ID"
 fi
 
+if [ -n "$CC_TTS_PROVIDERS" ]; then
+    echo "Using TTS providers override: $CC_TTS_PROVIDERS"
+fi
+
 # Each instance gets its own server, so always start one
 echo "Starting dedicated cc-hooks server on port $SERVER_PORT..."
 
@@ -159,6 +167,9 @@ if [ -n "$CC_TTS_LANGUAGE" ]; then
 fi
 if [ -n "$CC_ELEVENLABS_VOICE_ID" ]; then
     SERVER_ENV="$SERVER_ENV CC_ELEVENLABS_VOICE_ID=$CC_ELEVENLABS_VOICE_ID"
+fi
+if [ -n "$CC_TTS_PROVIDERS" ]; then
+    SERVER_ENV="$SERVER_ENV CC_TTS_PROVIDERS=$CC_TTS_PROVIDERS"
 fi
 
 # Start server in background with custom port and instance ID, capture errors
@@ -267,6 +278,10 @@ fi
 
 if [ -n "$CC_ELEVENLABS_VOICE_ID" ]; then
     export CC_ELEVENLABS_VOICE_ID
+fi
+
+if [ -n "$CC_TTS_PROVIDERS" ]; then
+    export CC_TTS_PROVIDERS
 fi
 
 # If original directory was passed, change to it before starting Claude
