@@ -7,6 +7,16 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.14.1] - 2025-09-17
+
+### Fixed
+
+- **OpenRouter Response Lag**: Improved prompt structure to reduce AI processing time and response lag
+  - Moved language instruction to beginning of prompt for better model attention and faster processing
+  - Language directive now appears at start of context rather than end, reducing parsing overhead
+  - Optimization applies to both contextual completion messages and PreToolUse message generation
+  - Should result in more responsive contextual AI features with reduced latency
+
 ## [0.14.0] - 2025-09-15
 
 ### Added

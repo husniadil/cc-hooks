@@ -388,6 +388,11 @@ class OpenRouterService:
         """Create a prompt for generating contextual completion messages."""
         context_lines = []
 
+        context_lines.append(
+            f"Generate the your response in language code '{target_language}' (ISO 639-1/639-2 format)."
+        )
+        context_lines.append("")
+
         # Add conversation context
         context_lines.append("Conversation context:")
         if user_prompt:
@@ -398,11 +403,6 @@ class OpenRouterService:
 
         if not user_prompt and not claude_response:
             context_lines.append("No specific context available.")
-
-        context_lines.append(
-            f"Generate the your response in language code '{target_language}' (ISO 639-1/639-2 format)."
-        )
-        context_lines.append("")
 
         return "\n".join(context_lines)
 
@@ -415,6 +415,11 @@ class OpenRouterService:
     ) -> str:
         """Create a prompt for generating contextual PreToolUse messages."""
         context_lines = []
+
+        context_lines.append(
+            f"Generate your response in language code '{target_language}' (ISO 639-1/639-2 format)."
+        )
+        context_lines.append("")
 
         # Add tool context
         context_lines.append(f"Tool to be used: {tool_name}")
@@ -430,11 +435,6 @@ class OpenRouterService:
 
         if not user_prompt and not claude_response:
             context_lines.append("No specific context available.")
-
-        context_lines.append(
-            f"Generate your response in language code '{target_language}' (ISO 639-1/639-2 format)."
-        )
-        context_lines.append("")
 
         return "\n".join(context_lines)
 
