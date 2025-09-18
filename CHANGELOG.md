@@ -7,12 +7,28 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.14.2] - 2025-09-18
+
+### Added
+
+- **Database Cleanup System**: Streamlined SQLite database maintenance tools
+  - New `db_cleanup.sh` script focused on essential operations: truncate and statistics
+  - Single-purpose design: complete database reset (truncate) or statistics display only
+  - Strong safety features: requires typing "TRUNCATE" for confirmation, dry-run mode support
+  - Color-coded terminal output with detailed database statistics and file size reporting
+  - Simplified NPM script integration: `npm run db:cleanup` (truncate), `npm run db:stats`
+    (statistics)
+  - Cross-platform sqlite3 installation guidance with automatic availability detection
+  - Database optimization with VACUUM operation after truncate for optimal performance
+
 ## [0.14.1] - 2025-09-17
 
 ### Fixed
 
-- **OpenRouter Response Lag**: Improved prompt structure to reduce AI processing time and response lag
-  - Moved language instruction to beginning of prompt for better model attention and faster processing
+- **OpenRouter Response Lag**: Improved prompt structure to reduce AI processing time and response
+  lag
+  - Moved language instruction to beginning of prompt for better model attention and faster
+    processing
   - Language directive now appears at start of context rather than end, reducing parsing overhead
   - Optimization applies to both contextual completion messages and PreToolUse message generation
   - Should result in more responsive contextual AI features with reduced latency
