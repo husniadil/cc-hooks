@@ -2,9 +2,9 @@
 # /// script
 # requires-python = ">=3.12"
 # dependencies = [
-#     "requests",
-#     "elevenlabs",
-#     "openai",
+#     "requests>=2.32.5,<3",
+#     "elevenlabs>=2.16.0,<3",
+#     "openai>=2.1.0,<3",
 # ]
 # ///
 """
@@ -110,6 +110,9 @@ class StatusLine:
 
     def elevenlabs_color(self):
         return self.tts_color()  # backward compatibility
+
+    def openrouter_color(self):
+        return self._color("1;36")  # cyan
 
     def session_color(self, session_pct):
         """Dynamic session color based on remaining percentage"""
@@ -238,7 +241,7 @@ class StatusLine:
 
             response = requests.get(get_server_url(port, "/health"), timeout=2)
             if response.status_code == 200:
-                return True, "✅", "online", port
+                return True, "🟢", "online", port
             else:
                 return False, "❌", "error", port
         except ImportError:
@@ -466,6 +469,79 @@ class StatusLine:
 
         return elevenlabs_info, voice_name
 
+    def _get_openrouter_info(self):
+        """Get OpenRouter status and model information"""
+        openrouter_info = ""
+        openrouter_enabled = False
+        openrouter_model = ""
+
+        try:
+            if config is None:
+                self._debug_log("config module not available")
+                return openrouter_info, openrouter_enabled, openrouter_model
+
+            # Check if OpenRouter is enabled
+            openrouter_enabled = config.openrouter_enabled
+            self._debug_log(f"OpenRouter enabled: {openrouter_enabled}")
+
+            if not openrouter_enabled:
+                return openrouter_info, openrouter_enabled, openrouter_model
+
+            # Get API key to verify configuration
+            api_key = config.openrouter_api_key
+            if not api_key:
+                openrouter_info = "No API key"
+                return openrouter_info, openrouter_enabled, openrouter_model
+
+            # Get model name
+            openrouter_model = config.openrouter_model or "openai/gpt-4o-mini"
+            model_display = openrouter_model.split("/")[-1]  # Get just the model name
+
+            # Build feature flags display
+            features = []
+            if config.openrouter_contextual_stop:
+                features.append("Stop")
+            if config.openrouter_contextual_pretooluse:
+                features.append("PreTool")
+
+            if features:
+                openrouter_info = f"{model_display} ({', '.join(features)})"
+            else:
+                openrouter_info = f"{model_display}"
+
+            # Try to verify connection with a simple API check
+            status_emoji = ""
+            try:
+                import requests
+
+                response = requests.get(
+                    "https://openrouter.ai/api/v1/models",
+                    headers={"Authorization": f"Bearer {api_key}"},
+                    timeout=2,
+                )
+                if response.status_code == 200:
+                    status_emoji = "🟢"  # online
+                else:
+                    status_emoji = "❌"  # error
+            except ImportError:
+                self._debug_log("requests package not available for OpenRouter check")
+                status_emoji = "❓"  # no-requests
+            except requests.exceptions.RequestException:
+                status_emoji = "🔴"  # offline
+            except Exception as e:
+                self._debug_log(f"Unexpected error in OpenRouter check: {e}")
+                status_emoji = "⚠️"  # unknown
+
+            # Format: emoji model (features)
+            if status_emoji:
+                openrouter_info = f"{status_emoji} {openrouter_info}"
+
+        except Exception as e:
+            self._debug_log(f"Error getting OpenRouter info: {e}")
+            return openrouter_info, openrouter_enabled, openrouter_model
+
+        return openrouter_info, openrouter_enabled, openrouter_model
+
     def render(self, input_data=None):
         """Render the complete status line"""
         self._debug_log("render() method called")
@@ -525,15 +601,22 @@ class StatusLine:
         # TTS information
         tts_info, tts_enabled, voice_name = self._get_tts_info()
 
-        # Start building the status line
-        parts = []
+        # OpenRouter information
+        openrouter_info, openrouter_enabled, openrouter_model = (
+            self._get_openrouter_info()
+        )
+
+        # Build line 1: Main context + cc-hooks features
+        line1_parts = []
 
         # Project context (if different from current dir)
         if project_name:
-            parts.append(f"📦 {self.project_color()}{project_name}{self._reset()}")
+            line1_parts.append(
+                f"📦 {self.project_color()}{project_name}{self._reset()}"
+            )
 
         # Current directory
-        parts.append(f"📁 {self.dir_color()}{current_dir}{self._reset()}")
+        line1_parts.append(f"📁 {self.dir_color()}{current_dir}{self._reset()}")
 
         # Git information
         if git_branch:
@@ -541,21 +624,23 @@ class StatusLine:
             if git_status:
                 git_part += f" {git_status}"
             git_part += self._reset()
-            parts.append(git_part)
+            line1_parts.append(git_part)
 
         # Model information
-        parts.append(f"🤖 {self.model_color()}{model_name}{self._reset()}")
+        line1_parts.append(f"💥 {self.model_color()}{model_name}{self._reset()}")
 
         # Output style
         if output_style and output_style != "null":
-            parts.append(f"🎨 {self.style_color()}{output_style}{self._reset()}")
+            line1_parts.append(f"🎨 {self.style_color()}{output_style}{self._reset()}")
 
         # Model version
         if model_version and model_version != "null":
-            parts.append(f"🏷️ {self.version_color()}{model_version}{self._reset()}")
+            line1_parts.append(
+                f"🏷️ {self.version_color()}{model_version}{self._reset()}"
+            )
 
         # CC-Hooks health status
-        parts.append(f"🔗 {cc_hooks_emoji} cc-hooks:{cc_hooks_port}")
+        line1_parts.append(f"🎧 {cc_hooks_emoji} cc-hooks:{cc_hooks_port}")
 
         # TTS information
         if tts_enabled and tts_info:
@@ -566,13 +651,22 @@ class StatusLine:
                 and not tts_info.startswith(voice_name)
             ):
                 tts_display = f"{voice_name}: {tts_info}"
-            parts.append(f"🔊 {self.tts_color()}{tts_display}{self._reset()}")
+            line1_parts.append(f"🔊 {self.tts_color()}{tts_display}{self._reset()}")
+
+        # OpenRouter information
+        if openrouter_enabled and openrouter_info:
+            line1_parts.append(
+                f"🔀 {self.openrouter_color()}{openrouter_info}{self._reset()}"
+            )
+
+        # Build line 2: Usage & Cost (ccusage dedicated)
+        line2_parts = []
 
         # Session information
         if session_txt:
             session_col = self.session_color(session_pct)
-            parts.append(f"⌛ {session_col}{session_txt}{self._reset()}")
-            parts.append(f"{session_col}[{session_bar}]{self._reset()}")
+            line2_parts.append(f"⌛ {session_col}{session_txt}{self._reset()}")
+            line2_parts.append(f"{session_col}[{session_bar}]{self._reset()}")
 
         # Cost information
         if cost_usd and re.match(r"^[\d.]+$", str(cost_usd)):
@@ -580,10 +674,12 @@ class StatusLine:
             if cost_per_hour and re.match(r"^[\d.]+$", str(cost_per_hour)):
                 cost_part += f" (${float(cost_per_hour):.2f}/h)"
             cost_part += self._reset()
-            parts.append(cost_part)
+            line2_parts.append(cost_part)
 
-        # Print the final status line
-        print("  ".join(parts))
+        # Print the final status line (2 lines)
+        print("  ".join(line1_parts))
+        if line2_parts:  # Only print line 2 if there's usage info
+            print("  ".join(line2_parts))
 
 
 def main():

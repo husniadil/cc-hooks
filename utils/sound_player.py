@@ -2,7 +2,7 @@
 # /// script
 # requires-python = ">=3.12"
 # dependencies = [
-#     "pygame",
+#     "pygame>=2.6.1,<3",
 # ]
 # ///
 """

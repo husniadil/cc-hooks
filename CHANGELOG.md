@@ -7,6 +7,48 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.15.0] - 2025-10-05
+
+### Added
+
+- **Enhanced Status Line Display**: Two-line layout with improved information architecture
+  - Line 1: Main context and features (project, directory, git, model, cc-hooks, TTS, OpenRouter)
+  - Line 2: Dedicated usage and cost information (session stats, cost tracking)
+  - Better visual separation between contextual info and resource usage metrics
+  - Improved readability for complex configurations with multiple active features
+
+- **OpenRouter Status Integration**: Real-time OpenRouter service monitoring in status line
+  - New OpenRouter status indicator with emoji and model display (🔀)
+  - Shows active model name and enabled contextual features (Stop, PreTool)
+  - Connection status checking with color-coded indicators (🟢 online, 🔴 offline, ❌ error)
+  - Automatic feature flag display for enabled contextual services
+  - Format: `🔀 🟢 gpt-4o-mini (Stop, PreTool)` or `🔀 🟢 gpt-4o-mini` when no features enabled
+
+### Changed
+
+- **Status Line Architecture**: Restructured layout for better scalability
+  - Split single-line display into two dedicated lines for better organization
+  - Line 1 focuses on execution context: project, directory, git branch, model, hooks status
+  - Line 2 reserved for ccusage metrics: session progress, cost tracking, hourly burn rate
+  - Improved emoji consistency (💥 for model, 🎧 for cc-hooks, 🟢 for online status)
+  - Better color coding with new OpenRouter cyan color (`openrouter_color()`)
+
+- **Dependency Version Strictness**: Updated all PEP 723 script dependencies with version ranges
+  - All Python dependencies now use strict version ranges (e.g., `>=2.32.5,<3`)
+  - Affects: `hooks.py`, `server.py`, `status-lines/status_line.py`, `utils/sound_player.py`, `utils/tts_announcer.py`
+  - Better dependency management and conflict resolution with explicit version boundaries
+  - Prevents unintended breaking changes from major version updates
+
+- **ccusage Dependency Update**: Bumped to latest version
+  - Updated from `ccusage@16.2.4` to `ccusage@16.2.5`
+  - Updated in both `package.json` and `package-lock.json`
+
+- **Development Tools Update**: Updated uv package manager to latest version
+  - Updated from `uv@0.5.29` to `uv@0.8.23` in `.tool-versions`
+  - Major version bump with improved performance and stability
+  - Updated README prerequisites with explicit uv installation instructions
+  - Added Node.js prerequisite mention for ccusage dependency
+
 ## [0.14.2] - 2025-09-18
 
 ### Added

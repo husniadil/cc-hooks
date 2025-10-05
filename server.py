@@ -2,16 +2,16 @@
 # /// script
 # requires-python = ">=3.12"
 # dependencies = [
-#     "uvicorn",
-#     "fastapi",
-#     "aiosqlite",
-#     "pydantic",
-#     "python-dotenv",
-#     "gtts",
-#     "elevenlabs",
-#     "pygame",
-#     "openai",
-#     "requests",
+#     "uvicorn>=0.37.0,<0.38",
+#     "fastapi>=0.118.0,<0.119",
+#     "aiosqlite>=0.21.0,<0.22",
+#     "pydantic>=2.11.10,<3",
+#     "python-dotenv>=1.1.1,<2",
+#     "gtts>=2.5.4,<3",
+#     "elevenlabs>=2.16.0,<3",
+#     "pygame>=2.6.1,<3",
+#     "openai>=2.1.0,<3",
+#     "requests>=2.32.5,<3",
 # ]
 # ///
 

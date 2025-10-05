@@ -33,8 +33,11 @@ Get up and running in 2 minutes with full audio feedback:
 ### Prerequisites
 
 - Python 3.12+
-- [uv](https://docs.astral.sh/uv/) package manager
+- [uv](https://docs.astral.sh/uv/) package manager (install via `curl -LsSf https://astral.sh/uv/install.sh | sh`)
+- Node.js ≥20.19.4 (for ccusage dependency)
 - [Claude Code](https://claude.ai/code) CLI tool
+
+> **Optional**: Use [mise](https://mise.jdx.dev/) to automatically install Python, uv, and Node.js from `.tool-versions`
 
 ### Installation
 

@@ -2,12 +2,12 @@
 # /// script
 # requires-python = ">=3.12"
 # dependencies = [
-#   "gtts",
-#   "elevenlabs",
-#   "openai",
-#   "pygame",
-#   "requests",
-#   "python-dotenv",
+#   "gtts>=2.5.4,<3",
+#   "elevenlabs>=2.16.0,<3",
+#   "openai>=2.1.0,<3",
+#   "pygame>=2.6.1,<3",
+#   "requests>=2.32.5,<3",
+#   "python-dotenv>=1.1.1,<2",
 # ]
 # ///
 """
