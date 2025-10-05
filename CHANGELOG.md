@@ -7,6 +7,92 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.16.0] - 2025-10-06
+
+### Added
+
+- **Automated Update System**: Comprehensive version management and update workflow
+  - New `update.sh` script with smart uncommitted changes handling (auto-stash/restore)
+  - Git-based version checking via `utils/version_checker.py` with 1-hour cache duration
+  - Background version checks on server startup with SQLite persistence
+  - Results cached in new `version_checks` table (migration v6)
+  - Simple update workflow: `npm run update` or `./update.sh`
+  - Version check command: `npm run version:check` for CLI-based status checking
+  - Auto-fetch from origin/main with commits-behind tracking
+  - Automatic dependency sync with `uv sync` after pull
+  - Smart network connectivity checking before update attempts
+
+- **Update Status API**: Real-time update information via REST endpoints
+  - `/version/status` endpoint exposing version information and update availability
+  - Force refresh support via `?force=true` query parameter to skip cache
+  - Returns current version, latest version, commits behind, and update availability status
+  - Integration with version checker's caching system for minimal network overhead
+
+- **Status Line Update Notifications**: Visual update alerts in three-line status display
+  - Third line notification shows when updates are available
+  - Yellow-colored warning message with commits-behind count
+  - Displays full update command: `cd <repo_root> && npm run update`
+  - Update checks performed on status line render with cached results
+  - Non-intrusive notification only appears when updates actually available
+
+### Enhanced
+
+- **Database Schema**: New migration for version tracking persistence
+  - Migration v6 creates `version_checks` table with comprehensive fields
+  - Stores current_version, latest_version, commits_behind, update_available, last_checked, error
+  - Single-row table design (id=1) for current version status
+  - Automatic cleanup and replacement on each check for fresh data
+
+- **Version Checker Architecture**: Robust git-based version management
+  - `VersionCheckResult` class for structured version information
+  - In-memory caching with configurable expiration (1 hour default)
+  - Database persistence for cross-session cache sharing
+  - Git fetch with 10-second timeout to prevent hanging
+  - Graceful error handling with detailed error messages
+  - CLI interface for manual testing: `uv run utils/version_checker.py [--force]`
+
+- **Update Script Features**: Production-ready update workflow
+  - Detects uncommitted changes and offers interactive stash
+  - Validates network connectivity before attempting fetch
+  - Shows git status and confirms before stashing changes
+  - Automatic stash restore after successful update
+  - Comprehensive error handling with rollback on failure
+  - Color-coded terminal output for better readability
+  - Displays current version after successful update
+
+### Changed
+
+- **Documentation Updates**: Comprehensive version management documentation
+  - CLAUDE.md enhanced with "Version Management" section and update workflow guide
+  - Added API endpoint examples for `/version/status` with force refresh
+  - Updated development commands section with `npm run update` and `npm run version:check`
+  - README.md updated with prerequisites section including mise installation hint
+  - Enhanced testing section with version check API examples
+
+- **Development Workflow**: Streamlined update and version checking
+  - New NPM scripts for simplified update management
+  - `npm run update` provides one-command update workflow
+  - `npm run version:check` enables quick CLI-based version status
+  - Better integration with existing development tools and scripts
+
+- **Gitignore Enhancement**: IDE-specific directories excluded
+  - Added `.vscode/` and `.idea/` to .gitignore
+  - Prevents IDE configuration pollution in version control
+
+### Technical
+
+- **API Integration**: Version checker integrated into FastAPI lifecycle
+  - Server creates `VersionChecker` instance with configured database path
+  - Async git operations with proper timeout handling
+  - Background version checks don't block server startup
+  - Graceful degradation when git commands fail
+
+- **Status Line Architecture**: Extended to support three-line layout
+  - Line 1: Main context (project, directory, git, model, cc-hooks, TTS, OpenRouter)
+  - Line 2: Usage metrics (session stats, cost tracking)
+  - Line 3: Update notifications (conditional, only when updates available)
+  - Yellow color coding for update warnings using `\033[1;33m` ANSI codes
+
 ## [0.15.0] - 2025-10-05
 
 ### Added
@@ -35,7 +121,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - **Dependency Version Strictness**: Updated all PEP 723 script dependencies with version ranges
   - All Python dependencies now use strict version ranges (e.g., `>=2.32.5,<3`)
-  - Affects: `hooks.py`, `server.py`, `status-lines/status_line.py`, `utils/sound_player.py`, `utils/tts_announcer.py`
+  - Affects: `hooks.py`, `server.py`, `status-lines/status_line.py`, `utils/sound_player.py`,
+    `utils/tts_announcer.py`
   - Better dependency management and conflict resolution with explicit version boundaries
   - Prevents unintended breaking changes from major version updates
 

@@ -15,6 +15,8 @@ from app.migrations import get_migration_status
 from utils.hooks_constants import is_valid_hook_event
 from utils.colored_logger import setup_logger, configure_root_logging
 from utils.constants import HTTPStatusConstants
+from utils.version_checker import VersionChecker
+from config import config
 
 configure_root_logging()
 logger = setup_logger(__name__)
@@ -31,6 +33,9 @@ class Event(BaseModel):
 def create_app(lifespan=None) -> FastAPI:
     """Create FastAPI application with configured endpoints."""
     app = FastAPI(lifespan=lifespan)
+
+    # Initialize version checker instance
+    version_checker = VersionChecker(db_path=config.db_path)
 
     @app.get("/health")
     def health():
@@ -137,6 +142,34 @@ def create_app(lifespan=None) -> FastAPI:
             raise HTTPException(
                 status_code=HTTPStatusConstants.INTERNAL_SERVER_ERROR,
                 detail="Failed to get last event status for instance",
+            )
+
+    @app.get("/version/status")
+    async def get_version_status(force: bool = False):
+        """Get version status and check for updates.
+
+        Query Parameters:
+            force: Skip cache and force fresh check (default: false)
+
+        Returns version information including current version, latest version,
+        commits behind, and update availability status.
+        """
+        try:
+            result = await version_checker.check_for_updates(force=force)
+
+            if not result:
+                raise HTTPException(
+                    status_code=HTTPStatusConstants.INTERNAL_SERVER_ERROR,
+                    detail="Version check failed",
+                )
+
+            return result.to_dict()
+
+        except Exception as e:
+            logger.error(f"Error checking version status: {e}")
+            raise HTTPException(
+                status_code=HTTPStatusConstants.INTERNAL_SERVER_ERROR,
+                detail="Failed to check version status",
             )
 
     @app.post("/shutdown")

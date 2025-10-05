@@ -253,6 +253,36 @@ class StatusLine:
             self._debug_log(f"Unexpected error in health check: {e}")
             return False, "⚠️", "unknown", port
 
+    def _get_cc_hooks_update_status(self):
+        """Check if cc-hooks update is available"""
+        update_available = False
+        update_msg = ""
+
+        # Get port from environment variable or use default
+        port = int(os.getenv("CC_HOOKS_PORT", str(NetworkConstants.DEFAULT_PORT)))
+
+        try:
+            import requests
+
+            response = requests.get(get_server_url(port, "/version/status"), timeout=2)
+            if response.status_code == 200:
+                version_data = response.json()
+                update_available = version_data.get("update_available", False)
+                if update_available:
+                    commits_behind = version_data.get("commits_behind", 0)
+                    commits_msg = f"{commits_behind} commit" + (
+                        "s" if commits_behind > 1 else ""
+                    )
+                    # Get repo root path
+                    repo_root = Path(__file__).parent.parent.resolve()
+                    update_msg = f"⚠ cc-hooks: update available ({commits_msg} behind) - run: cd {repo_root} && npm run update"
+        except ImportError:
+            self._debug_log("requests package not available for update check")
+        except Exception as e:
+            self._debug_log(f"Error checking for cc-hooks updates: {e}")
+
+        return update_available, update_msg
+
     def _get_ccusage_info(self):
         """Get usage information from ccusage command"""
         self._debug_log("_get_ccusage_info() called")
@@ -593,6 +623,9 @@ class StatusLine:
         # CC-Hooks health check
         _, cc_hooks_emoji, _, cc_hooks_port = self._get_cc_hooks_health()
 
+        # CC-Hooks update check
+        update_available, update_msg = self._get_cc_hooks_update_status()
+
         # Usage information
         session_txt, session_pct, session_bar, cost_usd, cost_per_hour = (
             self._get_ccusage_info()
@@ -676,10 +709,16 @@ class StatusLine:
             cost_part += self._reset()
             line2_parts.append(cost_part)
 
-        # Print the final status line (2 lines)
+        # Print the final status line (2-3 lines)
         print("  ".join(line1_parts))
         if line2_parts:  # Only print line 2 if there's usage info
             print("  ".join(line2_parts))
+        if update_available and update_msg:  # Print update notification on line 3
+            # Add yellow color to warning message
+            yellow = self._color("1;33")
+            reset = self._reset()
+            colored_msg = f"{yellow}{update_msg}{reset}"
+            print(colored_msg)
 
 
 def main():

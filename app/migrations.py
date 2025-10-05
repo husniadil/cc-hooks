@@ -48,6 +48,21 @@ MIGRATIONS = [
         "description": "Add session_id index for debugging support",
         "sql": "CREATE INDEX IF NOT EXISTS idx_events_session ON events (session_id)",
     },
+    {
+        "version": 6,
+        "description": "Create version_checks table for update tracking",
+        "sql": """
+            CREATE TABLE IF NOT EXISTS version_checks (
+                id INTEGER PRIMARY KEY,
+                current_version TEXT NOT NULL,
+                latest_version TEXT NOT NULL,
+                commits_behind INTEGER NOT NULL,
+                update_available INTEGER NOT NULL,
+                last_checked TEXT NOT NULL,
+                error TEXT NULL
+            )
+        """,
+    },
 ]
 
 

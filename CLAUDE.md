@@ -59,6 +59,12 @@ uv run server.py
 
 # Format code
 npm run format
+
+# Update cc-hooks to latest version
+npm run update
+
+# Check for available updates
+npm run version:check
 ```
 
 ### Testing
@@ -138,6 +144,12 @@ curl -X POST http://localhost:12223/events \
 
 # Check event queue
 curl http://localhost:12222/events/status?instance_id=test-instance-123
+
+# Check for updates
+curl http://localhost:12222/version/status
+
+# Force fresh version check (skip cache)
+curl http://localhost:12222/version/status?force=true
 ```
 
 ### Database Management
@@ -221,6 +233,47 @@ hooks.py → api.py → event_db.py → event_processor.py → [sound_player.py,
 - OpenRouter generates dynamic messages based on user prompts and Claude responses
 - No-cache strategy ensures freshness for contextual content
 - Cost control via disabled-by-default flags
+
+### Version Management
+
+- Git-based version checking via `utils/version_checker.py`
+- Background checks on server startup with 1-hour cache
+- Results persisted in SQLite `version_checks` table
+- API endpoint `/version/status` exposes update information
+- Simple update via `npm run update` or `./update.sh`
+- Auto-stash/restore uncommitted changes during update
+
+## Updating cc-hooks
+
+To update to the latest version:
+
+```bash
+# Simple update command
+npm run update
+# or
+./update.sh
+```
+
+The update script will:
+
+1. Check for uncommitted changes and offer to stash them
+2. Fetch latest from origin
+3. Pull changes from main branch
+4. Update dependencies with `uv sync`
+5. Restore stashed changes if any
+6. Show current version after update
+
+Check for available updates:
+
+```bash
+# CLI check
+npm run version:check
+
+# API check (if server is running)
+curl http://localhost:12222/version/status
+```
+
+**Important**: Restart your Claude Code session after updating to use the new version.
 
 ## Adding Features
 

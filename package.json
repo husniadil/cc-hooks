@@ -1,6 +1,6 @@
 {
   "name": "cc-hooks",
-  "version": "0.15.0",
+  "version": "0.16.0",
   "description": "Advanced Claude Code hooks processing system with contextual TTS announcements, AI-powered completion messages, multilingual translation, and event-driven automation",
   "private": true,
   "license": "MIT",
@@ -26,7 +26,9 @@
     "format:prettier": "prettier --write .",
     "format:py": "uvx black . --line-length 88",
     "db:cleanup": "./db_cleanup.sh",
-    "db:stats": "./db_cleanup.sh --stats-only"
+    "db:stats": "./db_cleanup.sh --stats-only",
+    "update": "./update.sh",
+    "version:check": "uv run utils/version_checker.py"
   },
   "dependencies": {
     "ccusage": "^16.2.5"
