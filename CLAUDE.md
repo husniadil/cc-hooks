@@ -259,7 +259,7 @@ The update script will:
 1. Check for uncommitted changes and offer to stash them
 2. Fetch latest from origin
 3. Pull changes from main branch
-4. Update dependencies with `uv sync`
+4. Verify `uv` installation (dependencies auto-managed via PEP 723)
 5. Restore stashed changes if any
 6. Show current version after update
 

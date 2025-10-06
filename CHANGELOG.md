@@ -7,6 +7,17 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.16.5] - 2025-10-06
+
+### Fixed
+
+- **Update Script**: Removed incorrect `uv sync` dependency update step
+  - Removed `uv sync` call that was incompatible with PEP 723 architecture
+  - Project uses inline script dependencies (PEP 723), not `pyproject.toml`
+  - Changed to verify `uv` installation instead (dependencies auto-managed via PEP 723)
+  - Updated documentation to reflect correct dependency management approach
+  - Eliminates "No pyproject.toml found" error during updates
+
 ## [0.16.4] - 2025-10-06
 
 ### Changed

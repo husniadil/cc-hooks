@@ -120,17 +120,12 @@ if ! git pull origin main; then
 fi
 print_success "Pull completed"
 
-# Update dependencies with uv
-print_info "Updating dependencies..."
+# Check uv installation (dependencies auto-managed via PEP 723)
+print_info "Checking uv installation..."
 if command -v uv &> /dev/null; then
-    if ! uv sync; then
-        print_warning "Failed to update dependencies with uv"
-        print_warning "You may need to run 'uv sync' manually"
-    else
-        print_success "Dependencies updated"
-    fi
+    print_success "uv found (dependencies auto-managed via PEP 723)"
 else
-    print_warning "uv not found, skipping dependency update"
+    print_warning "uv not found - required for running scripts"
     print_warning "Install uv with: curl -LsSf https://astral.sh/uv/install.sh | sh"
 fi
 
