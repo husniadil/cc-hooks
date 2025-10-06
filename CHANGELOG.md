@@ -7,6 +7,62 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.16.4] - 2025-10-06
+
+### Changed
+
+- **Development Tools Rollback**: Reverted uv package manager to stable version
+  - Rolled back from `uv@0.8.23` to `uv@0.5.29` in `.tool-versions`
+  - Restored to previously stable version for better compatibility
+  - Ensures consistent development environment across all contributors
+
+## [0.16.3] - 2025-10-06
+
+### Enhanced
+
+- **Setup Validation System**: Improved `uv` package manager global accessibility validation
+  - Added explicit test to verify `uv` works from any directory (runs test from `/tmp`)
+  - Validates `uv` is installed in standard global locations (`~/.local/bin/`, `/bin/`,
+    `~/.cargo/bin/`)
+  - Detects and warns if `uv` is project-local instead of globally installed
+  - Enhanced error messages with post-installation instructions (restart shell or source config)
+  - Clearer success messages: "uv is globally accessible from any directory"
+
+- **Documentation Improvements**: Enhanced README.md with `uv` installation clarity
+  - Added post-installation step: restart shell or `source ~/.bashrc` (or `~/.zshrc`)
+  - Added verification command: `uv --version` with note "should work from any directory"
+  - Clarified that `uv` must be globally accessible, not project-local
+
+### Technical
+
+- **Global Accessibility Testing**: Multi-layered validation approach
+  - `command -v uv` check for PATH availability
+  - Directory-independent execution test (subshell cd to `/tmp`)
+  - Installation path validation against known global locations
+  - Project-local installation detection and warning system
+
+## [0.16.2] - 2025-10-06
+
+### Enhanced
+
+- **WSL Shutdown Performance**: Optimized graceful shutdown timeouts for WSL environments
+  - Automatic WSL environment detection via `/proc/version` checking
+  - Reduced curl timeout from 2s to 1s for faster localhost API calls in WSL
+  - Reduced max event wait timeout from 10s to 5s for faster shutdown (50% improvement)
+  - Reduced server shutdown wait from 3s to 2s for more responsive cleanup
+  - Max total shutdown time reduced from 15s to 8s in WSL environments
+  - Native Linux/macOS environments maintain original timeout values for stability
+  - Visual feedback: displays "WSL environment detected - using optimized timeouts" on startup
+
+### Technical
+
+- **Conditional Timeout Configuration**: Platform-aware timeout management system
+  - `IS_WSL` flag for environment-specific optimizations
+  - `CURL_TIMEOUT`, `MAX_EVENT_WAIT`, `SERVER_SHUTDOWN_WAIT` variables for dynamic timeout
+    configuration
+  - All timeout-dependent functions updated to use configurable timeout variables
+  - Graceful degradation maintains safety while improving WSL user experience
+
 ## [0.16.1] - 2025-10-06
 
 ### Fixed

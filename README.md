@@ -35,6 +35,8 @@ Get up and running in 2 minutes with full audio feedback:
 - Python 3.12+
 - [uv](https://docs.astral.sh/uv/) package manager (install via
   `curl -LsSf https://astral.sh/uv/install.sh | sh`)
+  - After installation, restart your shell or run `source ~/.bashrc` (or `~/.zshrc`)
+  - Verify with: `uv --version` (should work from any directory)
 - Node.js ≥20.19.4 (for ccusage dependency)
 - [Claude Code](https://claude.ai/code) CLI tool
 

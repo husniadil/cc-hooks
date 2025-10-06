@@ -4,12 +4,29 @@
 # Get the directory where this script is located (absolute path)
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+# Detect WSL environment for optimized timeouts
+IS_WSL=false
+if grep -qi microsoft /proc/version 2>/dev/null || grep -qi wsl /proc/version 2>/dev/null; then
+    IS_WSL=true
+fi
+
 # Configuration
 SERVER_SCRIPT="$SCRIPT_DIR/server.py"
 REPL_COMMAND="claude"
 INSTANCES_DIR="$SCRIPT_DIR/.claude-instances"
 INSTANCE_PID=$$
 INSTANCE_UUID=$(uuidgen | tr '[:upper:]' '[:lower:]')
+
+# Timeout configurations (optimized for WSL)
+if [ "$IS_WSL" = true ]; then
+    CURL_TIMEOUT=1           # Shorter timeout for WSL networking overhead
+    MAX_EVENT_WAIT=5         # Reduced from 10s to 5s for faster shutdown
+    SERVER_SHUTDOWN_WAIT=2   # Reduced from 3s to 2s
+else
+    CURL_TIMEOUT=2
+    MAX_EVENT_WAIT=10
+    SERVER_SHUTDOWN_WAIT=3
+fi
 
 # Function to find available port starting from base port
 find_available_port() {
@@ -50,13 +67,13 @@ SERVER_PORT=$(find_available_port)
 
 # Function to check if server is responding
 check_server_health() {
-    curl -s --connect-timeout 2 http://localhost:$SERVER_PORT/health >/dev/null 2>&1
+    curl -s --connect-timeout $CURL_TIMEOUT http://localhost:$SERVER_PORT/health >/dev/null 2>&1
 }
 
 # Function to check if last event is still pending for this instance
 check_last_event_pending() {
     local response
-    response=$(curl -s --connect-timeout 2 http://localhost:$SERVER_PORT/instances/$INSTANCE_UUID/last-event 2>/dev/null)
+    response=$(curl -s --connect-timeout $CURL_TIMEOUT http://localhost:$SERVER_PORT/instances/$INSTANCE_UUID/last-event 2>/dev/null)
     if [ $? -eq 0 ]; then
         # Extract has_pending boolean from JSON response - improved pattern
         echo "$response" | grep -o '"has_pending":\(true\|false\)' | grep -o '\(true\|false\)'
@@ -143,9 +160,14 @@ done
 # Register this instance BEFORE starting server
 register_instance
 
-# Show current active instances after registration  
+# Show current active instances after registration
 active_count=$(count_active_instances)
 echo "Active Claude Code instances: $active_count"
+
+# Show WSL detection and optimizations
+if [ "$IS_WSL" = true ]; then
+    echo "WSL environment detected - using optimized timeouts (curl: ${CURL_TIMEOUT}s, shutdown: ${MAX_EVENT_WAIT}s)"
+fi
 
 # Show override information if provided
 if [ -n "$CC_TTS_LANGUAGE" ]; then
@@ -213,11 +235,11 @@ cleanup() {
     local has_pending=$(check_last_event_pending)
     echo "Last event pending status for this instance: $has_pending"
     
-    # Wait for last event to complete (max 10 seconds)
+    # Wait for last event to complete (WSL-optimized timeout)
     if [ "$has_pending" = "true" ]; then
-        echo "Waiting for last event to complete..."
+        echo "Waiting for last event to complete (timeout: ${MAX_EVENT_WAIT}s)..."
         local wait_count=0
-        while [ "$has_pending" = "true" ] && [ "$wait_count" -lt 10 ]; do
+        while [ "$has_pending" = "true" ] && [ "$wait_count" -lt $MAX_EVENT_WAIT ]; do
             sleep 1
             has_pending=$(check_last_event_pending)
             wait_count=$((wait_count + 1))
@@ -225,9 +247,9 @@ cleanup() {
                 echo "Still waiting for last event... (${wait_count}s elapsed)"
             fi
         done
-        
+
         if [ "$has_pending" = "true" ]; then
-            echo "Warning: Force exiting with last event still pending after 10s timeout"
+            echo "Warning: Force exiting with last event still pending after ${MAX_EVENT_WAIT}s timeout"
         else
             echo "Last event completed successfully"
         fi
@@ -237,13 +259,15 @@ cleanup() {
     echo "Stopping dedicated cc-hooks server on port $SERVER_PORT..."
     if [ ! -z "$SERVER_PID" ]; then
         kill $SERVER_PID 2>/dev/null || true
-        # Wait for graceful shutdown
-        for i in {1..3}; do
+        # Wait for graceful shutdown (WSL-optimized timeout)
+        local shutdown_count=0
+        while [ $shutdown_count -lt $SERVER_SHUTDOWN_WAIT ]; do
             if ! kill -0 $SERVER_PID 2>/dev/null; then
                 echo "cc-hooks server stopped (Port: $SERVER_PORT)"
                 break
             fi
             sleep 1
+            shutdown_count=$((shutdown_count + 1))
         done
         # Force kill if still running
         if kill -0 $SERVER_PID 2>/dev/null; then

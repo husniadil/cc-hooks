@@ -112,11 +112,29 @@ fi
 # Check uv package manager
 if command -v uv &> /dev/null; then
     UV_VERSION=$(uv --version 2>&1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
-    print_success "uv $UV_VERSION found"
-    print_info "uv location: $(which uv)"
+    UV_PATH=$(which uv)
+    print_success "uv $UV_VERSION found (globally accessible)"
+    print_info "uv location: $UV_PATH"
+
+    # Verify uv is truly global by testing from different directory
+    if (cd /tmp && uv --version &> /dev/null); then
+        print_success "uv is globally accessible from any directory"
+    else
+        print_warning "uv may not be properly configured in PATH"
+        echo "        Try: source ~/.bashrc or source ~/.zshrc"
+    fi
+
+    # Check if uv is in a standard global location
+    if [[ "$UV_PATH" == *"/.local/bin/"* ]] || [[ "$UV_PATH" == *"/bin/uv"* ]] || [[ "$UV_PATH" == *"/.cargo/bin/"* ]]; then
+        print_info "uv is installed in standard global location"
+    elif [[ "$UV_PATH" == *"$SCRIPT_DIR"* ]]; then
+        print_warning "uv appears to be project-local, should be global"
+        echo "        Reinstall globally: curl -LsSf https://astral.sh/uv/install.sh | sh"
+    fi
 else
-    print_error "uv package manager not found"
-    echo "        Install uv: curl -LsSf https://astral.sh/uv/install.sh | sh"
+    print_error "uv package manager not found in PATH"
+    echo "        Install uv globally: curl -LsSf https://astral.sh/uv/install.sh | sh"
+    echo "        After install, restart your shell or run: source ~/.bashrc (or ~/.zshrc)"
 fi
 
 # Check Claude CLI
