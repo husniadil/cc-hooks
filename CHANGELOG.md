@@ -7,6 +7,29 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.16.1] - 2025-10-06
+
+### Fixed
+
+- **Instance Management Path Resolution**: Fixed critical bug with relative path handling in
+  `claude.sh`
+  - `INSTANCES_DIR` now uses absolute path based on script location instead of current working
+    directory
+  - `.env` file loading now resolves to script directory for consistent configuration access
+  - `SERVER_SCRIPT` path now absolute, preventing startup failures when running from different
+    directories
+  - Prevents stale PID files when `claude.sh` is executed from directories other than cc-hooks root
+  - Ensures proper cleanup during graceful shutdown regardless of working directory changes
+  - Instance tracking files now always created in `<script-dir>/.claude-instances/` directory
+
+### Technical
+
+- **Path Resolution Architecture**: Enhanced wrapper script with `SCRIPT_DIR` variable
+  - Uses `$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)` for reliable script location detection
+  - All relative paths converted to absolute paths anchored to script directory
+  - Better cross-directory execution support without breaking instance management
+  - Improved reliability when running via absolute path or from different directories
+
 ## [0.16.0] - 2025-10-06
 
 ### Added

@@ -1,10 +1,13 @@
 #!/bin/bash
 # Claude Code Wrapper
 
+# Get the directory where this script is located (absolute path)
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
 # Configuration
-SERVER_SCRIPT="server.py"
+SERVER_SCRIPT="$SCRIPT_DIR/server.py"
 REPL_COMMAND="claude"
-INSTANCES_DIR=".claude-instances"
+INSTANCES_DIR="$SCRIPT_DIR/.claude-instances"
 INSTANCE_PID=$$
 INSTANCE_UUID=$(uuidgen | tr '[:upper:]' '[:lower:]')
 
@@ -14,9 +17,9 @@ find_available_port() {
     local port=$base_port
     
     # Override base port from .env if available
-    if [ -f ".env" ]; then
+    if [ -f "$SCRIPT_DIR/.env" ]; then
         # Source .env file to get environment variables
-        export $(grep -v '^#' .env | grep -v '^$' | xargs)
+        export $(grep -v '^#' "$SCRIPT_DIR/.env" | grep -v '^$' | xargs)
         if [ -n "$PORT" ]; then
             base_port=$PORT
             port=$base_port
