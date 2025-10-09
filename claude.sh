@@ -138,6 +138,8 @@ fi
 CC_TTS_LANGUAGE=""
 CC_ELEVENLABS_VOICE_ID=""
 CC_TTS_PROVIDERS=""
+CC_SILENT_ANNOUNCEMENTS=""
+CC_SILENT_EFFECTS=""
 CLAUDE_ARGS=()
 
 for arg in "$@"; do
@@ -150,6 +152,29 @@ for arg in "$@"; do
             ;;
         --tts-providers=*)
             CC_TTS_PROVIDERS="${arg#*=}"
+            ;;
+        --silent=*)
+            SILENT_MODE="${arg#*=}"
+            case "$SILENT_MODE" in
+                announcements)
+                    CC_SILENT_ANNOUNCEMENTS="true"
+                    ;;
+                sound-effects)
+                    CC_SILENT_EFFECTS="true"
+                    ;;
+                all)
+                    CC_SILENT_ANNOUNCEMENTS="true"
+                    CC_SILENT_EFFECTS="true"
+                    ;;
+                *)
+                    echo "Warning: Unknown --silent value '$SILENT_MODE'. Valid values: announcements, sound-effects, all"
+                    ;;
+            esac
+            ;;
+        --silent)
+            # Default to 'all' when no value provided
+            CC_SILENT_ANNOUNCEMENTS="true"
+            CC_SILENT_EFFECTS="true"
             ;;
         *)
             CLAUDE_ARGS+=("$arg")
@@ -182,6 +207,14 @@ if [ -n "$CC_TTS_PROVIDERS" ]; then
     echo "Using TTS providers override: $CC_TTS_PROVIDERS"
 fi
 
+if [ -n "$CC_SILENT_ANNOUNCEMENTS" ] && [ -n "$CC_SILENT_EFFECTS" ]; then
+    echo "Silent mode: all (announcements + sound effects disabled)"
+elif [ -n "$CC_SILENT_ANNOUNCEMENTS" ]; then
+    echo "Silent mode: announcements only (sound effects enabled)"
+elif [ -n "$CC_SILENT_EFFECTS" ]; then
+    echo "Silent mode: sound effects only (announcements enabled)"
+fi
+
 # Each instance gets its own server, so always start one
 echo "Starting dedicated cc-hooks server on port $SERVER_PORT..."
 
@@ -195,6 +228,12 @@ if [ -n "$CC_ELEVENLABS_VOICE_ID" ]; then
 fi
 if [ -n "$CC_TTS_PROVIDERS" ]; then
     SERVER_ENV="$SERVER_ENV CC_TTS_PROVIDERS=$CC_TTS_PROVIDERS"
+fi
+if [ -n "$CC_SILENT_ANNOUNCEMENTS" ]; then
+    SERVER_ENV="$SERVER_ENV CC_SILENT_ANNOUNCEMENTS=$CC_SILENT_ANNOUNCEMENTS"
+fi
+if [ -n "$CC_SILENT_EFFECTS" ]; then
+    SERVER_ENV="$SERVER_ENV CC_SILENT_EFFECTS=$CC_SILENT_EFFECTS"
 fi
 
 # Start server in background with custom port and instance ID, capture errors
@@ -309,6 +348,14 @@ fi
 
 if [ -n "$CC_TTS_PROVIDERS" ]; then
     export CC_TTS_PROVIDERS
+fi
+
+if [ -n "$CC_SILENT_ANNOUNCEMENTS" ]; then
+    export CC_SILENT_ANNOUNCEMENTS
+fi
+
+if [ -n "$CC_SILENT_EFFECTS" ]; then
+    export CC_SILENT_EFFECTS
 fi
 
 # If original directory was passed, change to it before starting Claude

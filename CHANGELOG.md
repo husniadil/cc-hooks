@@ -7,6 +7,40 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.17.0] - 2025-10-09
+
+### Added
+
+- **Granular Silent Mode Control**: Advanced audio control with three independent modes
+  - New `--silent` parameter with optional value support (announcements, sound-effects, all)
+  - `--silent=announcements` disables TTS only while keeping sound effects enabled
+  - `--silent=sound-effects` disables sound effects only while keeping TTS enabled
+  - `--silent=all` or `--silent` (no value) disables both announcements and sound effects
+  - Per-session environment variables: `CC_SILENT_ANNOUNCEMENTS` and `CC_SILENT_EFFECTS`
+  - Backward compatible - `--silent` defaults to disabling both audio types
+
+### Enhanced
+
+- **Audio Processing Logic**: Independent control over TTS announcements and sound effects
+  - Event processor now checks granular flags (`CC_SILENT_ANNOUNCEMENTS`, `CC_SILENT_EFFECTS`)
+  - Clear logging when audio is skipped due to silent mode settings
+  - Maintained parallel audio processing while respecting silent mode preferences
+  - Better user feedback with mode-specific console messages
+
+- **Session Configuration System**: Extended per-session override capabilities
+  - Console feedback shows active silent mode: "all", "announcements only", or "sound effects only"
+  - Environment variable propagation through server and hooks for consistent behavior
+  - Support for combining silent modes with other session overrides (language, voice ID, providers)
+  - Multiple concurrent sessions with different silent mode configurations
+
+### Changed
+
+- **Documentation Updates**: Comprehensive documentation for granular silent mode
+  - CLAUDE.md updated with all silent mode options and combination examples
+  - README.md enhanced with use case descriptions (meetings vs focused work)
+  - Configuration precedence documentation updated to include silent mode parameters
+  - Added 5 concurrent session examples demonstrating different audio configurations
+
 ## [0.16.5] - 2025-10-06
 
 ### Fixed

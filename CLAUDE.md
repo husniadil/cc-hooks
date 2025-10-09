@@ -35,6 +35,12 @@ contextual AI-powered completion messages.
 # Start server + Claude Code (recommended)
 ./claude.sh
 
+# Silent mode options
+./claude.sh --silent                      # Disable both announcements and sound effects
+./claude.sh --silent=all                  # Same as above (explicit)
+./claude.sh --silent=announcements        # Disable TTS only, keep sound effects
+./claude.sh --silent=sound-effects        # Disable sound effects only, keep TTS
+
 # Start with language override (per-session)
 ./claude.sh --language=id
 
@@ -49,6 +55,9 @@ contextual AI-powered completion messages.
 
 # Combine multiple session overrides
 ./claude.sh --language=id --tts-providers=elevenlabs,gtts --elevenlabs-voice-id=21m00Tcm4TlvDq8ikWAM
+
+# Combine with silent modes
+./claude.sh --silent=announcements --language=id      # Indonesian TTS disabled, effects enabled
 
 # Development server with hot reload
 npm run dev
@@ -201,10 +210,14 @@ Configuration via `.env` file (see `.env.example`):
 - `CC_TTS_PROVIDERS`: Override TTS providers chain per session (via
   `--tts-providers=gtts,prerecorded`)
 - `CC_ELEVENLABS_VOICE_ID`: Override voice ID per session (via `--elevenlabs-voice-id=abc123`)
+- `CC_SILENT_ANNOUNCEMENTS`: Disable TTS announcements per session (via `--silent=announcements` or
+  `--silent`)
+- `CC_SILENT_EFFECTS`: Disable sound effects per session (via `--silent=sound-effects` or
+  `--silent`)
 
 These environment variables are automatically set by `claude.sh` when using `--language`,
-`--tts-providers`, or `--elevenlabs-voice-id` parameters, allowing multiple concurrent sessions with
-different voice configurations without modifying `.env` files.
+`--tts-providers`, `--elevenlabs-voice-id`, or `--silent` parameters, allowing multiple concurrent
+sessions with different audio configurations without modifying `.env` files.
 
 ## Key Implementation Details
 

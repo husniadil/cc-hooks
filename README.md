@@ -354,17 +354,26 @@ cld --elevenlabs-voice-id=21m00Tcm4TlvDq8ikWAM
 # Override TTS providers for this session
 cld --tts-providers=gtts,prerecorded
 
+# Silent mode options (granular control over audio)
+cld --silent                      # Disable both announcements and sound effects
+cld --silent=all                  # Same as above (explicit)
+cld --silent=announcements        # Disable TTS only, keep sound effects
+cld --silent=sound-effects        # Disable sound effects only, keep TTS
+
 # Combine all overrides for comprehensive session customization
 cld --language=es --elevenlabs-voice-id=21m00Tcm4TlvDq8ikWAM --tts-providers=elevenlabs,gtts
 
 # Multiple concurrent sessions with different configurations
 cld --language=id --tts-providers=gtts,prerecorded    # Session 1: Indonesian + Google TTS
 cld --language=es --tts-providers=elevenlabs          # Session 2: Spanish + ElevenLabs only
+cld --silent=announcements                            # Session 3: Sound effects only (no TTS)
+cld --silent=sound-effects                            # Session 4: TTS only (no sound effects)
+cld --silent                                          # Session 5: Complete silence
 ```
 
 **Configuration Precedence** (highest to lowest priority):
 
-1. Session parameters (`--language`, `--elevenlabs-voice-id`, `--tts-providers`)
+1. Session parameters (`--language`, `--elevenlabs-voice-id`, `--tts-providers`, `--silent`)
 2. Environment variables (`TTS_LANGUAGE`, `ELEVENLABS_VOICE_ID`, `TTS_PROVIDERS`)
 3. Default values
 
@@ -373,6 +382,8 @@ This allows you to:
 - Run multiple Claude Code sessions with different languages simultaneously
 - Test different voices without changing your global configuration
 - Switch languages per project without config file modifications
+- Granular audio control: disable TTS only, sound effects only, or both
+- Perfect for meetings (silent mode) or focused work (announcements only)
 
 ## Troubleshooting
 

@@ -3,6 +3,7 @@
 
 import asyncio
 import json
+import os
 from typing import Optional
 from pathlib import Path
 from config import config
@@ -201,23 +202,41 @@ async def process_single_event(event_data: dict, arguments: Optional[dict] = Non
     # Prepare audio tasks for parallel execution
     audio_tasks = []
 
+    # Check granular silent mode flags
+    silent_announcements = os.getenv("CC_SILENT_ANNOUNCEMENTS", "").lower() == "true"
+    silent_effects = os.getenv("CC_SILENT_EFFECTS", "").lower() == "true"
+
     # Check for announcement request (new intelligent mapping)
     if arguments and "announce" in arguments:
-        # Volume can be specified, default to 0.5
-        volume = 0.5
-        if isinstance(arguments["announce"], (int, float)):
-            volume = float(arguments["announce"])
-        elif arguments["announce"] is True:
-            volume = 0.5  # Default volume for --announce flag
+        if silent_announcements:
+            logger.info(
+                f"Silent announcements mode - skipping announcement for {hook_event_name}"
+            )
+        else:
+            # Volume can be specified, default to 0.5
+            volume = 0.5
+            if isinstance(arguments["announce"], (int, float)):
+                volume = float(arguments["announce"])
+            elif arguments["announce"] is True:
+                volume = 0.5  # Default volume for --announce flag
 
-        logger.info(f"Announcement requested for {hook_event_name} (volume: {volume})")
-        audio_tasks.append(play_announcement_sound(hook_event_name, event_data, volume))
+            logger.info(
+                f"Announcement requested for {hook_event_name} (volume: {volume})"
+            )
+            audio_tasks.append(
+                play_announcement_sound(hook_event_name, event_data, volume)
+            )
 
     # Check for sound effect argument (backward compatibility)
     if arguments and "sound_effect" in arguments:
-        sound_file = arguments["sound_effect"]
-        logger.info(f"Sound effect requested: {sound_file}")
-        audio_tasks.append(play_sound(sound_file))
+        if silent_effects:
+            logger.info(
+                f"Silent effects mode - skipping sound effect: {arguments['sound_effect']}"
+            )
+        else:
+            sound_file = arguments["sound_effect"]
+            logger.info(f"Sound effect requested: {sound_file}")
+            audio_tasks.append(play_sound(sound_file))
 
     # Run all audio tasks in parallel if any exist
     if audio_tasks:
