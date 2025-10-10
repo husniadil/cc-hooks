@@ -7,6 +7,16 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.17.1] - 2025-10-10
+
+### Fixed
+
+- **Status Line Dependencies**: Added missing `python-dotenv` dependency to status line script
+  - Added `python-dotenv>=1.1.1,<2` to `status-lines/status_line.py` PEP 723 dependencies
+  - Ensures consistency with other Python scripts in the project (server.py, hooks.py,
+    tts_announcer.py)
+  - Prevents import errors when status line tries to use config module that depends on dotenv
+
 ## [0.17.0] - 2025-10-09
 
 ### Added

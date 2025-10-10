@@ -5,6 +5,7 @@
 #     "requests>=2.32.5,<3",
 #     "elevenlabs>=2.16.0,<3",
 #     "openai>=2.1.0,<3",
+#     "python-dotenv>=1.1.1,<2",
 # ]
 # ///
 """
