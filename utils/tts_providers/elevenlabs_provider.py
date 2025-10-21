@@ -149,7 +149,7 @@ class ElevenLabsProvider(TTSProvider):
                 voice_id=self.voice_id, text=text, model_id=self.model_id
             )
 
-            # Validate API response before processing
+            # Validate API response
             if not audio:
                 logger.error("ElevenLabs API returned empty response")
                 return None
@@ -237,25 +237,3 @@ class ElevenLabsProvider(TTSProvider):
         """
         cache_input = f"{text}_{voice_id}_{model_id}_{language}".encode("utf-8")
         return hashlib.md5(cache_input).hexdigest()
-
-    def _get_text_for_event(
-        self, hook_event_name: str, event_data: Dict[str, Any]
-    ) -> Optional[str]:
-        """
-        Get the text to speak for the given hook event.
-        Uses prepared text from event_data if available, falls back to event name.
-
-        Args:
-            hook_event_name (str): Name of the hook event
-            event_data (dict): Hook event data from Claude Code
-
-        Returns:
-            str or None: Text to speak if found, None otherwise
-        """
-        # Check for prepared text from tts_announcer
-        prepared_text = event_data.get("_prepared_text")
-        if prepared_text:
-            return prepared_text
-
-        # Fallback: use event name as text
-        return hook_event_name.replace("_", " ")

@@ -17,24 +17,22 @@ import json
 from pathlib import Path
 from typing import Optional, Dict, Any, List
 from utils.colored_logger import setup_logger, configure_root_logging
+from utils.constants import PathConstants
 
 configure_root_logging()
 logger = setup_logger(__name__)
 
 
 def _get_temp_dir() -> Path:
-    """Get or create temporary directory for transcript tracking."""
-    temp_dir = Path(".claude-instances")
+    """Get or create temporary directory for transcript tracking in system temp."""
+    # Use PathConstants for consistent directory location
+    temp_dir = PathConstants.TRANSCRIPT_TRACKING_DIR
     try:
         temp_dir.mkdir(exist_ok=True)
+        logger.debug(f"Using temp directory: {temp_dir}")
     except (PermissionError, OSError) as e:
-        logger.warning(f"Failed to create temp directory {temp_dir}: {e}")
-        # Fallback to system temp directory
-        import tempfile
-
-        temp_dir = Path(tempfile.gettempdir()) / "claude-instances"
-        temp_dir.mkdir(exist_ok=True)
-        logger.info(f"Using fallback temp directory: {temp_dir}")
+        logger.error(f"Failed to create temp directory {temp_dir}: {e}")
+        raise
     return temp_dir
 
 
@@ -93,7 +91,7 @@ def clear_last_processed_message(session_id: str) -> None:
 
 
 def cleanup_old_processed_files(max_age_hours: int = 24) -> None:
-    """Clean up old last-processed files older than max_age_hours."""
+    """Clean up last-processed files older than max_age_hours."""
     try:
         import time
 
@@ -106,12 +104,12 @@ def cleanup_old_processed_files(max_age_hours: int = 24) -> None:
                 file_stat = file_path.stat()
                 if file_stat.st_mtime < cutoff_time:
                     file_path.unlink()
-                    logger.debug(f"Cleaned up old processed file: {file_path}")
+                    logger.debug(f"Cleaned up expired processed file: {file_path}")
             except Exception as e:
                 logger.warning(f"Failed to clean up file {file_path}: {e}")
 
     except Exception as e:
-        logger.warning(f"Failed to cleanup old processed files: {e}")
+        logger.warning(f"Failed to cleanup expired processed files: {e}")
 
 
 class ConversationContext:
@@ -348,7 +346,7 @@ def extract_conversation_context(
                 continue
 
         # Second pass: Find user message and Claude response
-        # If Stop event found, only look at entries before the Stop event index
+        # If Stop event found, only look at entries up to the Stop event index
         search_entries = entries[:stop_event_index] if found_stop_event else entries
 
         logger.debug(
@@ -421,7 +419,7 @@ def extract_conversation_context(
                 logger.debug(f"Error processing entry: {e}")
                 continue
 
-        # If Stop event was found but no messages after it, that's expected
+        # If Stop event was found but no messages, that's expected
         if found_stop_event:
             if not last_claude_response:
                 logger.debug(
@@ -506,11 +504,14 @@ def main():
     if args.skip_duplicate_check:
         # Temporarily disable duplicate checking by clearing processed files
         import tempfile
+        import shutil
 
-        old_claude_instances = Path(".claude-instances")
-        if old_claude_instances.exists():
-            temp_backup = Path(tempfile.mkdtemp()) / "claude-instances-backup"
-            old_claude_instances.rename(temp_backup)
+        temp_dir = _get_temp_dir()
+        if temp_dir.exists():
+            temp_backup = Path(tempfile.mkdtemp()) / "cc-hooks-transcripts-backup"
+            shutil.copytree(temp_dir, temp_backup)
+            # Clear temp dir
+            shutil.rmtree(temp_dir)
 
         try:
             context = extract_conversation_context(
@@ -519,11 +520,10 @@ def main():
         finally:
             # Restore backup
             if "temp_backup" in locals() and temp_backup.exists():
-                if Path(".claude-instances").exists():
-                    import shutil
-
-                    shutil.rmtree(".claude-instances")
-                temp_backup.rename(".claude-instances")
+                if temp_dir.exists():
+                    shutil.rmtree(temp_dir)
+                shutil.copytree(temp_backup, temp_dir)
+                shutil.rmtree(temp_backup)
     else:
         context = extract_conversation_context(
             args.transcript_path, start_line=args.start_line, end_line=args.end_line

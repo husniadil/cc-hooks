@@ -7,424 +7,658 @@
 [![Claude Code](https://img.shields.io/badge/Claude%20Code-Enhanced-orange)](https://www.anthropic.com/claude-code)
 [![Audio](https://img.shields.io/badge/Audio-TTS%20%2B%20Sound%20Effects-purple)]()
 
-Enhanced Claude Code hooks system with intelligent audio feedback, TTS announcements, and optional
-AI-powered contextual messages.
+**Give Claude Code a voice!** Transform your coding experience with intelligent audio feedback,
+multilingual TTS announcements, and AI-powered contextual messages.
 
-## Overview
+## Why cc-hooks?
 
-cc-hooks enhances your Claude Code experience with:
+Working with Claude Code is powerful, but it can feel silent and disconnected. **cc-hooks** brings
+your coding sessions to life:
 
-- 🔊 **Smart sound effects** for different Claude Code events
-- 🗣️ **Text-to-speech announcements** with multiple provider options
-- 🤖 **AI-powered contextual messages** that understand your conversation
-- 🌍 **Multilingual support** for international users
-- ⚡ **Multi-instance support** - run multiple Claude Code sessions simultaneously
+- 🎯 **Stay in the flow** - Audio cues keep you informed without breaking focus
+- 🔊 **Instant feedback** - Know when tools start, complete, or when Claude needs your attention
+- 🗣️ **Smart announcements** - Context-aware messages that understand what you're working on
+- 🌍 **Your language** - TTS support for multiple languages (English, Indonesian, Spanish, and more)
+- ⚡ **Zero config** - Works out of the box, customize when you need it
+- 🎛️ **Flexible control** - From complete silence to premium AI voices, you choose
 
-## Demo
+## Quick Demo
 
 [![ElevenLabs TTS Demo](public/thumbnail.png)](https://www.youtube.com/watch?v=VXkKhgeZ-xU)
 
-_Watch cc-hooks in action with premium ElevenLabs text-to-speech integration_
+_Watch cc-hooks in action with premium ElevenLabs text-to-speech_
 
-## Quick Start (Recommended)
+## Features
 
-Get up and running in 2 minutes with full audio feedback:
+### 🎵 Audio Feedback System
 
-### Prerequisites
+- **Sound effects** for different events (tool execution, notifications, completions)
+- **Voice announcements** for session lifecycle and task completions
+- **Multiple TTS providers**: Prerecorded sounds (offline), Google TTS (free), ElevenLabs (premium)
+- **Smart fallback chain** - automatically tries next provider if one fails
 
-- Python 3.12+
-- [uv](https://docs.astral.sh/uv/) package manager (install via
-  `curl -LsSf https://astral.sh/uv/install.sh | sh`)
-  - After installation, restart your shell or run `source ~/.bashrc` (or `~/.zshrc`)
-  - Verify with: `uv --version` (should work from any directory)
-- Node.js ≥20.19.4 (for ccusage dependency)
-- [Claude Code](https://claude.ai/code) CLI tool
+### 🤖 AI-Powered Intelligence (Optional)
 
-> **Optional**: Use [mise](https://mise.jdx.dev/) to automatically install Python, uv, and Node.js
-> from `.tool-versions`
-
-### Installation
-
-1. **Clone and install dependencies:**
-
-   ```bash
-   git clone https://github.com/husniadil/cc-hooks.git
-   cd cc-hooks
-
-   # Optional: Use mise to install Python, uv, and Node.js automatically
-   # mise install
-
-   npm install
-   ```
-
-2. **Verify setup:**
-
-   ```bash
-   npm run check
-   ```
-
-3. **Add hooks to Claude Code settings:**
-
-   Edit your Claude Code settings (typically `~/.claude/settings.json`):
-
-   ```json
-   {
-     "$schema": "https://json.schemastore.org/claude-code-settings.json",
-     "model": "sonnet",
-     "hooks": {
-       "SessionStart": [
-         {
-           "matcher": "",
-           "hooks": [
-             {
-               "type": "command",
-               "command": "uv run /path/to/cc-hooks/hooks.py"
-             }
-           ]
-         }
-       ],
-       "SessionEnd": [
-         {
-           "matcher": "",
-           "hooks": [
-             {
-               "type": "command",
-               "command": "uv run /path/to/cc-hooks/hooks.py"
-             }
-           ]
-         }
-       ],
-       "PreToolUse": [
-         {
-           "matcher": "",
-           "hooks": [
-             {
-               "type": "command",
-               "command": "uv run /path/to/cc-hooks/hooks.py --sound-effect=sound_effect_tek.mp3"
-             }
-           ]
-         }
-       ],
-       "PostToolUse": [
-         {
-           "matcher": "",
-           "hooks": [
-             {
-               "type": "command",
-               "command": "uv run /path/to/cc-hooks/hooks.py --sound-effect=sound_effect_cetek.mp3"
-             }
-           ]
-         }
-       ],
-       "Notification": [
-         {
-           "matcher": "",
-           "hooks": [
-             {
-               "type": "command",
-               "command": "uv run /path/to/cc-hooks/hooks.py --sound-effect=sound_effect_tung.mp3"
-             }
-           ]
-         }
-       ],
-       "UserPromptSubmit": [
-         {
-           "matcher": "",
-           "hooks": [
-             {
-               "type": "command",
-               "command": "uv run /path/to/cc-hooks/hooks.py --sound-effect=sound_effect_klek.mp3"
-             }
-           ]
-         }
-       ],
-       "Stop": [
-         {
-           "matcher": "",
-           "hooks": [
-             {
-               "type": "command",
-               "command": "uv run /path/to/cc-hooks/hooks.py"
-             }
-           ]
-         }
-       ],
-       "SubagentStop": [
-         {
-           "matcher": "",
-           "hooks": [
-             {
-               "type": "command",
-               "command": "uv run /path/to/cc-hooks/hooks.py --sound-effect=sound_effect_cetek.mp3"
-             }
-           ]
-         }
-       ],
-       "PreCompact": [
-         {
-           "matcher": "",
-           "hooks": [
-             {
-               "type": "command",
-               "command": "uv run /path/to/cc-hooks/hooks.py"
-             }
-           ]
-         }
-       ]
-     },
-     "statusLine": {
-       "type": "command",
-       "command": "uv run /path/to/cc-hooks/status-lines/status_line.py"
-     }
-   }
-   ```
-
-   **Replace `/path/to/cc-hooks` with your actual installation path** (find it with `pwd` in the
-   cc-hooks directory).
-
-4. **Create basic configuration:**
-
-   ```bash
-   cp .env.example .env
-   ```
-
-   The default settings work perfectly for Quick Start - no editing needed!
-
-5. **Create command alias (recommended):**
-
-   Add this to your shell config (`.bashrc`, `.zshrc`, etc.):
-
-   ```bash
-   cld() {
-       local original_dir="$PWD"
-       (cd /path/to/cc-hooks && CC_ORIGINAL_DIR="$original_dir" ./claude.sh "$@")
-   }
-   ```
-
-   **Replace `/path/to/cc-hooks` with your actual installation path.**
-
-   This alias allows you to run `cld` from **any directory** on your system - Claude Code will start
-   with all the audio enhancements while working in your current project folder.
-
-6. **Start using:**
-
-   ```bash
-   # Use your alias from any directory (recommended)
-   cd ~/my-project
-   cld
-
-   # Or navigate to cc-hooks directory first
-   cd /path/to/cc-hooks && ./claude.sh
-   ```
-
-You're all set! Claude Code will now have complete audio feedback with sound effects for all events.
-No configuration files needed!
-
----
-
-## Intermediate Setup (Dynamic Voice Generation)
-
-Want real-time generated voice announcements? Add Google TTS or premium ElevenLabs:
-
-### Option A: Google TTS (Free)
-
-1. **Edit your existing `.env` file:**
-
-   ```bash
-   # Enable Google TTS
-   TTS_PROVIDERS=gtts,prerecorded
-   TTS_LANGUAGE=en
-   TTS_CACHE_ENABLED=true
-   ```
-
-2. **Add `--announce` to specific hooks** (if you want voice announcements):
-
-   Update your existing hooks from Quick Start by adding `--announce` to these events:
-   - `SessionStart`, `SessionEnd`, `Stop`, `PreCompact` → Add `--announce`
-   - `Notification` → Already has sound effect, add `--announce`
-   - Keep `PreToolUse`, `PostToolUse`, `UserPromptSubmit` as sound-only
-
-### Option B: ElevenLabs (Premium Quality)
-
-1. **Get your API key** from
-   [elevenlabs.io/app/developers/api-keys](https://elevenlabs.io/app/developers/api-keys)
-
-2. **Edit your existing `.env` file:**
-
-   ```bash
-   # Premium ElevenLabs TTS
-   TTS_PROVIDERS=elevenlabs,gtts,prerecorded
-   ELEVENLABS_API_KEY=your_api_key_here
-   ELEVENLABS_VOICE_ID=21m00Tcm4TlvDq8ikWAM  # Rachel voice (default)
-   ```
-
-   **⚠️ Important**: The `ELEVENLABS_VOICE_ID` must be from either:
-   - **My Voices**: https://elevenlabs.io/app/voice-lab (your custom voices)
-   - **Default Voices**: https://elevenlabs.io/app/default-voices (built-in voices)
-
-   Using voice IDs from other sources will fail and automatically fallback to the next TTS provider.
-
-3. **Follow the same hook update steps as Google TTS above**
-
----
-
-## Advanced Setup (AI-Powered Contextual Messages)
-
-Get intelligent, context-aware announcements that understand your conversation:
-
-### Requirements
-
-- OpenRouter API account ([get free credits](https://openrouter.ai/keys))
-- Text-to-speech already configured (see Intermediate Setup)
-
-### Configuration
-
-1. **Add OpenRouter to your `.env`:**
-
-   ```bash
-   # AI Features
-   OPENROUTER_ENABLED=true
-   OPENROUTER_API_KEY=your_openrouter_key
-   OPENROUTER_MODEL=openai/gpt-4o-mini
-
-   # Enable contextual messages (costs apply!)
-   OPENROUTER_CONTEXTUAL_STOP=true              # Smart completion messages
-   OPENROUTER_CONTEXTUAL_PRETOOLUSE=true        # Intelligent tool announcements
-
-   # TTS (required for contextual features)
-   TTS_PROVIDERS=elevenlabs,gtts,prerecorded    # Your choice
-   ```
-
-2. **Enable contextual AI for key events:**
-
-   For AI contextual features, add `--announce` to these important hooks:
-   - **PreToolUse** → `--sound-effect=sound_effect_tek.mp3 --announce`
-   - **Stop** → `--announce`
-
-   These are the most valuable events for AI contextual messages. Other hooks can remain as-is from
-   Quick Start.
-
-### What You Get
-
-- **Smart completion messages**: "I've successfully implemented the user authentication system as
+- **Contextual completion messages** - "I've successfully implemented the authentication system you
   requested"
-- **Contextual tool announcements**: "Running tests to validate the login functionality you just
-  built"
-- **Multilingual support**: Automatically translates to your preferred language
-- **Cost-optimized**: Only generates AI messages when needed
+- **Smart tool announcements** - Understands what Claude is doing and why
+- **Automatic translation** - AI messages in your preferred language
+- **Cost optimized** - Disabled by default, enable per session when needed
 
-> **⚠️ Important**: Contextual AI features only work when `--announce` is included in your hook
-> commands. Without it, contextual messages won't be generated.
+### ⚙️ Advanced Capabilities
+
+- **Multi-instance support** - Run multiple Claude sessions with different audio configs
+- **Granular silent modes** - Disable just announcements or just sound effects
+- **Per-session configuration** - Change settings without editing config files
+- **Auto-cleanup** - Smart session management prevents resource leaks
+- **Status line integration** - See current session info in Claude Code UI
+
+## Installation
+
+### Choose Your Installation Mode
+
+| Feature               | Plugin Mode ⭐ Recommended | Standalone Mode               |
+| --------------------- | -------------------------- | ----------------------------- |
+| **Setup Complexity**  | ✅ Simple (3 commands)     | ⚠️ Manual hooks configuration |
+| **Updates**           | ✅ One command             | ⚠️ Git pull + restart         |
+| **Slash Commands**    | ✅ Built-in                | ❌ Not available              |
+| **Hooks Config**      | ✅ Automatic               | ⚠️ Manual (settings.json)     |
+| **Installation Path** | Fixed location             | ✅ User-defined               |
+| **For Contributors**  | ⚠️ Limited                 | ✅ Full source access         |
+| **Recommended for**   | **Most users**             | Developers, testers           |
+
+[**→ Continue with Plugin Installation**](#plugin-installation-recommended) |
+[**→ Standalone Installation**](STANDALONE_README.md)
 
 ---
 
-## Configuration Reference
+### Plugin Installation (Recommended)
 
-All configuration is done through the `.env` file. Key settings:
+#### Prerequisites
 
-### TTS Providers
+- **Python 3.12+** (recommended: 3.12.7)
+- **[uv](https://docs.astral.sh/uv/)** package manager
+- **Claude Code** CLI installed
 
-- `TTS_PROVIDERS=prerecorded` - Default (sound effects only)
-- `TTS_PROVIDERS=gtts,prerecorded` - Add Google TTS
-- `TTS_PROVIDERS=elevenlabs,gtts,prerecorded` - Premium ElevenLabs + fallbacks
+#### Quick Install
 
-### Languages
-
-- `TTS_LANGUAGE=en` - English (default)
-- `TTS_LANGUAGE=id` - Indonesian
-- `TTS_LANGUAGE=es` - Spanish, etc.
-
-### API Keys
-
-- `ELEVENLABS_API_KEY=` - For premium TTS ([get key](https://elevenlabs.io/app/developers/api-keys))
-- `OPENROUTER_API_KEY=` - For AI features ([get key](https://openrouter.ai/keys))
-
-### Per-Session Configuration Overrides
-
-Override language, voice, and provider settings for individual Claude Code sessions without
-modifying your `.env` file:
+**Option 1: CLI (Recommended - No REPL needed)**
 
 ```bash
-# Use Indonesian TTS for this session
-cld --language=id
+# Add marketplace
+claude plugin marketplace add https://github.com/husniadil/cc-hooks.git
 
-# Use specific ElevenLabs voice for this session
-cld --elevenlabs-voice-id=21m00Tcm4TlvDq8ikWAM
+# Install plugin
+claude plugin install cc-hooks@cc-hooks-plugin
 
-# Override TTS providers for this session
-cld --tts-providers=gtts,prerecorded
-
-# Silent mode options (granular control over audio)
-cld --silent                      # Disable both announcements and sound effects
-cld --silent=all                  # Same as above (explicit)
-cld --silent=announcements        # Disable TTS only, keep sound effects
-cld --silent=sound-effects        # Disable sound effects only, keep TTS
-
-# Combine all overrides for comprehensive session customization
-cld --language=es --elevenlabs-voice-id=21m00Tcm4TlvDq8ikWAM --tts-providers=elevenlabs,gtts
-
-# Multiple concurrent sessions with different configurations
-cld --language=id --tts-providers=gtts,prerecorded    # Session 1: Indonesian + Google TTS
-cld --language=es --tts-providers=elevenlabs          # Session 2: Spanish + ElevenLabs only
-cld --silent=announcements                            # Session 3: Sound effects only (no TTS)
-cld --silent=sound-effects                            # Session 4: TTS only (no sound effects)
-cld --silent                                          # Session 5: Complete silence
+# Done! Start Claude to use
+claude
 ```
 
-**Configuration Precedence** (highest to lowest priority):
+**Option 2: Inside Claude REPL**
 
-1. Session parameters (`--language`, `--elevenlabs-voice-id`, `--tts-providers`, `--silent`)
-2. Environment variables (`TTS_LANGUAGE`, `ELEVENLABS_VOICE_ID`, `TTS_PROVIDERS`)
-3. Default values
+```bash
+# Start Claude first
+claude
 
-This allows you to:
+# Then in the REPL:
+/plugin marketplace add https://github.com/husniadil/cc-hooks.git
+/plugin install cc-hooks@cc-hooks-plugin
 
-- Run multiple Claude Code sessions with different languages simultaneously
-- Test different voices without changing your global configuration
-- Switch languages per project without config file modifications
-- Granular audio control: disable TTS only, sound effects only, or both
-- Perfect for meetings (silent mode) or focused work (announcements only)
+# Restart Claude Code
+```
+
+**Start using!** Audio feedback works immediately with default prerecorded sounds. 🎉
+
+#### Post-Installation Setup (Recommended)
+
+After installation, use the interactive setup wizard:
+
+```bash
+# Inside Claude REPL
+/cc-hooks-plugin:setup
+```
+
+This wizard helps you:
+
+- ✅ Check system requirements (uv installation)
+- ✅ Set up convenient shell aliases (`cld` command)
+- ✅ Configure status line
+- ✅ Set up API keys for premium features
+- ✅ Choose preset configurations
+- ✅ Test your installation
+
+**Quick setup modes:**
+
+```bash
+/cc-hooks-plugin:setup check    # Check requirements and config only
+/cc-hooks-plugin:setup apikeys  # Focus on API key setup
+/cc-hooks-plugin:setup test     # Run installation tests
+```
+
+#### Status Line Setup (Optional)
+
+The plugin includes a status line feature that shows session info in Claude Code UI. **This is not
+configured automatically** and requires manual setup in `~/.claude/settings.json`:
+
+```jsonc
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  // ...
+  "statusLine": {
+    "type": "command",
+    "command": "uv run ~/.claude/plugins/marketplaces/cc-hooks-plugin/status-lines/status_line.py"
+  }
+}
+```
+
+**Benefits:**
+
+- Shows current TTS provider, language, and AI mode
+- Displays session info at a glance
+- Real-time status updates
+
+## Usage
+
+### Quick Start
+
+**Automated Setup (Easiest):**
+
+```bash
+# Inside Claude REPL
+/cc-hooks-plugin:setup
+```
+
+**Manual Setup:**
+
+Add shell alias to your `.bashrc` or `.zshrc`:
+
+```bash
+alias cld='~/.claude/plugins/marketplaces/cc-hooks-plugin/claude.sh'
+```
+
+Then reload: `source ~/.bashrc` or `source ~/.zshrc`
+
+### Usage Examples
+
+```bash
+# Default: prerecorded sounds (offline, no config needed)
+cld
+
+# Google TTS in Indonesian
+cld --audio=gtts --language=id
+
+# Premium ElevenLabs voice
+cld --audio=elevenlabs
+
+# With AI-powered contextual messages
+cld --audio=gtts --ai=full --language=id
+
+# Silent mode for meetings
+cld --silent
+```
+
+## Configuration
+
+### CLI Flags Reference
+
+#### Audio Providers
+
+```bash
+cld --audio=prerecorded  # Offline sounds (default, no API key)
+cld --audio=gtts         # Google TTS (free, requires internet)
+cld --audio=elevenlabs   # Premium quality (requires API key)
+```
+
+| Provider        | Quality | Cost | Requires Internet | API Key |
+| --------------- | ------- | ---- | ----------------- | ------- |
+| **prerecorded** | Good    | Free | ❌ No             | ❌ No   |
+| **gtts**        | Great   | Free | ✅ Yes            | ❌ No   |
+| **elevenlabs**  | Premium | Paid | ✅ Yes            | ✅ Yes  |
+
+#### Language
+
+```bash
+cld --audio=gtts --language=id  # Indonesian
+cld --audio=gtts --language=es  # Spanish
+cld --audio=gtts --language=fr  # French
+```
+
+Supports any Google TTS or ElevenLabs language: `en`, `id`, `es`, `fr`, `de`, `ja`, and many more!
+
+#### AI Features
+
+```bash
+cld --ai=basic  # Contextual completion messages only
+cld --ai=full   # Completion + intelligent tool announcements
+```
+
+**Requires**: OpenRouter API key (`export OPENROUTER_API_KEY=your_key`)
+
+**What you get:**
+
+- "I've successfully implemented the authentication system you requested"
+- "Running tests to validate the changes we just made"
+- Messages automatically translated to your language
+
+**Cost**: Very affordable (~$0.15 per 1M tokens)
+
+#### Silent Modes
+
+```bash
+cld --silent                    # Complete silence
+cld --silent=announcements      # No TTS, keep sound effects
+cld --silent=sound-effects      # No sound effects, keep TTS
+```
+
+#### Advanced Flags
+
+```bash
+--elevenlabs-voice-id=ID        # Custom ElevenLabs voice
+--elevenlabs-model=MODEL        # ElevenLabs model (default: eleven_flash_v2_5)
+--openrouter-model=MODEL        # AI model (default: openai/gpt-4o-mini)
+--no-cache                      # Disable TTS caching (for testing)
+```
+
+### API Keys Setup
+
+For ElevenLabs or AI features, set API keys as environment variables:
+
+```bash
+# Add to your .bashrc or .zshrc
+export ELEVENLABS_API_KEY=your_key_here
+export OPENROUTER_API_KEY=your_key_here
+```
+
+**Get your keys:**
+
+- **ElevenLabs**:
+  [elevenlabs.io/app/developers/api-keys](https://elevenlabs.io/app/developers/api-keys)
+- **OpenRouter**: [openrouter.ai/keys](https://openrouter.ai/keys) (free credits available)
+
+### Configuration File (Recommended)
+
+**Set your defaults once** - no need to use CLI flags every time!
+
+**Location**: `~/.claude/.cc-hooks/config.yaml`
+
+**Why use it?**
+
+- ✅ **For Zed/Editors**: Only way to customize (editors can't pass CLI flags)
+- ✅ **For Terminal**: Set once, run `claude` or `cld` - your preferences auto-apply
+- ✅ **Still flexible**: CLI flags override config when needed
+
+**Create config file:**
+
+```bash
+# Inside Claude REPL
+/cc-hooks-plugin:setup
+
+# Or manually create with defaults
+uv run ~/.claude/plugins/marketplaces/cc-hooks-plugin/utils/config_loader.py --create-example
+
+# Edit to your preferences
+nano ~/.claude/.cc-hooks/config.yaml
+```
+
+**Example config** (Indonesian with Google TTS):
+
+```yaml
+audio:
+  providers: gtts,prerecorded
+  language: id
+  cache_enabled: true
+
+openrouter:
+  enabled: false
+```
+
+**Example config** (Premium with AI):
+
+```yaml
+audio:
+  providers: elevenlabs,gtts,prerecorded
+  language: en
+  cache_enabled: true
+
+elevenlabs:
+  voice_id: 21m00Tcm4TlvDq8ikWAM
+  model_id: eleven_flash_v2_5
+
+openrouter:
+  enabled: true
+  model: openai/gpt-4o-mini
+  contextual_stop: true
+```
+
+**Priority**: CLI flags > Environment variables > Config file > Defaults
+
+**This means:**
+
+- Config file provides defaults for all sessions
+- Run `cld --language=es` to override for one session
+- Perfect for both Zed and terminal users!
+
+### Example Configurations
+
+```bash
+# Work setup: Indonesian TTS with Google
+cld --audio=gtts --language=id
+
+# Premium experience: ElevenLabs + AI features
+cld --audio=elevenlabs --ai=full
+
+# Meeting mode: Sound effects only
+cld --silent=announcements
+
+# Testing: Premium voice without cache
+cld --audio=elevenlabs --no-cache
+
+# Multi-session workflow
+# Terminal 1: Work project
+cd ~/work-project
+cld --audio=gtts --language=id
+
+# Terminal 2: Side project with premium
+cd ~/side-project
+cld --audio=elevenlabs --ai=full
+
+# Terminal 3: Silent for meetings
+cd ~/meeting-notes
+cld --silent
+```
+
+## Audio Event Mapping
+
+| Event            | Sound Effect | TTS Announcement               |
+| ---------------- | ------------ | ------------------------------ |
+| SessionStart     | -            | ✅ Always                      |
+| SessionEnd       | -            | ✅ Always                      |
+| PreToolUse       | tek.mp3      | ✅ With AI=full                |
+| PostToolUse      | cetek.mp3    | -                              |
+| UserPromptSubmit | klek.mp3     | -                              |
+| Notification     | tung.mp3     | -                              |
+| Stop             | -            | ✅ Always (contextual with AI) |
+| SubagentStop     | cetek.mp3    | -                              |
+| PreCompact       | -            | ✅ Always                      |
+
+**Notes:**
+
+- Sound effects play regardless of `--audio` flag (unless `--silent` or `--silent=sound-effects`)
+- TTS announcements use the configured provider (`--audio=prerecorded|gtts|elevenlabs`)
+- PreToolUse only announces with `--ai=full` (contextual tool messages)
+- Stop always announces, but uses AI contextual messages when `--ai=basic` or `--ai=full` is enabled
+
+## Updating cc-hooks
+
+### Check for Updates
+
+Inside Claude REPL:
+
+```bash
+/cc-hooks-plugin:update
+```
+
+Or via CLI:
+
+```bash
+claude plugin marketplace update cc-hooks-plugin
+```
+
+**The update command will:**
+
+- Detect your installation mode automatically
+- Check for available updates
+- Show current vs latest version
+- Install updates with your confirmation
+- Remind you to restart Claude Code
+
+**Alternative methods:**
+
+```bash
+# CLI (outside Claude REPL)
+claude plugin marketplace update cc-hooks-plugin
+
+# Inside Claude REPL
+/plugin update cc-hooks@cc-hooks-plugin
+```
+
+**Important**: Restart Claude Code session after updating.
 
 ## Troubleshooting
 
-### Validation
+### Quick Diagnostics
 
-Run the setup checker to verify your installation:
+Run `/cc-hooks-plugin:setup check` to verify your configuration.
 
-```bash
-npm run check
+### Plugin Hook Metadata Error?
+
+**Error message:**
+
+```
+⎿  SessionStart:startup says: Plugin hook error: Reading inline script metadata from `~/.claude/plugins/marketplaces/cc-hooks-plugin//hooks.py`
+   Installed 28 packages in 115ms
 ```
 
-For detailed validation output:
+**Cause:** This typically occurs when Claude CLI is being auto-updated by Anthropic in the
+background.
+
+**Solution:** Simply restart your Claude session. The error should disappear after the update
+completes.
+
+### No audio at all?
+
+1. Check system audio is working
+2. Verify plugin is installed: `/plugin`
+3. Run setup wizard: `/cc-hooks-plugin:setup test`
+4. Check logs: `tail -f ~/.claude/.cc-hooks/logs/*.log`
+5. Test manually: `uv run ~/.claude/plugins/marketplaces/cc-hooks-plugin/utils/sound_player.py`
+
+### Google TTS not working?
+
+1. Check internet connection
+2. Test:
+   `uv run ~/.claude/plugins/marketplaces/cc-hooks-plugin/utils/tts_announcer.py --provider gtts SessionStart`
+
+### ElevenLabs not working?
+
+1. Verify API key: `printenv ELEVENLABS_API_KEY`
+2. Check quota at [elevenlabs.io](https://elevenlabs.io)
+3. Test:
+   `uv run ~/.claude/plugins/marketplaces/cc-hooks-plugin/utils/tts_announcer.py --provider elevenlabs SessionStart`
+
+### AI contextual messages not working?
+
+1. Verify API key: `printenv OPENROUTER_API_KEY`
+2. Use `--ai=basic` or `--ai=full` flag when starting
+3. Check OpenRouter API quota at [openrouter.ai](https://openrouter.ai)
+
+### Database Issues
+
+Check database exists:
 
 ```bash
-npm run check:verbose
+ls -la ~/.claude/.cc-hooks/events.db
 ```
 
-### Common Issues
+View recent events:
 
-**Sound effects not playing?**
+```bash
+sqlite3 ~/.claude/.cc-hooks/events.db "SELECT id, hook_event_name, status FROM events ORDER BY created_at DESC LIMIT 10;"
+```
 
-- Check that your audio system is working
-- Verify that sound files exist in the `sound/` directory
+## Data Storage
 
-**TTS not working?**
+The plugin uses a shared data directory for persistence:
 
-- Ensure you have `--announce` in your hook commands
-- Check your `.env` file has correct TTS provider settings
-- For Google TTS: requires internet connection
-- For ElevenLabs: verify your API key is valid
+```
+~/.claude/.cc-hooks/
+├── events.db          # Event queue database
+├── logs/              # Per-session logs
+│   └── {pid}.log
+└── .tts_cache/        # Cached TTS audio (if enabled)
+```
 
-**AI contextual messages not working?**
+**Why shared?** This directory persists across plugin updates, allowing seamless upgrades without
+losing data.
 
-- Verify `OPENROUTER_ENABLED=true` and API key is set
-- **Critical**: Contextual features require `--announce` in hook commands
-- Check that contextual flags are enabled: `OPENROUTER_CONTEXTUAL_STOP=true`
+## FAQ
+
+**Q: Do I need API keys to use cc-hooks?**
+
+No! Default mode uses prerecorded sounds and works completely offline with no API keys required.
+
+**Q: Which TTS provider should I use?**
+
+- **Prerecorded**: Fastest, offline, no costs (great for starting)
+- **Google TTS**: Free, good quality, requires internet
+- **ElevenLabs**: Premium quality, costs money, best voices
+
+**Q: Can I use my own voice with ElevenLabs?**
+
+Yes! Upload your voice at [elevenlabs.io/app/voice-lab](https://elevenlabs.io/app/voice-lab), then
+use `--elevenlabs-voice-id=your_voice_id`
+
+**Q: How much do AI features cost?**
+
+OpenRouter has free credits to start. After that, costs vary by model. Use `--ai=basic` for minimal
+costs (only completion messages). The default model is very cheap (~$0.15 per 1M tokens).
+
+**Q: Can I run multiple Claude sessions with different audio settings?**
+
+Yes! Each session is independent. Run `cld --audio=gtts` in one terminal and `cld --silent` in
+another.
+
+**Q: Does cc-hooks slow down Claude Code?**
+
+No! cc-hooks uses a "fire-and-forget" pattern - hooks return immediately. Audio processing happens
+in the background without blocking Claude.
+
+**Q: What languages are supported?**
+
+Any language supported by Google TTS or ElevenLabs. Common ones: English (en), Indonesian (id),
+Spanish (es), French (fr), German (de), Japanese (ja), etc.
+
+**Q: Can I disable just the voice but keep sound effects?**
+
+Yes! Use `--silent=announcements` to disable TTS while keeping sound effects.
+
+**Q: How do I migrate from standalone mode?**
+
+See [MIGRATION.md](MIGRATION.md) for a comprehensive step-by-step guide.
+
+**Q: Can I use cc-hooks in CI/CD?**
+
+Yes, use `--silent` mode to disable all audio in automated environments.
+
+**Q: Where are audio files cached?**
+
+TTS cache is in `~/.claude/.cc-hooks/.tts_cache/` directory. Delete it with
+`rm -rf ~/.claude/.cc-hooks/.tts_cache` to regenerate all audio.
+
+**Q: How do I contribute?**
+
+Pull requests welcome! For development, use [Standalone Mode](STANDALONE_README.md). See
+[CLAUDE.md](CLAUDE.md) for development guide.
+
+## Advanced Usage
+
+### Custom ElevenLabs Voice
+
+1. Upload voice at [elevenlabs.io/app/voice-lab](https://elevenlabs.io/app/voice-lab)
+2. Get voice ID
+3. Use with flag:
+   ```bash
+   cld --audio=elevenlabs --elevenlabs-voice-id=your_voice_id
+   ```
+
+### Custom AI Model
+
+Use different AI models for contextual messages:
+
+```bash
+cld --ai=full --openrouter-model=google/gemini-2.5-flash-lite  # Faster, cheaper
+cld --ai=full --openrouter-model=anthropic/claude-3-haiku      # Better quality
+```
+
+### Multi-Instance Support
+
+Run multiple Claude sessions with different configurations simultaneously:
+
+```bash
+# Terminal 1: Work project with Indonesian TTS
+cld --audio=gtts --language=id
+
+# Terminal 2: Side project with premium voice + AI
+cld --audio=elevenlabs --ai=full
+
+# Terminal 3: Meeting mode (silent)
+cld --silent
+
+# Terminal 4: Testing with prerecorded only
+cld --audio=prerecorded
+```
+
+Each session runs independently with its own server and configuration!
+
+## Slash Commands Reference
+
+cc-hooks provides convenient slash commands for management:
+
+### Setup Command
+
+Configure and test your installation:
+
+```bash
+/cc-hooks-plugin:setup           # Interactive setup wizard
+/cc-hooks-plugin:setup check     # Check system requirements
+/cc-hooks-plugin:setup apikeys   # Configure API keys
+/cc-hooks-plugin:setup test      # Test installation
+```
+
+### Update Command
+
+Keep cc-hooks up to date:
+
+```bash
+/cc-hooks-plugin:update          # Check and install updates
+```
+
+## Migrating from Standalone
+
+If you previously used standalone installation, see [MIGRATION.md](MIGRATION.md) for a comprehensive
+migration guide.
+
+**Quick summary:**
+
+1. Remove hooks from `~/.claude/settings.json`
+2. Install plugin via `claude plugin install cc-hooks@cc-hooks-plugin`
+3. Update shell alias to point to plugin path
+4. Export API keys to shell environment (if using)
+5. Test with `/cc-hooks-plugin:setup check`
+
+Your data in `~/.claude/.cc-hooks/` is automatically preserved!
+
+## Support
+
+- **Issues**: [GitHub Issues](https://github.com/husniadil/cc-hooks/issues)
+- **Documentation**: [Main README](README.md) (this file) | [Standalone](STANDALONE_README.md) |
+  [Migration](MIGRATION.md)
+- **Development**: [CLAUDE.md](CLAUDE.md) for technical details
+- **Updates**: Use `/cc-hooks-plugin:update` inside Claude REPL
 
 ## Credits
 
-Sound effects generated using [ElevenLabs](https://elevenlabs.io) voice synthesis technology.
+- **Sound effects**: Generated using [ElevenLabs](https://elevenlabs.io) voice synthesis
+- **TTS**: [Google TTS](https://github.com/pndurette/gTTS), [ElevenLabs](https://elevenlabs.io)
+- **AI**: [OpenRouter](https://openrouter.ai)
 
 ## License
 
 MIT - see [LICENSE](LICENSE) for details.
+
+---
+
+**Made with ❤️ for the Claude Code community**
+
+Enjoy your enhanced coding experience! 🎉

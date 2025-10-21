@@ -7,6 +7,194 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.0.0] - 2025-10-18
+
+### Added
+
+- **Plugin Marketplace Integration**: Official Claude Code plugin system with marketplace support
+  - New `.claude-plugin/` directory structure for plugin metadata and configuration
+  - `plugin.json` with comprehensive plugin metadata (name, version, author, keywords)
+  - `marketplace.json` defining marketplace structure with plugin listings and owner information
+  - Plugin discovery and installation via Claude Code plugin marketplace
+  - 14 comprehensive keywords for better discoverability (audio, tts, productivity, ai-translation,
+    multilingual, etc.)
+  - MIT license specification for open-source distribution
+  - Repository and homepage links for community engagement
+
+- **Slash Commands**: Interactive setup and update commands for plugin users
+  - `/cc-hooks-plugin:setup [check|apikeys|test]` - Comprehensive setup wizard with system checks
+  - `/cc-hooks-plugin:update` - One-command update workflow with auto-detection of installation mode
+  - Setup wizard covers: uv installation, shell alias configuration, API key setup, audio testing
+  - Update command automatically detects plugin vs standalone mode and uses correct update method
+  - Interactive UI with preset configurations (Basic, Enhanced, Full, Premium)
+  - Built-in audio testing with volume control and provider selection
+
+- **YAML Configuration System**: Global configuration file for persistent preferences
+  - New `~/.claude/.cc-hooks/config.yaml` for default settings across both installation modes
+  - Supports audio settings (providers, language, cache), ElevenLabs, silent modes, OpenRouter
+  - Config file creator utility: `uv run utils/config_loader.py --create-example`
+  - Layered configuration: Session DB > CLI flags > YAML config > Shell env > Hardcoded defaults
+  - Enables customization for editors (Zed) that can't pass CLI flags
+  - Terminal users get "set once, forget" experience without typing flags every session
+  - Config persists across updates (shared data directory)
+
+- **Enhanced Documentation System**: Comprehensive documentation for plugin users and marketplace
+  - New `README.md` (plugin mode) as primary installation guide with marketplace setup
+  - New `STANDALONE_README.md` for developers/contributors with manual installation steps
+  - New `MIGRATION.md` guide for seamless transition from standalone to plugin mode
+  - Plugin-specific documentation in `docs/plugins.md` covering plugin architecture
+  - `docs/plugins-reference.md` with technical plugin system reference
+  - `docs/plugin-marketplace.md` with marketplace submission guidelines
+  - Enhanced hooks documentation split into user guide (`docs/hooks.md`) and technical reference
+    (`docs/hooks-reference.md`)
+  - Restructured documentation hierarchy for better navigation and accessibility
+
+### Enhanced
+
+- **Editor Detection System**: Automatic detection of parent editor for intelligent behavior
+  - New `utils/editor_detector.py` module for process chain analysis
+  - Detects VSCode, Zed, Cursor, Windsurf, and terminal sessions
+  - Multi-signature detection (extension dirs, unique agents, app names)
+  - Powers intelligent SessionEnd behavior (silent for VSCode extension workaround)
+  - CLI interface: `uv run utils/editor_detector.py <claude_pid>` or `--test` mode
+  - Enables context-aware audio behavior based on execution environment
+
+- **Type Safety**: Comprehensive type definitions for improved code quality
+  - New `app/types.py` module with TypedDict definitions for data structures
+  - `EventData` type for hook event payloads with optional fields
+  - `SessionRow` type for database session records
+  - Better IDE support and runtime validation throughout the codebase
+
+- **Plugin Hooks Configuration**: Automatic hooks setup via plugin system
+  - New `hooks/hooks.json` defining all hook events for plugin mode
+  - Uses `${CLAUDE_PLUGIN_ROOT}` variable for path-independent hook commands
+  - Covers all 8 hook events (SessionStart, SessionEnd, PreToolUse, PostToolUse, etc.)
+  - No manual `~/.claude/settings.json` editing required for plugin users
+  - Automatic registration during plugin installation
+
+- **Configuration Management**: Streamlined `.env.example` for plugin users
+  - Removed `.env.example` entirely (replaced by YAML config and shell environment)
+  - API keys now only in shell environment (safer for plugin mode - updates delete `.env`)
+  - Configuration examples moved to config.yaml generator and documentation
+  - Clear separation: API keys in shell env, preferences in config.yaml
+  - Smart API key resolution priority: shell env > config.yaml (for non-secret settings)
+  - Better user experience with explicit guidance on where each setting belongs
+
+- **Project Structure Organization**: Enhanced asset and documentation organization
+  - Moved documentation images and assets to cleaner structure
+  - Better separation between user-facing and developer-facing documentation
+  - Enhanced `.gitignore` with logs directory and legacy instance tracking entries
+  - Removed legacy `db_cleanup.sh` (functionality replaced by better database management)
+  - Cleaner repository structure for plugin distribution
+
+- **Documentation Updates**: Comprehensive updates across all documentation files
+  - `README.md` enhanced with plugin installation instructions
+  - `CLAUDE.md` updated with plugin development guidelines
+  - Better quick start examples with common configuration patterns
+  - Enhanced audio system documentation with clearer provider explanations
+  - Improved silent mode documentation with use case examples
+
+### Changed
+
+- **Audio Mappings Modularization**: Extracted audio configurations to dedicated utility module
+  - New `utils/audio_mappings.py` centralizing all audio event configurations
+  - `AudioConfig` dataclass for type-safe audio configuration management
+  - `HOOK_AUDIO_MAPPINGS` dictionary defining sound effects and announcement settings
+  - Moved audio mapping logic from event processor to dedicated module
+  - Better separation of concerns between event processing and audio configuration
+  - Easier maintenance and extension of audio event mappings
+
+- **Installation Mode Detection**: Smart detection system for plugin vs standalone installation
+  - Two-step detection: Plugin mode first (hooks.json), then standalone (settings.json)
+  - Handles edge cases where hooks might be commented out (`#hooks_disabled`)
+  - Used by `/cc-hooks-plugin:update` command for correct update workflow
+  - Programmatic detection via Python script for reliable automation
+  - Supports diagnostic tools showing current installation configuration
+
+- **Sound Effects Enhancements**: Improved audio quality and file organization
+  - Updated 4 core sound effect files (tek, cetek, klek, tung) with better quality recordings
+  - Consistent audio levels and clearer sound signatures across all effects
+  - Better distinction between different event types through improved sound design
+  - Maintained file naming convention for backward compatibility
+
+- **Version Management**: Release version 1.0.0 marking production-ready milestone
+  - Bumped version across all metadata files (plugin.json, marketplace.json, package.json)
+  - Stable API interface with comprehensive documentation
+  - Production-ready error handling and logging
+  - Complete feature set for core functionality
+  - Full documentation coverage for users and developers
+
+### Documentation
+
+- **Dual Installation Mode Documentation**: Clear separation between plugin and standalone modes
+  - `README.md` focuses on plugin mode (recommended for users)
+  - `STANDALONE_README.md` focuses on standalone mode (for developers/contributors)
+  - Both documents cross-reference each other for clarity
+  - Installation path differences clearly documented
+  - Update workflows documented for each mode
+
+- **Migration Documentation**: Comprehensive guide for switching between modes
+  - `MIGRATION.md` provides step-by-step migration from standalone to plugin
+  - Pre-migration checklist covering API keys, aliases, status line config
+  - Data preservation guarantees (shared `~/.claude/.cc-hooks/` directory)
+  - Rollback instructions for reverting to standalone if needed
+  - Edge cases covered (custom sounds, code modifications, multiple installations)
+
+- **Plugin Architecture Documentation**: Complete plugin system documentation
+  - Plugin metadata structure and requirements
+  - Marketplace submission process and guidelines
+  - Plugin discovery and installation workflows
+  - Best practices for plugin development and distribution
+  - Slash commands usage and customization
+
+- **Hooks System Documentation**: Enhanced hooks documentation structure
+  - User-facing `docs/hooks.md` with practical usage examples
+  - Technical `docs/hooks-reference.md` with implementation details
+  - Event reference table with all supported hook events
+  - Custom hook creation guidelines and examples
+
+- **Installation Guides**: Streamlined installation documentation
+  - Plugin marketplace installation as primary method (3 commands)
+  - Standalone manual installation as alternative method (developers)
+  - Prerequisites and system requirements clearly documented
+  - Step-by-step setup verification process with `/cc-hooks-plugin:setup check`
+  - Shell alias setup (cld) with automatic detection
+  - Config file creation with example generator
+
+- **Configuration Documentation**: Comprehensive configuration layer documentation
+  - YAML config file structure and usage examples
+  - Layered configuration priority explanation
+  - API key management best practices (shell env for plugin mode)
+  - Per-session CLI flag overrides
+  - Editor vs terminal usage patterns
+
+### Technical
+
+- **Metadata Architecture**: Plugin system metadata management
+  - JSON schema for plugin and marketplace metadata
+  - Version synchronization across multiple metadata files (plugin.json, marketplace.json,
+    package.json)
+  - Category and tag system for plugin classification
+  - Author information and contact details standardization
+
+- **Shared Data Directory**: Unified data storage for both installation modes
+  - All runtime data in `~/.claude/.cc-hooks/` (database, logs, cache)
+  - Enables seamless migration between plugin and standalone modes
+  - Config file persists across updates and mode switches
+  - Session logs organized by Claude PID for debugging
+
+- **Session Management Enhancements**: Improved session lifecycle and configuration
+  - Session-specific settings stored in sessions table (language, providers, AI features)
+  - Silent modes tracked per session (announcements vs effects)
+  - OpenRouter contextual features configurable per session
+  - TTS provider chain and cache settings per session
+
+- **Development Workflow**: Enhanced development tools and utilities
+  - PEP 723 script dependencies for all utilities
+  - Config loader utility with example generator
+  - Editor detector for intelligent behavior
+  - Installation mode detection script
+
 ## [0.17.1] - 2025-10-10
 
 ### Fixed

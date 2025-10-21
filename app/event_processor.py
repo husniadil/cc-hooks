@@ -3,10 +3,11 @@
 
 import asyncio
 import json
-import os
-from typing import Optional
+import psutil
+from typing import Optional, Dict, Any
 from pathlib import Path
 from config import config
+from app.types import EventData
 from app.event_db import (
     get_next_pending_event,
     mark_event_processing,
@@ -14,6 +15,7 @@ from app.event_db import (
     mark_event_failed,
 )
 from utils.tts_announcer import announce_event
+from utils.audio_mappings import should_play_sound_effect, should_play_announcement
 from utils.constants import HookEvent, ProcessingConstants
 from utils.hooks_constants import is_valid_hook_event
 
@@ -23,26 +25,23 @@ configure_root_logging()
 logger = setup_logger(__name__)
 
 
-async def process_events(instance_id: Optional[str] = None):
-    """Background task for processing events."""
-    # Get current instance ID from parameter or environment
-    if instance_id is None:
-        import os
+async def process_events(server_port: Optional[int] = None) -> None:
+    """Background task for processing events.
 
-        instance_id = os.getenv("CC_INSTANCE_ID")
+    Args:
+        server_port: Port of this server, used to filter events by session ownership
 
-    if not instance_id:
-        logger.warning(
-            "instance_id not provided - event processor will handle all events"
-        )
+    Each server only processes events for sessions it owns (by server_port).
+    """
+    if server_port:
+        logger.info(f"Starting event processor for server port {server_port}")
     else:
-        logger.info(f"Starting event processor for instance: {instance_id}")
+        logger.info("Starting event processor (processing all events)")
 
-    logger.info("Starting event processor")
     while True:
         try:
-            # Get next pending event using database module with instance filter
-            row = await get_next_pending_event(instance_id)
+            # Get next pending event using database module
+            row = await get_next_pending_event()
 
             if row:
                 (
@@ -51,9 +50,59 @@ async def process_events(instance_id: Optional[str] = None):
                     hook_event_name,
                     payload,
                     retry_count,
-                    arguments_json,
                 ) = row
-                logger.info(
+
+                # Filter: only process if session belongs to this server
+                if server_port:
+                    from app.event_db import get_session_by_id
+                    import aiosqlite
+
+                    session = await get_session_by_id(session_id)
+
+                    if not session:
+                        # Session not found - could be temporary (registration delay, DB lock)
+                        # Increment retry count and check if we should fail or retry
+                        new_retry_count = retry_count + 1
+
+                        logger.debug(
+                            f"Session {session_id} not found yet for event {event_id} "
+                            f"(attempt {new_retry_count}/{config.max_retry_count}), will retry"
+                        )
+
+                        # Only mark as failed if we've exceeded max retries
+                        if new_retry_count >= config.max_retry_count:
+                            logger.error(
+                                f"Session {session_id} not found after {config.max_retry_count} attempts, "
+                                f"marking event {event_id} as failed"
+                            )
+                            await mark_event_failed(
+                                event_id,
+                                new_retry_count,
+                                "Session not found after max retries",
+                            )
+                        else:
+                            # Increment retry count but keep as PENDING for retry
+                            async with aiosqlite.connect(config.db_path) as db:
+                                await db.execute(
+                                    "UPDATE events SET retry_count = ? WHERE id = ?",
+                                    (new_retry_count, event_id),
+                                )
+                                await db.commit()
+                            logger.debug(
+                                f"Event {event_id} retry count updated to {new_retry_count}, will retry later"
+                            )
+                        continue
+
+                    if session.get("server_port") != server_port:
+                        logger.debug(
+                            f"Skipping event {event_id} for session {session_id} "
+                            f"(belongs to server port {session.get('server_port')}, we are {server_port})"
+                        )
+                        # Don't process - belongs to another server
+                        # Skip immediately to check next event (no sleep needed)
+                        continue
+
+                logger.debug(
                     f"Processing event {event_id}: {hook_event_name} for session {session_id} (attempt {retry_count + 1}/{config.max_retry_count})"
                 )
 
@@ -65,17 +114,6 @@ async def process_events(instance_id: Optional[str] = None):
                 event_data["session_id"] = session_id
                 event_data["hook_event_name"] = hook_event_name
 
-                # Parse arguments if present
-                arguments = None
-                if arguments_json:
-                    try:
-                        arguments = json.loads(arguments_json)
-                    except json.JSONDecodeError as e:
-                        logger.warning(
-                            f"Failed to parse arguments JSON for event {event_id}: {e}"
-                        )
-                        arguments = None
-
                 # Retry loop
                 current_retry = retry_count
                 success = False
@@ -83,12 +121,12 @@ async def process_events(instance_id: Optional[str] = None):
 
                 while current_retry < config.max_retry_count and not success:
                     try:
-                        await process_single_event(event_data, arguments)
+                        await process_single_event(event_data)
                         success = True
 
                         # Mark as completed
                         await mark_event_completed(event_id, current_retry)
-                        logger.info(
+                        logger.debug(
                             f"Event {event_id} processed successfully after {current_retry + 1} attempt(s)"
                         )
 
@@ -96,11 +134,12 @@ async def process_events(instance_id: Optional[str] = None):
                         current_retry += 1
                         last_error = str(e)
                         logger.warning(
-                            f"Event {event_id} failed (attempt {current_retry}/{config.max_retry_count}): {e}"
+                            f"Event {event_id} failed (attempt {current_retry}/{config.max_retry_count}): {e}",
+                            exc_info=True,
                         )
 
                         if current_retry < config.max_retry_count:
-                            # Small delay before retry
+                            # Delay before next retry attempt
                             await asyncio.sleep(ProcessingConstants.RETRY_DELAY_SECONDS)
 
                 if not success:
@@ -115,13 +154,20 @@ async def process_events(instance_id: Optional[str] = None):
                 await asyncio.sleep(ProcessingConstants.NO_EVENTS_WAIT_SECONDS)
 
         except Exception as e:
-            logger.error(f"Error in event processor: {e}")
+            logger.error(
+                f"Error in event processor main loop: {e}",
+                exc_info=True,
+                extra={"server_port": server_port},
+            )
             await asyncio.sleep(ProcessingConstants.ERROR_WAIT_SECONDS)
 
 
 # Sound effect processing
-async def play_sound(sound_file: str):
-    """Play sound using the sound player utility (BLOCKING - waits for completion)."""
+async def play_sound(sound_file: str) -> bool:
+    """Play sound using the sound player utility (BLOCKING - waits for completion).
+
+    Returns True if sound played successfully, False otherwise.
+    """
     try:
         script_dir = Path(__file__).parent.parent  # Go up from app/ to project root
         sound_player_path = script_dir / "utils" / "sound_player.py"
@@ -140,11 +186,11 @@ async def play_sound(sound_file: str):
             stderr=asyncio.subprocess.PIPE,
         )
 
-        # Wait for sound to finish playing before continuing
+        # Wait for sound playback to complete
         stdout, stderr = await process.communicate()
 
         if process.returncode == 0:
-            logger.info(f"Sound played successfully: {sound_file}")
+            logger.debug(f"Sound played successfully: {sound_file}")
             return True
         else:
             logger.warning(
@@ -153,40 +199,47 @@ async def play_sound(sound_file: str):
             return False
 
     except Exception as e:
-        logger.warning(f"Failed to play sound {sound_file}: {e}")
+        logger.warning(f"Failed to play sound {sound_file}: {e}", exc_info=True)
         return False
 
 
 # TTS announcement processing
 async def play_announcement_sound(
-    hook_event_name: str, event_data: dict, volume: float = 0.5
-):
-    """Play appropriate announcement sound based on hook event context."""
+    hook_event_name: str,
+    event_data: Dict[str, Any],
+    volume: float = 0.5,
+    session_settings: Optional[Dict[str, Any]] = None,
+) -> bool:
+    """Play appropriate announcement sound based on hook event context with session-specific settings.
+
+    Returns True if announcement played successfully, False otherwise.
+    """
     try:
         # Use synchronous announce_event in a thread to avoid blocking
         loop = asyncio.get_event_loop()
         success = await loop.run_in_executor(
-            None, announce_event, hook_event_name, event_data, volume
+            None, announce_event, hook_event_name, event_data, volume, session_settings
         )
 
         if success:
-            logger.info(f"Announced {hook_event_name} event successfully")
+            logger.debug(f"Announced {hook_event_name} event successfully")
         else:
             logger.warning(f"Failed to announce {hook_event_name} event")
 
         return success
 
     except Exception as e:
-        logger.warning(f"Failed to play announcement for {hook_event_name}: {e}")
+        logger.warning(
+            f"Failed to play announcement for {hook_event_name}: {e}", exc_info=True
+        )
         return False
 
 
 # Your custom event processing logic
-async def process_single_event(event_data: dict, arguments: Optional[dict] = None):
-    """
-    Process events based on hook_event_name.
+async def process_single_event(event_data: EventData) -> None:
+    """Process events based on hook_event_name.
+
     Expected fields: session_id, hook_event_name
-    Optional arguments: sound_effect, etc.
     """
     # Validate required fields
     if "session_id" not in event_data:
@@ -197,50 +250,62 @@ async def process_single_event(event_data: dict, arguments: Optional[dict] = Non
     session_id = event_data["session_id"]
     hook_event_name = event_data["hook_event_name"]
 
-    logger.info(f"Processing {hook_event_name} event for session {session_id}")
+    logger.debug(f"Processing {hook_event_name} event for session {session_id}")
 
     # Prepare audio tasks for parallel execution
     audio_tasks = []
 
-    # Check granular silent mode flags
-    silent_announcements = os.getenv("CC_SILENT_ANNOUNCEMENTS", "").lower() == "true"
-    silent_effects = os.getenv("CC_SILENT_EFFECTS", "").lower() == "true"
+    # Get session settings from DB (includes TTS config, silent modes, etc.)
+    session_settings = None
+    from app.event_db import get_session_by_id
 
-    # Check for announcement request (new intelligent mapping)
-    if arguments and "announce" in arguments:
-        if silent_announcements:
-            logger.info(
-                f"Silent announcements mode - skipping announcement for {hook_event_name}"
-            )
-        else:
-            # Volume can be specified, default to 0.5
-            volume = 0.5
-            if isinstance(arguments["announce"], (int, float)):
-                volume = float(arguments["announce"])
-            elif arguments["announce"] is True:
-                volume = 0.5  # Default volume for --announce flag
+    session_settings = await get_session_by_id(session_id)
 
-            logger.info(
-                f"Announcement requested for {hook_event_name} (volume: {volume})"
-            )
-            audio_tasks.append(
-                play_announcement_sound(hook_event_name, event_data, volume)
-            )
+    if not session_settings:
+        logger.warning(
+            f"Session {session_id} not found in DB, using global config defaults"
+        )
 
-    # Check for sound effect argument (backward compatibility)
-    if arguments and "sound_effect" in arguments:
-        if silent_effects:
-            logger.info(
-                f"Silent effects mode - skipping sound effect: {arguments['sound_effect']}"
+    # Check granular silent mode flags (from session DB or fallback to config defaults)
+    silent_announcements = (
+        session_settings.get("silent_announcements") if session_settings else False
+    )
+    silent_effects = (
+        session_settings.get("silent_effects") if session_settings else False
+    )
+
+    # Use audio mappings to determine what to play based on hook event type
+    # Audio control is via claude.sh flags (--audio, --silent, etc.)
+
+    # Check if this event should have announcement (pass session_settings for context)
+    if should_play_announcement(
+        hook_event_name, silent_announcements, session_settings
+    ):
+        volume = 0.5  # Default volume
+        logger.debug(f"Playing announcement for {hook_event_name} (volume: {volume})")
+        audio_tasks.append(
+            play_announcement_sound(
+                hook_event_name, event_data, volume, session_settings
             )
-        else:
-            sound_file = arguments["sound_effect"]
-            logger.info(f"Sound effect requested: {sound_file}")
-            audio_tasks.append(play_sound(sound_file))
+        )
+    elif silent_announcements:
+        logger.debug(
+            f"Silent announcements mode - skipping announcement for {hook_event_name}"
+        )
+
+    # Check if this event should have sound effect
+    sound_file = should_play_sound_effect(hook_event_name, silent_effects)
+    if sound_file:
+        logger.debug(f"Playing sound effect for {hook_event_name}: {sound_file}")
+        audio_tasks.append(play_sound(sound_file))
+    elif silent_effects and should_play_sound_effect(hook_event_name, False):
+        logger.debug(
+            f"Silent effects mode - skipping sound effect for {hook_event_name}"
+        )
 
     # Run all audio tasks in parallel if any exist
     if audio_tasks:
-        logger.info(f"Running {len(audio_tasks)} audio task(s) in parallel")
+        logger.debug(f"Running {len(audio_tasks)} audio task(s) in parallel")
         audio_results = await asyncio.gather(*audio_tasks, return_exceptions=True)
 
         # Log results for debugging
@@ -248,7 +313,7 @@ async def process_single_event(event_data: dict, arguments: Optional[dict] = Non
             if isinstance(result, Exception):
                 logger.warning(f"Audio task {i+1} failed: {result}")
             else:
-                logger.info(f"Audio task {i+1} completed: {result}")
+                logger.debug(f"Audio task {i+1} completed: {result}")
 
         # Check if any audio task failed
         failed_tasks = [r for r in audio_results if isinstance(r, Exception)]
@@ -257,12 +322,12 @@ async def process_single_event(event_data: dict, arguments: Optional[dict] = Non
                 f"{len(failed_tasks)}/{len(audio_tasks)} audio task(s) failed"
             )
         else:
-            logger.info(f"All {len(audio_tasks)} audio task(s) completed successfully")
+            logger.debug(f"All {len(audio_tasks)} audio task(s) completed successfully")
 
     # Check if hook event is valid first
     if not is_valid_hook_event(hook_event_name):
-        logger.info(
-            f"Skipping processing for unknown hook event: {hook_event_name} (session: {session_id})"
+        logger.debug(
+            f"Skipping unknown hook event: {hook_event_name} (session: {session_id})"
         )
         return  # Still process sound effects/announcements but skip event-specific logic
 
@@ -279,6 +344,8 @@ EVENT_CONFIGS = {
         "log_message": "Session {session_id} ended",
         "clear_tracking": True,
         "cleanup_old_files": True,
+        "cleanup_orphaned": True,
+        "delete_session": True,
     },
     HookEvent.PRE_TOOL_USE.value: {
         "log_message": "Session {session_id}: Pre-tool use for {tool_name}",
@@ -308,7 +375,9 @@ EVENT_CONFIGS = {
 }
 
 
-async def handle_generic_event(hook_event_name: str, session_id: str, event_data: dict):
+async def handle_generic_event(
+    hook_event_name: str, session_id: str, event_data: EventData
+) -> None:
     """Generic handler for all event types with configurable behavior."""
     config = EVENT_CONFIGS.get(hook_event_name, {})
 
@@ -325,6 +394,37 @@ async def handle_generic_event(hook_event_name: str, session_id: str, event_data
     logger.info(log_message.format(**log_params))
 
     # Handle special behaviors
+    if config.get("cleanup_orphaned"):
+        try:
+            from app.event_db import (
+                cleanup_orphaned_server_processes,
+                cleanup_orphaned_sessions,
+            )
+
+            # For SessionEnd with reason="clear", exclude current session from cleanup
+            end_reason = event_data.get("reason")
+            exclude_sessions = []
+            if end_reason == "clear":
+                exclude_sessions = [session_id]
+                logger.info(
+                    f"SessionEnd with reason 'clear' - excluding session {session_id} from cleanup"
+                )
+
+            # Kill orphaned server processes first
+            killed_count = await cleanup_orphaned_server_processes()
+            # Then cleanup orphaned sessions from DB (excluding current session if /clear)
+            cleaned_count = await cleanup_orphaned_sessions(
+                exclude_sessions=exclude_sessions
+            )
+
+            if killed_count > 0 or cleaned_count > 0:
+                logger.info(
+                    f"{hook_event_name} cleanup: killed {killed_count} server(s), "
+                    f"cleaned {cleaned_count} session(s)"
+                )
+        except Exception as e:
+            logger.warning(f"Failed to cleanup orphaned resources: {e}")
+
     if config.get("clear_tracking"):
         try:
             from utils.transcript_parser import clear_last_processed_message
@@ -343,8 +443,104 @@ async def handle_generic_event(hook_event_name: str, session_id: str, event_data
             from utils.transcript_parser import cleanup_old_processed_files
 
             cleanup_old_processed_files(max_age_hours=24)
-            logger.debug("Cleaned up old processed files")
+            logger.debug("Cleaned up expired processed files")
         except Exception as e:
-            logger.warning(f"Failed to cleanup old processed files: {e}")
+            logger.warning(f"Failed to cleanup expired processed files: {e}")
+
+    if config.get("delete_session"):
+        # Check end_reason to determine if we should actually delete
+        # For /clear command, keep session alive to enable server reuse
+        end_reason = event_data.get("reason")
+
+        if end_reason == "clear":
+            logger.info(
+                f"SessionEnd with reason 'clear' - keeping session {session_id} in database for server reuse"
+            )
+        else:
+            try:
+                from app.event_db import delete_session
+
+                deleted = await delete_session(session_id)
+                if deleted:
+                    logger.info(
+                        f"Deleted session {session_id} from database (reason: {end_reason})"
+                    )
+                else:
+                    logger.warning(f"Session {session_id} not found for deletion")
+            except Exception as e:
+                logger.warning(f"Failed to delete session {session_id}: {e}")
 
     await asyncio.sleep(ProcessingConstants.DEFAULT_SLEEP_SECONDS)
+
+
+async def monitor_claude_pid(server_port: int) -> None:
+    """Monitor if Claude process is still alive, shutdown if gone.
+
+    Args:
+        server_port: Port of this server, used to identify our session
+
+    Periodically checks if the Claude process (parent) is still running.
+    If Claude exits, triggers server shutdown to prevent orphaned servers.
+    """
+    from app.event_db import get_sessions_by_port
+    import os
+    import signal
+
+    logger.info(f"Starting Claude PID monitor for server port {server_port}")
+
+    check_interval = 30  # Check every 30 seconds
+
+    while True:
+        try:
+            await asyncio.sleep(check_interval)
+
+            # Get session(s) for this server port
+            sessions = await get_sessions_by_port(server_port)
+
+            if not sessions:
+                logger.debug(
+                    f"No sessions found for port {server_port}, continuing monitoring"
+                )
+                continue
+
+            # Check each session's Claude PID
+            for session in sessions:
+                claude_pid = session.get("claude_pid")
+                session_id = session.get("session_id")
+
+                if not claude_pid:
+                    logger.warning(f"Session {session_id} has no claude_pid, skipping")
+                    continue
+
+                # Check if Claude process exists
+                if not psutil.pid_exists(claude_pid):
+                    logger.info(
+                        f"Claude PID {claude_pid} (session {session_id}) no longer exists, "
+                        f"triggering server shutdown"
+                    )
+
+                    # Cleanup session before shutdown
+                    try:
+                        from app.event_db import delete_session
+
+                        deleted = await delete_session(session_id)
+                        if deleted:
+                            logger.info(
+                                f"Cleaned up session {session_id} before shutdown"
+                            )
+                    except Exception as e:
+                        logger.warning(f"Failed to cleanup session {session_id}: {e}")
+
+                    # Trigger graceful shutdown by sending SIGTERM to ourselves
+                    # This allows FastAPI's lifespan to cleanup properly
+                    logger.info("Initiating graceful server shutdown")
+                    os.kill(os.getpid(), signal.SIGTERM)
+                    return
+
+        except asyncio.CancelledError:
+            logger.info("Claude PID monitor cancelled, shutting down")
+            raise
+        except Exception as e:
+            logger.error(f"Error in Claude PID monitor: {e}", exc_info=True)
+            # Continue monitoring even on error
+            await asyncio.sleep(check_interval)

@@ -5,8 +5,7 @@ This service provides a unified interface to OpenRouter's LLM API,
 supporting translation and other text generation tasks for future extensibility.
 """
 
-from typing import Optional
-from pathlib import Path
+from typing import Optional, Dict, Any
 from utils.colored_logger import setup_logger, configure_root_logging
 from utils.openrouter_prompts import (
     TRANSLATION_SYSTEM_PROMPT,
@@ -52,7 +51,8 @@ class OpenRouterService:
             contextual_stop (bool): Whether contextual Stop messages are enabled
             contextual_pretooluse (bool): Whether contextual PreToolUse messages are enabled
         """
-        self.api_key = api_key
+        # Strip and validate API key (empty or whitespace-only strings become empty)
+        self.api_key = api_key.strip() if api_key else ""
         self.model = model
         self.enabled = enabled
         self.contextual_stop = contextual_stop
@@ -63,7 +63,13 @@ class OpenRouterService:
     @property
     def client(self) -> Optional[OpenAI]:
         """Lazy-load OpenAI client configured for OpenRouter."""
-        if not self._client and self.is_available():
+        # Initialize client if we have valid API key and SDK, regardless of enabled flag
+        # (to support session-specific usage even when globally disabled)
+        if (
+            not self._client
+            and self._is_valid_api_key(self.api_key)
+            and OPENAI_AVAILABLE
+        ):
             try:
                 self._client = OpenAI(
                     api_key=self.api_key,
@@ -75,18 +81,52 @@ class OpenRouterService:
                 self._client = None
         return self._client
 
-    def is_available(self) -> bool:
-        """Check if OpenRouter service is available and properly configured."""
-        if self._is_available is not None:
+    def _is_valid_api_key(self, api_key: str) -> bool:
+        """Check if API key is valid (non-empty, not placeholder, reasonable length)"""
+        if not api_key or not api_key.strip():
+            return False
+        # Check for common placeholder values
+        placeholders = ["your_key_here", "your_api_key", "null", "none", "undefined"]
+        if api_key.lower() in placeholders:
+            return False
+        # OpenRouter keys should be at least 20 characters (reasonable minimum)
+        if len(api_key) < 20:
+            return False
+        return True
+
+    def is_available(self, for_translation: bool = False) -> bool:
+        """
+        Check if OpenRouter service is available and properly configured.
+
+        Args:
+            for_translation (bool): If True, only checks API key availability (ignores enabled flag)
+                                   This allows translation to work even when enabled=False globally
+        """
+        if self._is_available is not None and not for_translation:
             return self._is_available
 
-        self._is_available = self.enabled and bool(self.api_key) and OPENAI_AVAILABLE
+        # For translation, only require API key (ignore enabled flag)
+        if for_translation:
+            is_ready = self._is_valid_api_key(self.api_key) and OPENAI_AVAILABLE
+            if not is_ready:
+                if not self._is_valid_api_key(self.api_key):
+                    logger.debug(
+                        "API key not valid for translation (empty, placeholder, or too short)"
+                    )
+                elif not OPENAI_AVAILABLE:
+                    logger.debug("OpenAI SDK not available for translation")
+            return is_ready
+
+        # For other features (contextual messages), check enabled flag
+        self._is_available = (
+            self.enabled and self._is_valid_api_key(self.api_key) and OPENAI_AVAILABLE
+        )
 
         if not self._is_available:
             if not self.enabled:
                 logger.debug("Service is disabled")
-            elif not self.api_key:
-                logger.warning("API key not provided")
+            elif not self._is_valid_api_key(self.api_key):
+                logger.warning("API key not valid (empty, placeholder, or too short)")
             elif not OPENAI_AVAILABLE:
                 logger.warning("OpenAI SDK not available")
 
@@ -113,7 +153,7 @@ class OpenRouterService:
         Returns:
             str or None: Translated text if successful, None if failed
         """
-        if not self.is_available():
+        if not self.is_available(for_translation=True):
             logger.debug("Service not available for translation")
             return None
 
@@ -181,6 +221,7 @@ class OpenRouterService:
         user_prompt: Optional[str] = None,
         claude_response: Optional[str] = None,
         target_language: str = "en",
+        override_contextual_stop: Optional[bool] = None,
     ) -> Optional[str]:
         """
         Generate a contextual completion message based on conversation context.
@@ -190,17 +231,34 @@ class OpenRouterService:
             user_prompt (str, optional): Last user prompt from conversation
             claude_response (str, optional): Last Claude response from conversation
             target_language (str): Target language for the message (default: "en")
+            override_contextual_stop (bool, optional): Override contextual_stop setting (for session-specific config)
 
         Returns:
             str or None: Generated completion message if successful, None if failed
         """
-        if not self.contextual_stop:
+        # Use override if provided, otherwise use instance setting
+        contextual_stop_enabled = (
+            override_contextual_stop
+            if override_contextual_stop is not None
+            else self.contextual_stop
+        )
+
+        if not contextual_stop_enabled:
             logger.debug("Contextual completion messages are disabled")
             return None
 
-        if not self.is_available():
-            logger.debug("Service not available for completion message generation")
-            return None
+        # When using session-specific override, skip the global enabled check
+        # Only check API key availability
+        if override_contextual_stop is not None:
+            # Session-specific mode: only check API key and SDK availability
+            if not (bool(self.api_key) and OPENAI_AVAILABLE):
+                logger.debug("Service not available (missing API key or SDK)")
+                return None
+        else:
+            # Global mode: check full availability including enabled flag
+            if not self.is_available():
+                logger.debug("Service not available for completion message generation")
+                return None
 
         if not user_prompt and not claude_response:
             logger.debug("No conversation context available for completion message")
@@ -264,6 +322,7 @@ class OpenRouterService:
         user_prompt: Optional[str] = None,
         claude_response: Optional[str] = None,
         target_language: str = "en",
+        override_contextual_pretooluse: Optional[bool] = None,
     ) -> Optional[str]:
         """
         Generate a contextual PreToolUse message based on conversation context and tool info.
@@ -274,17 +333,34 @@ class OpenRouterService:
             user_prompt (str, optional): Last user prompt from conversation
             claude_response (str, optional): Last Claude response from conversation
             target_language (str): Target language for the message (default: "en")
+            override_contextual_pretooluse (bool, optional): Override contextual_pretooluse setting (for session-specific config)
 
         Returns:
             str or None: Generated PreToolUse message if successful, None if failed
         """
-        if not self.contextual_pretooluse:
+        # Use override if provided, otherwise use instance setting
+        contextual_pretooluse_enabled = (
+            override_contextual_pretooluse
+            if override_contextual_pretooluse is not None
+            else self.contextual_pretooluse
+        )
+
+        if not contextual_pretooluse_enabled:
             logger.debug("Contextual PreToolUse messages are disabled")
             return None
 
-        if not self.is_available():
-            logger.debug("Service not available for PreToolUse message generation")
-            return None
+        # When using session-specific override, skip the global enabled check
+        # Only check API key availability
+        if override_contextual_pretooluse is not None:
+            # Session-specific mode: only check API key and SDK availability
+            if not (bool(self.api_key) and OPENAI_AVAILABLE):
+                logger.debug("Service not available (missing API key or SDK)")
+                return None
+        else:
+            # Global mode: check full availability including enabled flag
+            if not self.is_available():
+                logger.debug("Service not available for PreToolUse message generation")
+                return None
 
         if not user_prompt and not claude_response:
             logger.debug("No conversation context available for PreToolUse message")
@@ -481,7 +557,7 @@ def translate_text_if_available(
     text: str,
     target_language: str,
     hook_event_name: Optional[str] = None,
-    event_data: Optional[dict] = None,
+    event_data: Optional[Dict[str, Any]] = None,
 ) -> str:
     """
     Convenience function to translate text if OpenRouter is available.
@@ -517,6 +593,7 @@ def generate_completion_message_if_available(
     claude_response: Optional[str] = None,
     target_language: str = "en",
     fallback_message: str = "Task completed successfully",
+    override_contextual_stop: Optional[bool] = None,
 ) -> str:
     """
     Convenience function to generate completion message if OpenRouter is available.
@@ -528,6 +605,7 @@ def generate_completion_message_if_available(
         claude_response (str, optional): Last Claude response from conversation
         target_language (str): Target language for the message (default: "en")
         fallback_message (str): Default message if generation fails
+        override_contextual_stop (bool, optional): Override contextual_stop setting (for session-specific config)
 
     Returns:
         str: Generated contextual completion message or fallback message
@@ -542,6 +620,7 @@ def generate_completion_message_if_available(
         user_prompt=user_prompt,
         claude_response=claude_response,
         target_language=target_language,
+        override_contextual_stop=override_contextual_stop,
     )
 
     if completion_message:
@@ -558,6 +637,7 @@ def generate_pre_tool_message_if_available(
     claude_response: Optional[str] = None,
     target_language: str = "en",
     fallback_message: Optional[str] = None,
+    override_contextual_pretooluse: Optional[bool] = None,
 ) -> str:
     """
     Convenience function to generate PreToolUse message if OpenRouter is available.
@@ -570,6 +650,7 @@ def generate_pre_tool_message_if_available(
         claude_response (str, optional): Last Claude response from conversation
         target_language (str): Target language for the message (default: "en")
         fallback_message (str, optional): Default message if generation fails (auto-generated if None)
+        override_contextual_pretooluse (bool, optional): Override contextual_pretooluse setting (for session-specific config)
 
     Returns:
         str: Generated contextual PreToolUse message or fallback message
@@ -595,6 +676,7 @@ def generate_pre_tool_message_if_available(
         user_prompt=user_prompt,
         claude_response=claude_response,
         target_language=target_language,
+        override_contextual_pretooluse=override_contextual_pretooluse,
     )
 
     if pre_tool_message:

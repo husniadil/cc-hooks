@@ -6,7 +6,7 @@ used by all TTS providers to avoid duplication and ensure consistency.
 """
 
 from typing import Dict, Tuple, Optional, Any, Union
-from utils.hooks_constants import HookEvent
+from utils.constants import HookEvent, SoundFiles, EventSource
 from utils.colored_logger import setup_logger
 
 logger = setup_logger(__name__)
@@ -15,88 +15,139 @@ logger = setup_logger(__name__)
 # Format: (hook_event_name, source) : "filename.mp3"
 HOOK_EVENT_SOUND_MAP: Dict[Tuple[str, Optional[str]], str] = {
     # SessionStart events
-    (HookEvent.SESSION_START.value, "startup"): "session_start_startup.mp3",
-    (HookEvent.SESSION_START.value, "resume"): "session_start_resume.mp3",
-    (HookEvent.SESSION_START.value, "clear"): "session_start_clear.mp3",
-    (HookEvent.SESSION_START.value, "compact"): "session_start_compact.mp3",
-    (HookEvent.SESSION_START.value, None): "session_start_startup.mp3",  # fallback
-    (HookEvent.SESSION_START.value, "unknown"): "session_start_startup.mp3",  # fallback
+    (
+        HookEvent.SESSION_START.value,
+        EventSource.SessionStart.STARTUP,
+    ): SoundFiles.SESSION_START_STARTUP,
+    (
+        HookEvent.SESSION_START.value,
+        EventSource.SessionStart.RESUME,
+    ): SoundFiles.SESSION_START_RESUME,
+    (
+        HookEvent.SESSION_START.value,
+        EventSource.SessionStart.CLEAR,
+    ): SoundFiles.SESSION_START_CLEAR,
+    (
+        HookEvent.SESSION_START.value,
+        EventSource.SessionStart.COMPACT,
+    ): SoundFiles.SESSION_START_COMPACT,
+    (HookEvent.SESSION_START.value, None): SoundFiles.SESSION_START_STARTUP,  # fallback
+    (
+        HookEvent.SESSION_START.value,
+        EventSource.SessionStart.UNKNOWN,
+    ): SoundFiles.SESSION_START_STARTUP,  # fallback
     # SessionEnd events
-    (HookEvent.SESSION_END.value, "clear"): "session_end_clear.mp3",
-    (HookEvent.SESSION_END.value, "logout"): "session_end_logout.mp3",
     (
         HookEvent.SESSION_END.value,
-        "prompt_input_exit",
-    ): "session_end_prompt_input_exit.mp3",
-    (HookEvent.SESSION_END.value, "other"): "session_end_other.mp3",
-    (HookEvent.SESSION_END.value, None): "session_end_other.mp3",  # fallback
+        EventSource.SessionEnd.CLEAR,
+    ): SoundFiles.SESSION_END_CLEAR,
+    (
+        HookEvent.SESSION_END.value,
+        EventSource.SessionEnd.LOGOUT,
+    ): SoundFiles.SESSION_END_LOGOUT,
+    (
+        HookEvent.SESSION_END.value,
+        EventSource.SessionEnd.PROMPT_INPUT_EXIT,
+    ): SoundFiles.SESSION_END_PROMPT_INPUT_EXIT,
+    (
+        HookEvent.SESSION_END.value,
+        EventSource.SessionEnd.OTHER,
+    ): SoundFiles.SESSION_END_OTHER,
+    (HookEvent.SESSION_END.value, None): SoundFiles.SESSION_END_OTHER,  # fallback
     # PreToolUse events
-    (HookEvent.PRE_TOOL_USE.value, "tool_running"): "pre_tool_use_tool_running.mp3",
     (
         HookEvent.PRE_TOOL_USE.value,
-        "command_blocked",
-    ): "pre_tool_use_command_blocked.mp3",
-    (HookEvent.PRE_TOOL_USE.value, None): "pre_tool_use_tool_running.mp3",  # fallback
+        EventSource.PreToolUse.TOOL_RUNNING,
+    ): SoundFiles.PRE_TOOL_USE_TOOL_RUNNING,
+    (
+        HookEvent.PRE_TOOL_USE.value,
+        EventSource.PreToolUse.COMMAND_BLOCKED,
+    ): SoundFiles.PRE_TOOL_USE_COMMAND_BLOCKED,
+    (
+        HookEvent.PRE_TOOL_USE.value,
+        None,
+    ): SoundFiles.PRE_TOOL_USE_TOOL_RUNNING,  # fallback
     # PostToolUse events
     (
         HookEvent.POST_TOOL_USE.value,
-        "tool_completed",
-    ): "post_tool_use_tool_completed.mp3",
+        EventSource.PostToolUse.TOOL_COMPLETED,
+    ): SoundFiles.POST_TOOL_USE_TOOL_COMPLETED,
     (
         HookEvent.POST_TOOL_USE.value,
         None,
-    ): "post_tool_use_tool_completed.mp3",  # fallback
+    ): SoundFiles.POST_TOOL_USE_TOOL_COMPLETED,  # fallback
     # Notification events
-    (HookEvent.NOTIFICATION.value, "general"): "notification_general.mp3",
-    (HookEvent.NOTIFICATION.value, "permission"): "notification_permission.mp3",
-    (HookEvent.NOTIFICATION.value, "waiting"): "notification_waiting.mp3",
-    (HookEvent.NOTIFICATION.value, None): "notification_general.mp3",  # fallback
+    (
+        HookEvent.NOTIFICATION.value,
+        EventSource.Notification.GENERAL,
+    ): SoundFiles.NOTIFICATION_GENERAL,
+    (
+        HookEvent.NOTIFICATION.value,
+        EventSource.Notification.PERMISSION,
+    ): SoundFiles.NOTIFICATION_PERMISSION,
+    (
+        HookEvent.NOTIFICATION.value,
+        EventSource.Notification.WAITING,
+    ): SoundFiles.NOTIFICATION_WAITING,
+    (HookEvent.NOTIFICATION.value, None): SoundFiles.NOTIFICATION_GENERAL,  # fallback
     # UserPromptSubmit events
-    (HookEvent.USER_PROMPT_SUBMIT.value, "prompt"): "user_prompt_submit_prompt.mp3",
+    (
+        HookEvent.USER_PROMPT_SUBMIT.value,
+        EventSource.UserPromptSubmit.PROMPT,
+    ): SoundFiles.USER_PROMPT_SUBMIT_PROMPT,
     (
         HookEvent.USER_PROMPT_SUBMIT.value,
         None,
-    ): "user_prompt_submit_prompt.mp3",  # fallback
+    ): SoundFiles.USER_PROMPT_SUBMIT_PROMPT,  # fallback
     # Stop events
-    (HookEvent.STOP.value, "task_completed"): "stop_task_completed.mp3",
-    (HookEvent.STOP.value, None): "stop_task_completed.mp3",  # fallback
+    (
+        HookEvent.STOP.value,
+        EventSource.Stop.TASK_COMPLETED,
+    ): SoundFiles.STOP_TASK_COMPLETED,
+    (HookEvent.STOP.value, None): SoundFiles.STOP_TASK_COMPLETED,  # fallback
     # SubagentStop events
     (
         HookEvent.SUBAGENT_STOP.value,
-        "agent_completed",
-    ): "subagent_stop_agent_completed.mp3",
+        EventSource.SubagentStop.AGENT_COMPLETED,
+    ): SoundFiles.SUBAGENT_STOP_AGENT_COMPLETED,
     (
         HookEvent.SUBAGENT_STOP.value,
         None,
-    ): "subagent_stop_agent_completed.mp3",  # fallback
+    ): SoundFiles.SUBAGENT_STOP_AGENT_COMPLETED,  # fallback
     # PreCompact events
-    (HookEvent.PRE_COMPACT.value, "auto"): "pre_compact_auto.mp3",
-    (HookEvent.PRE_COMPACT.value, "manual"): "pre_compact_manual.mp3",
-    (HookEvent.PRE_COMPACT.value, None): "pre_compact_auto.mp3",  # fallback
+    (
+        HookEvent.PRE_COMPACT.value,
+        EventSource.PreCompact.AUTO,
+    ): SoundFiles.PRE_COMPACT_AUTO,
+    (
+        HookEvent.PRE_COMPACT.value,
+        EventSource.PreCompact.MANUAL,
+    ): SoundFiles.PRE_COMPACT_MANUAL,
+    (HookEvent.PRE_COMPACT.value, None): SoundFiles.PRE_COMPACT_AUTO,  # fallback
 }
 
 # Audio descriptions mapping for sound files
 # Maps sound file names to their descriptive content for UI/accessibility features
 AUDIO_DESCRIPTIONS_MAP: Dict[str, str] = {
-    "notification_general.mp3": "Notification",
-    "notification_permission.mp3": "Permission required",
-    "notification_waiting.mp3": "Waiting for input",
-    "post_tool_use_tool_completed.mp3": "Tool completed",
-    "pre_compact_auto.mp3": "Auto compacting conversation",
-    "pre_compact_manual.mp3": "Compacting conversation",
-    "pre_tool_use_command_blocked.mp3": "Command Blocked",
-    "pre_tool_use_tool_running.mp3": "Running tool",
-    "session_end_clear.mp3": "Session cleared",
-    "session_end_logout.mp3": "Logout",
-    "session_end_other.mp3": "Interrupted",
-    "session_end_prompt_input_exit.mp3": "Session ended",
-    "session_start_clear.mp3": "Fresh start",
-    "session_start_compact.mp3": "Session refreshed",
-    "session_start_resume.mp3": "Session resume",
-    "session_start_startup.mp3": "Claude Code ready",
-    "stop_task_completed.mp3": "Task completed successfully",
-    "subagent_stop_agent_completed.mp3": "Agent completed successfully",
-    "user_prompt_submit_prompt.mp3": "Prompt submitted",
+    SoundFiles.NOTIFICATION_GENERAL: "Notification",
+    SoundFiles.NOTIFICATION_PERMISSION: "Permission required",
+    SoundFiles.NOTIFICATION_WAITING: "Waiting for input",
+    SoundFiles.POST_TOOL_USE_TOOL_COMPLETED: "Tool completed",
+    SoundFiles.PRE_COMPACT_AUTO: "Auto compacting conversation",
+    SoundFiles.PRE_COMPACT_MANUAL: "Compacting conversation",
+    SoundFiles.PRE_TOOL_USE_COMMAND_BLOCKED: "Command Blocked",
+    SoundFiles.PRE_TOOL_USE_TOOL_RUNNING: "Running tool",
+    SoundFiles.SESSION_END_CLEAR: "Session cleared",
+    SoundFiles.SESSION_END_LOGOUT: "Logout",
+    SoundFiles.SESSION_END_OTHER: "Interrupted",
+    SoundFiles.SESSION_END_PROMPT_INPUT_EXIT: "Session ended",
+    SoundFiles.SESSION_START_CLEAR: "Fresh start",
+    SoundFiles.SESSION_START_COMPACT: "Session refreshed",
+    SoundFiles.SESSION_START_RESUME: "Session resume",
+    SoundFiles.SESSION_START_STARTUP: "Claude Code ready",
+    SoundFiles.STOP_TASK_COMPLETED: "Task completed successfully",
+    SoundFiles.SUBAGENT_STOP_AGENT_COMPLETED: "Agent completed successfully",
+    SoundFiles.USER_PROMPT_SUBMIT_PROMPT: "Prompt submitted",
 }
 
 
@@ -125,11 +176,11 @@ def extract_source_from_event_data(
         message = str(event_data["message"])
 
         if message.startswith("Claude needs your permission"):
-            return "permission"
+            return EventSource.Notification.PERMISSION
         elif message.startswith("Claude is waiting for your input"):
-            return "waiting"
+            return EventSource.Notification.WAITING
         else:
-            return "general"
+            return EventSource.Notification.GENERAL
 
     # Special handling for PreToolUse/PostToolUse events - extract tool name for context
     if event_name in [HookEvent.PRE_TOOL_USE.value, HookEvent.POST_TOOL_USE.value]:

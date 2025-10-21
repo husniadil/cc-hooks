@@ -200,36 +200,33 @@ else
     echo "        Please configure Claude Code settings as shown in README.md"
 fi
 
-# 3. Environment Configuration
-print_section "Environment Configuration"
+# 3. Environment Configuration (Optional)
+print_section "Environment Configuration (Optional)"
 
 ENV_FILE="$SCRIPT_DIR/.env"
 ENV_EXAMPLE="$SCRIPT_DIR/.env.example"
 
+echo -e "  ${CYAN}ℹ${NC} .env file is completely optional - only needed for API keys"
+
 if [ -f "$ENV_FILE" ]; then
     print_success ".env file exists"
-    
-    # Check for key variables (without exposing values)
-    if grep -q "^PORT=" "$ENV_FILE"; then
-        PORT=$(grep "^PORT=" "$ENV_FILE" | cut -d= -f2)
-        print_info "Server port configured: $PORT"
-    fi
-    
+
+    # Check for API keys only (without exposing values)
     if grep -q "^OPENROUTER_API_KEY=." "$ENV_FILE"; then
-        print_success "OpenRouter API key is configured"
+        print_success "OpenRouter API key configured (enables AI features with --ai flag)"
     else
-        print_info "OpenRouter API key not configured (optional)"
+        print_info "OpenRouter API key not set (AI features will be unavailable)"
     fi
-    
+
     if grep -q "^ELEVENLABS_API_KEY=." "$ENV_FILE"; then
-        print_success "ElevenLabs API key is configured"
+        print_success "ElevenLabs API key configured (enables premium TTS with --audio=elevenlabs)"
     else
-        print_info "ElevenLabs API key not configured (optional)"
+        print_info "ElevenLabs API key not set (premium TTS will be unavailable)"
     fi
 else
-    print_warning ".env file not found"
-    if [ -f "$ENV_EXAMPLE" ]; then
-        echo "        Run: cp .env.example .env"
+    print_info ".env file not found - using defaults (prerecorded audio, no AI features)"
+    if [ "$VERBOSE" = true ] && [ -f "$ENV_EXAMPLE" ]; then
+        print_info "To enable premium features, create .env: cp .env.example .env"
     fi
 fi
 
@@ -270,8 +267,8 @@ if [ -d "$SCRIPT_DIR/sound" ]; then
     fi
 fi
 
-# Check writable directories
-WRITABLE_DIRS=(".tts_cache" ".claude-instances")
+# Check writable directories (transcript temp files now in system temp, not project dir)
+WRITABLE_DIRS=(".tts_cache")
 for dir in "${WRITABLE_DIRS[@]}"; do
     if [ -d "$SCRIPT_DIR/$dir" ] || mkdir -p "$SCRIPT_DIR/$dir" 2>/dev/null; then
         if [ -w "$SCRIPT_DIR/$dir" ]; then
@@ -376,16 +373,7 @@ else
         echo -e "${GREEN}✓${NC}"
         print_info "Server is responsive at http://localhost:$SERVER_PORT"
         SERVER_RUNNING=true
-        
-        # Test database
-        echo -n "  Testing database access... "
-        if curl -s "http://localhost:$SERVER_PORT/events/status?instance_id=$CC_INSTANCE_ID" | grep -q "queued\|processing" 2>/dev/null; then
-            echo -e "${GREEN}✓${NC}"
-        else
-            echo -e "${GREEN}✓${NC}"
-            print_info "Database is accessible"
-        fi
-    
+
     else
         echo -e "${RED}✗${NC}"
         ((FAILURES++))
@@ -398,17 +386,36 @@ else
     
     # Test hook script (regardless of server health check result)
     echo -n "  Testing hook script... "
-    TEST_EVENT='{"session_id": "test", "hook_event_name": "Test", "instance_id": "'$TEST_INSTANCE_ID'"}'
-    if [ "$SERVER_RUNNING" = true ] && echo "$TEST_EVENT" | CC_HOOKS_PORT=$SERVER_PORT uv run hooks.py 2>/dev/null; then
-        echo -e "${GREEN}✓${NC}"
+    TEST_EVENT='{"session_id": "test", "hook_event_name": "Test"}'
+    if [ "$SERVER_RUNNING" = true ]; then
+        # Capture both stdout and stderr to check for expected error (with timeout)
+        HOOK_OUTPUT=$(echo "$TEST_EVENT" | timeout 3 sh -c "CC_HOOKS_PORT=$SERVER_PORT uv run hooks.py 2>&1" || true)
+        HOOK_EXIT_CODE=$?
+
+        # Hook script is expected to fail with "Failed to detect Claude PID" when not running inside Claude
+        # This is normal - it means the script is working correctly
+        if echo "$HOOK_OUTPUT" | grep -q "Failed to detect Claude PID"; then
+            echo -e "${GREEN}✓${NC}"
+            print_info "Hook script works (Claude PID detection expected to fail outside Claude Code)"
+        elif [ $HOOK_EXIT_CODE -eq 124 ]; then
+            echo -e "${YELLOW}⚠${NC}"
+            ((WARNINGS++))
+            print_info "Hook script test timed out (may be waiting for input)"
+        elif [ $HOOK_EXIT_CODE -eq 0 ]; then
+            echo -e "${GREEN}✓${NC}"
+            print_info "Hook script executed successfully"
+        else
+            echo -e "${YELLOW}⚠${NC}"
+            ((WARNINGS++))
+            print_info "Hook script may have issues (expected when not running from Claude Code)"
+            if [ "$VERBOSE" = true ] && [ -n "$HOOK_OUTPUT" ]; then
+                print_info "Error: $(echo "$HOOK_OUTPUT" | head -1)"
+            fi
+        fi
     else
         echo -e "${YELLOW}⚠${NC}"
         ((WARNINGS++))
-        if [ "$SERVER_RUNNING" = false ]; then
-            print_info "Hook script test skipped (server not running)"
-        else
-            print_info "Hook script may have connection issues"
-        fi
+        print_info "Hook script test skipped (server not running)"
     fi
     
     # Kill test server if it was started
@@ -433,17 +440,21 @@ if [ "$FAILURES" -eq 0 ] && [ "$WARNINGS" -eq 0 ]; then
     echo "Next steps:"
     echo "  1. Start cc-hooks with: ./claude.sh"
     echo "  2. Or use the alias: cld (if configured)"
+    echo ""
+    echo "Default mode uses prerecorded audio (no API keys needed)."
+    echo "To enable premium features, see README.md for setup instructions."
     exit 0
 elif [ "$FAILURES" -eq 0 ]; then
     echo -e "${YELLOW}${BOLD}⚠ Setup is functional with $WARNINGS warning(s)${NC}"
     echo ""
     echo "Your installation will work but some features may be limited."
+    echo "Most warnings are about optional features (ElevenLabs, OpenRouter, etc.)."
     echo "Run with --verbose for more details."
     exit 0
 else
     echo -e "${RED}${BOLD}✗ Found $FAILURES critical issue(s) and $WARNINGS warning(s)${NC}"
     echo ""
     echo "Please fix the critical issues before using cc-hooks."
-    echo "Run with --fix to attempt automatic fixes."
+    echo "Note: Warnings about optional features (.env, API keys) are not critical."
     exit 1
 fi

@@ -3,6 +3,7 @@
 
 import aiosqlite
 from typing import Dict, Any
+from pathlib import Path
 from config import config
 from utils.colored_logger import setup_logger
 
@@ -63,6 +64,49 @@ MIGRATIONS = [
             )
         """,
     },
+    {
+        "version": 7,
+        "description": "Create sessions table with complete schema",
+        "sql": """
+            CREATE TABLE IF NOT EXISTS sessions (
+                session_id TEXT PRIMARY KEY,
+                claude_pid INTEGER NOT NULL,
+                server_port INTEGER NOT NULL,
+                tts_language TEXT NULL,
+                tts_providers TEXT NULL,
+                tts_cache_enabled INTEGER DEFAULT 1,
+                elevenlabs_voice_id TEXT NULL,
+                elevenlabs_model_id TEXT NULL,
+                silent_announcements INTEGER DEFAULT 0,
+                silent_effects INTEGER DEFAULT 0,
+                openrouter_enabled INTEGER DEFAULT 0,
+                openrouter_model TEXT NULL,
+                openrouter_contextual_stop INTEGER DEFAULT 0,
+                openrouter_contextual_pretooluse INTEGER DEFAULT 0,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """,
+    },
+    {
+        "version": 8,
+        "description": "Drop suboptimal idx_events_processing index (fix v4/v8 conflict)",
+        "sql": "DROP INDEX IF EXISTS idx_events_processing",
+    },
+    {
+        "version": 9,
+        "description": "Create optimized events index for query performance",
+        "sql": "CREATE INDEX IF NOT EXISTS idx_events_processing ON events (status, created_at, id)",
+    },
+    {
+        "version": 10,
+        "description": "Create index on sessions claude_pid",
+        "sql": "CREATE INDEX IF NOT EXISTS idx_sessions_claude_pid ON sessions (claude_pid)",
+    },
+    {
+        "version": 11,
+        "description": "Drop arguments column from events table",
+        "sql": "ALTER TABLE events DROP COLUMN arguments",
+    },
 ]
 
 
@@ -92,8 +136,13 @@ async def get_current_version() -> int:
 async def apply_migration(migration: Dict[str, Any]):
     """Apply a single migration"""
     async with aiosqlite.connect(config.db_path) as db:
-        # Execute the migration SQL
-        await db.execute(migration["sql"])
+        # Execute the migration SQL - handle multiple statements
+        sql_statements = [
+            stmt.strip() for stmt in migration["sql"].split(";") if stmt.strip()
+        ]
+
+        for statement in sql_statements:
+            await db.execute(statement)
 
         # Record the migration as applied
         await db.execute(
@@ -109,6 +158,10 @@ async def apply_migration(migration: Dict[str, Any]):
 
 async def run_migrations():
     """Run all pending migrations"""
+    # Ensure database parent directory exists
+    db_path = Path(config.db_path)
+    db_path.parent.mkdir(parents=True, exist_ok=True)
+
     await create_migrations_table()
     current_version = await get_current_version()
 

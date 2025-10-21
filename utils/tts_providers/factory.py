@@ -5,7 +5,7 @@ This module handles instantiation of different TTS providers
 and provides a clean interface for provider creation.
 """
 
-from typing import Dict, Type, Optional
+from typing import Dict, Type, Optional, List
 from .base import TTSProvider
 from .prerecorded_provider import PrerecordedProvider
 from .gtts_provider import GTTSProvider
@@ -101,12 +101,11 @@ def create_provider(provider_name: str, **kwargs) -> Optional[TTSProvider]:
         return None
 
 
-def get_available_providers() -> list:
-    """
-    Get list of available TTS provider names.
+def get_available_providers() -> List[str]:
+    """Get list of available TTS provider names.
 
     Returns:
-        list: List of provider names that can be instantiated
+        List of provider names that can be instantiated
     """
     available = []
 

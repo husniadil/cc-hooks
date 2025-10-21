@@ -1,0 +1,29 @@
+{
+  "name": "cc-hooks-plugin",
+  "version": "1.0.0",
+  "description": "Audio feedback system with multilingual TTS announcements, AI-powered contextual messages, and sound effects for Claude Code. Transform your coding experience with intelligent voice feedback that keeps you informed without breaking your flow.",
+  "author": {
+    "name": "Husni Adil Makmur",
+    "email": "husniadil@gmail.com",
+    "url": "https://github.com/husniadil"
+  },
+  "homepage": "https://github.com/husniadil/cc-hooks#readme",
+  "repository": "https://github.com/husniadil/cc-hooks",
+  "license": "MIT",
+  "keywords": [
+    "audio",
+    "tts",
+    "text-to-speech",
+    "hooks",
+    "productivity",
+    "ai-translation",
+    "multilingual",
+    "elevenlabs",
+    "gtts",
+    "openrouter",
+    "sound-effects",
+    "voice-feedback",
+    "automation",
+    "development-tools"
+  ]
+}

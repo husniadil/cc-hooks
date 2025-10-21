@@ -6,6 +6,7 @@
 #     "elevenlabs>=2.16.0,<3",
 #     "openai>=2.1.0,<3",
 #     "python-dotenv>=1.1.1,<2",
+#     "psutil>=6.1.1,<7",
 # ]
 # ///
 """
@@ -181,6 +182,87 @@ class StatusLine:
         empty = width - filled
         return "=" * filled + "-" * empty
 
+    def _detect_claude_pid(self):
+        """Detect Claude binary PID by walking up the process tree.
+        Returns the PID of the Claude process or None if not found.
+        """
+        try:
+            import psutil
+
+            current_process = psutil.Process(os.getpid())
+
+            while current_process:
+                cmdline = " ".join(current_process.cmdline()).lower()
+                name = current_process.name().lower()
+
+                # Only match actual claude binary, not paths containing ".claude/"
+                # Check if name is exactly "claude" or cmdline starts with "claude "
+                is_claude_binary = (
+                    name == "claude"
+                    or cmdline.startswith("claude ")
+                    or cmdline == "claude"
+                )
+
+                if is_claude_binary:
+                    claude_pid = current_process.pid
+                    self._debug_log(f"Found Claude PID: {claude_pid}")
+                    return claude_pid
+
+                if current_process.parent():
+                    current_process = current_process.parent()
+                else:
+                    break
+
+            self._debug_log("Could not detect Claude PID")
+            return None
+
+        except ImportError:
+            self._debug_log("psutil package not available")
+            return None
+        except Exception as e:
+            self._debug_log(f"Error detecting Claude PID: {e}")
+            return None
+
+    def _find_server_port_for_pid(self, claude_pid):
+        """Find server port for a given Claude PID.
+        Returns port number or None if not found.
+        """
+        if not claude_pid:
+            return None
+
+        try:
+            import requests
+
+            # Query each potential server port to find our instance settings
+            # Use shorter timeout and check fewer ports for faster failure
+            for port_offset in range(3):  # Reduced from 10 to 3
+                test_port = NetworkConstants.DEFAULT_PORT + port_offset
+                try:
+                    url = get_server_url(test_port, f"/instances/{claude_pid}/settings")
+                    response = requests.get(
+                        url, timeout=0.1
+                    )  # Reduced from 0.5s to 0.1s
+                    if response.status_code == 200:
+                        settings = response.json()
+                        port = settings.get("server_port")
+                        self._debug_log(
+                            f"Found server port {port} for PID {claude_pid}"
+                        )
+                        return port
+                except:
+                    continue
+
+            # No server found - this is normal for status_line processes
+            # Don't log as it creates noise
+            return None
+
+        except ImportError:
+            self._debug_log("requests package not available")
+            return None
+        except Exception as e:
+            self._debug_log(f"Error finding server port: {e}")
+            return None
+
     def _get_git_info(self):
         """Get git branch and status information"""
         git_branch = ""
@@ -234,9 +316,15 @@ class StatusLine:
 
     def _get_cc_hooks_health(self):
         """Get cc-hooks server health status"""
-        # Get port from environment variable (set by claude.sh) or use default
-        port = int(os.getenv("CC_HOOKS_PORT", str(NetworkConstants.DEFAULT_PORT)))
+        # Detect Claude PID and find its server port
+        claude_pid = self._detect_claude_pid()
+        port = self._find_server_port_for_pid(claude_pid)
 
+        # Fallback to env var or default port if detection failed
+        if not port:
+            port = int(os.getenv("CC_HOOKS_PORT", str(NetworkConstants.DEFAULT_PORT)))
+
+        # Check health on detected port
         try:
             import requests
 
@@ -245,9 +333,10 @@ class StatusLine:
                 return True, "🟢", "online", port
             else:
                 return False, "❌", "error", port
+
         except ImportError:
-            self._debug_log("requests package not available for health check")
-            return False, "❓", "no-requests", port
+            self._debug_log("requests package not available")
+            return False, "❓", "no-deps", port
         except requests.exceptions.RequestException:
             return False, "🔴", "offline", port
         except Exception as e:
@@ -259,8 +348,13 @@ class StatusLine:
         update_available = False
         update_msg = ""
 
-        # Get port from environment variable or use default
-        port = int(os.getenv("CC_HOOKS_PORT", str(NetworkConstants.DEFAULT_PORT)))
+        # Detect Claude PID and find its server port (reuse same helper functions)
+        claude_pid = self._detect_claude_pid()
+        port = self._find_server_port_for_pid(claude_pid)
+
+        # Fallback to env var or default port if detection failed
+        if not port:
+            port = int(os.getenv("CC_HOOKS_PORT", str(NetworkConstants.DEFAULT_PORT)))
 
         try:
             import requests
@@ -274,9 +368,17 @@ class StatusLine:
                     commits_msg = f"{commits_behind} commit" + (
                         "s" if commits_behind > 1 else ""
                     )
-                    # Get repo root path
+                    # Get repo root path and detect installation mode
                     repo_root = Path(__file__).parent.parent.resolve()
-                    update_msg = f"⚠ cc-hooks: update available ({commits_msg} behind) - run: cd {repo_root} && npm run update"
+                    repo_root_str = str(repo_root)
+
+                    # Check if installed as plugin (path contains .claude/plugins/marketplaces/)
+                    if ".claude/plugins/marketplaces/" in repo_root_str:
+                        # Plugin mode - use marketplace update command
+                        update_msg = f"⚠ cc-hooks: update available ({commits_msg} behind) - run: claude plugin marketplace update cc-hooks-plugin"
+                    else:
+                        # Standalone mode - use npm update command
+                        update_msg = f"⚠ cc-hooks: update available ({commits_msg} behind) - run: cd {repo_root} && npm run update"
         except ImportError:
             self._debug_log("requests package not available for update check")
         except Exception as e:
@@ -365,19 +467,83 @@ class StatusLine:
 
         return session_txt, session_pct, session_bar, cost_usd, cost_per_hour
 
+    def _get_session_settings(self):
+        """Get session settings from database for current Claude instance"""
+        # Detect Claude PID and find its server port
+        claude_pid = self._detect_claude_pid()
+        if not claude_pid:
+            # No Claude PID detected - likely status_line running standalone
+            return None
+
+        port = self._find_server_port_for_pid(claude_pid)
+
+        # If no server found for this PID, don't try to fetch settings
+        # This avoids unnecessary 404 requests in logs
+        if not port:
+            return None
+
+        try:
+            import requests
+
+            url = get_server_url(port, f"/instances/{claude_pid}/settings")
+            response = requests.get(url, timeout=0.5)  # Reduced from 2s to 0.5s
+            if response.status_code == 200:
+                settings = response.json()
+                self._debug_log(f"Fetched session settings from server: {settings}")
+                return settings
+            else:
+                # Server exists but no session for this PID - normal for --resume
+                return None
+
+        except ImportError:
+            self._debug_log("requests package not available")
+            return None
+        except Exception as e:
+            # Connection failed - server likely not running
+            return None
+
     def _get_tts_info(self):
-        """Get TTS provider information if available"""
+        """Get TTS provider information from session settings"""
         tts_info = ""
         tts_enabled = False
         voice_name = ""
 
         try:
-            if config is None:
-                self._debug_log("config module not available")
+            # Get session-specific settings from database
+            session_settings = self._get_session_settings()
+            if not session_settings:
+                self._debug_log("No session settings available, using config defaults")
+                # Fallback to config defaults
+                if config is None:
+                    return tts_info, tts_enabled, voice_name
+                tts_providers_str = config.tts_providers
+                tts_language = config.tts_language
+                silent_announcements = False
+            else:
+                tts_providers_str = (
+                    session_settings.get("tts_providers") or config.tts_providers
+                )
+                tts_language = (
+                    session_settings.get("tts_language") or config.tts_language
+                )
+                silent_announcements = session_settings.get(
+                    "silent_announcements", False
+                )
+
+            # If announcements are silenced, show muted indicator
+            if silent_announcements:
+                self._debug_log("Silent announcements mode - showing muted indicator")
+                tts_info = "Muted"
+                tts_enabled = True
+                voice_name = ""
                 return tts_info, tts_enabled, voice_name
 
-            # Get the list of TTS providers in priority order
-            tts_providers_list = config.get_tts_providers_list()
+            # Parse TTS providers string
+            tts_providers_list = (
+                [p.strip() for p in tts_providers_str.split(",") if p.strip()]
+                if tts_providers_str
+                else ["prerecorded"]
+            )
             self._debug_log(f"TTS providers list: {tts_providers_list}")
 
             if not tts_providers_list:
@@ -387,7 +553,7 @@ class StatusLine:
             active_provider = None
             for provider in tts_providers_list:
                 if provider == "elevenlabs":
-                    api_key = config.elevenlabs_api_key
+                    api_key = config.elevenlabs_api_key if config else None
                     if api_key:
                         active_provider = "elevenlabs"
                         break
@@ -409,10 +575,9 @@ class StatusLine:
 
             # Get provider-specific information
             if active_provider == "elevenlabs":
-                tts_info, voice_name = self._get_elevenlabs_details()
+                tts_info, voice_name = self._get_elevenlabs_details(session_settings)
             elif active_provider == "gtts":
-                language = config.tts_language or os.getenv("CC_TTS_LANGUAGE", "en")
-                tts_info = f"Google TTS ({language.upper()})"
+                tts_info = f"Google TTS ({tts_language.upper()})"
                 voice_name = "Google TTS"
             elif active_provider == "prerecorded":
                 tts_info = "Prerecorded Audio"
@@ -424,13 +589,13 @@ class StatusLine:
 
         return tts_info, tts_enabled, voice_name
 
-    def _get_elevenlabs_details(self):
+    def _get_elevenlabs_details(self, session_settings=None):
         """Get detailed ElevenLabs information"""
         elevenlabs_info = ""
         voice_name = ""
 
         try:
-            api_key = config.elevenlabs_api_key
+            api_key = config.elevenlabs_api_key if config else None
             if not api_key:
                 return "ElevenLabs: No API key", ""
 
@@ -446,15 +611,24 @@ class StatusLine:
             char_used = getattr(subscription, "character_count", 0)
             can_do_tts = char_used < char_limit if char_limit > 0 else True
 
-            # Get language for display
-            language = config.tts_language or os.getenv("CC_TTS_LANGUAGE", "en")
+            # Get language for display from session settings or config
+            if session_settings:
+                language = session_settings.get("tts_language") or (
+                    config.tts_language if config else "en"
+                )
+            else:
+                language = config.tts_language if config else "en"
             language_display = f" ({language.upper()})"
 
-            # Fetch voice name
+            # Fetch voice name from session settings or config
             try:
-                voice_id = config.elevenlabs_voice_id or os.getenv(
-                    "CC_ELEVENLABS_VOICE_ID"
-                )
+                if session_settings:
+                    voice_id = session_settings.get("elevenlabs_voice_id") or (
+                        config.elevenlabs_voice_id if config else None
+                    )
+                else:
+                    voice_id = config.elevenlabs_voice_id if config else None
+
                 if voice_id:
                     voice = client.voices.get(voice_id)
                     base_voice_name = getattr(voice, "name", "ElevenLabs")
@@ -482,57 +656,89 @@ class StatusLine:
         except ImportError:
             self._debug_log("elevenlabs package not available")
             elevenlabs_info = "Not installed"
-            language = (
-                config.tts_language or os.getenv("CC_TTS_LANGUAGE", "en")
-                if config
-                else "en"
-            )
+            if session_settings:
+                language = session_settings.get("tts_language") or (
+                    config.tts_language if config else "en"
+                )
+            else:
+                language = config.tts_language if config else "en"
             voice_name = f"ElevenLabs ({language.upper()})"
         except Exception as e:
             self._debug_log(f"Error fetching ElevenLabs details: {e}")
             elevenlabs_info = f"Error: {type(e).__name__}"
-            language = (
-                config.tts_language or os.getenv("CC_TTS_LANGUAGE", "en")
-                if config
-                else "en"
-            )
+            if session_settings:
+                language = session_settings.get("tts_language") or (
+                    config.tts_language if config else "en"
+                )
+            else:
+                language = config.tts_language if config else "en"
             voice_name = f"ElevenLabs ({language.upper()})"
 
         return elevenlabs_info, voice_name
 
     def _get_openrouter_info(self):
-        """Get OpenRouter status and model information"""
+        """Get OpenRouter status and model information from session settings"""
         openrouter_info = ""
         openrouter_enabled = False
         openrouter_model = ""
 
         try:
-            if config is None:
-                self._debug_log("config module not available")
-                return openrouter_info, openrouter_enabled, openrouter_model
+            # Get session-specific settings from database
+            session_settings = self._get_session_settings()
+            if not session_settings:
+                self._debug_log("No session settings available, using config defaults")
+                if config is None:
+                    return openrouter_info, openrouter_enabled, openrouter_model
+                # Fallback to config defaults
+                openrouter_enabled = config.openrouter_enabled
+                openrouter_model = config.openrouter_model
+                contextual_stop = config.openrouter_contextual_stop
+                contextual_pretooluse = config.openrouter_contextual_pretooluse
+                silent_announcements = False
+            else:
+                openrouter_enabled = session_settings.get("openrouter_enabled", False)
+                openrouter_model = session_settings.get("openrouter_model") or (
+                    config.openrouter_model if config else "openai/gpt-4o-mini"
+                )
+                contextual_stop = session_settings.get(
+                    "openrouter_contextual_stop", False
+                )
+                contextual_pretooluse = session_settings.get(
+                    "openrouter_contextual_pretooluse", False
+                )
+                silent_announcements = session_settings.get(
+                    "silent_announcements", False
+                )
 
-            # Check if OpenRouter is enabled
-            openrouter_enabled = config.openrouter_enabled
             self._debug_log(f"OpenRouter enabled: {openrouter_enabled}")
+
+            # If silent announcements mode is active, show disabled status
+            # (OpenRouter calls are skipped to save costs)
+            if silent_announcements:
+                self._debug_log(
+                    "Silent announcements mode - OpenRouter disabled to save costs"
+                )
+                openrouter_info = "Disabled (silent mode)"
+                openrouter_enabled = True  # Show in status line
+                return openrouter_info, openrouter_enabled, openrouter_model
 
             if not openrouter_enabled:
                 return openrouter_info, openrouter_enabled, openrouter_model
 
             # Get API key to verify configuration
-            api_key = config.openrouter_api_key
+            api_key = config.openrouter_api_key if config else None
             if not api_key:
                 openrouter_info = "No API key"
                 return openrouter_info, openrouter_enabled, openrouter_model
 
             # Get model name
-            openrouter_model = config.openrouter_model or "openai/gpt-4o-mini"
             model_display = openrouter_model.split("/")[-1]  # Get just the model name
 
             # Build feature flags display
             features = []
-            if config.openrouter_contextual_stop:
+            if contextual_stop:
                 features.append("Stop")
-            if config.openrouter_contextual_pretooluse:
+            if contextual_pretooluse:
                 features.append("PreTool")
 
             if features:
@@ -572,6 +778,38 @@ class StatusLine:
             return openrouter_info, openrouter_enabled, openrouter_model
 
         return openrouter_info, openrouter_enabled, openrouter_model
+
+    def _get_sound_effects_info(self):
+        """Get sound effects status from session settings.
+
+        Returns tuple of (effects_info, effects_muted):
+        - effects_info: Display string (empty if not muted, "Effects" if muted)
+        - effects_muted: Boolean indicating if effects are muted
+        """
+        effects_info = ""
+        effects_muted = False
+
+        try:
+            # Get session-specific settings from database
+            session_settings = self._get_session_settings()
+            if not session_settings:
+                self._debug_log("No session settings available for sound effects check")
+                return effects_info, effects_muted
+
+            # Check if sound effects are muted
+            effects_muted = session_settings.get("silent_effects", False)
+
+            if effects_muted:
+                self._debug_log("Silent effects mode - showing muted indicator")
+                effects_info = "Effects"
+            else:
+                self._debug_log("Sound effects active - no indicator needed")
+
+        except Exception as e:
+            self._debug_log(f"Error getting sound effects info: {e}")
+            return effects_info, effects_muted
+
+        return effects_info, effects_muted
 
     def render(self, input_data=None):
         """Render the complete status line"""
@@ -640,6 +878,9 @@ class StatusLine:
             self._get_openrouter_info()
         )
 
+        # Sound effects information
+        effects_info, effects_muted = self._get_sound_effects_info()
+
         # Build line 1: Main context + cc-hooks features
         line1_parts = []
 
@@ -673,8 +914,11 @@ class StatusLine:
                 f"🏷️ {self.version_color()}{model_version}{self._reset()}"
             )
 
+        # Build line 2: CC-Hooks features
+        line2_parts = []
+
         # CC-Hooks health status
-        line1_parts.append(f"🎧 {cc_hooks_emoji} cc-hooks:{cc_hooks_port}")
+        line2_parts.append(f"🎧 {cc_hooks_emoji} cc-hooks:{cc_hooks_port}")
 
         # TTS information
         if tts_enabled and tts_info:
@@ -685,22 +929,30 @@ class StatusLine:
                 and not tts_info.startswith(voice_name)
             ):
                 tts_display = f"{voice_name}: {tts_info}"
-            line1_parts.append(f"🔊 {self.tts_color()}{tts_display}{self._reset()}")
+            # Use muted icon for muted state, speaker icon otherwise
+            tts_icon = "🔇" if tts_info == "Muted" else "🔊"
+            line2_parts.append(
+                f"{tts_icon} {self.tts_color()}{tts_display}{self._reset()}"
+            )
+
+        # Sound effects information (only show when muted)
+        if effects_muted and effects_info:
+            line2_parts.append(f"🔕 {effects_info}")
 
         # OpenRouter information
         if openrouter_enabled and openrouter_info:
-            line1_parts.append(
+            line2_parts.append(
                 f"🔀 {self.openrouter_color()}{openrouter_info}{self._reset()}"
             )
 
-        # Build line 2: Usage & Cost (ccusage dedicated)
-        line2_parts = []
+        # Build line 3: Usage & Cost (ccusage dedicated)
+        line3_parts = []
 
         # Session information
         if session_txt:
             session_col = self.session_color(session_pct)
-            line2_parts.append(f"⌛ {session_col}{session_txt}{self._reset()}")
-            line2_parts.append(f"{session_col}[{session_bar}]{self._reset()}")
+            line3_parts.append(f"⌛ {session_col}{session_txt}{self._reset()}")
+            line3_parts.append(f"{session_col}[{session_bar}]{self._reset()}")
 
         # Cost information
         if cost_usd and re.match(r"^[\d.]+$", str(cost_usd)):
@@ -708,13 +960,15 @@ class StatusLine:
             if cost_per_hour and re.match(r"^[\d.]+$", str(cost_per_hour)):
                 cost_part += f" (${float(cost_per_hour):.2f}/h)"
             cost_part += self._reset()
-            line2_parts.append(cost_part)
+            line3_parts.append(cost_part)
 
-        # Print the final status line (2-3 lines)
+        # Print the final status line (2-4 lines)
         print("  ".join(line1_parts))
-        if line2_parts:  # Only print line 2 if there's usage info
+        if line2_parts:  # Only print line 2 if there's cc-hooks info
             print("  ".join(line2_parts))
-        if update_available and update_msg:  # Print update notification on line 3
+        if line3_parts:  # Only print line 3 if there's usage info
+            print("  ".join(line3_parts))
+        if update_available and update_msg:  # Print update notification on line 4
             # Add yellow color to warning message
             yellow = self._color("1;33")
             reset = self._reset()

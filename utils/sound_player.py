@@ -12,6 +12,7 @@ This module provides flexible sound effect playback across macOS, Linux, and WSL
 Supports automatic sound file discovery, platform detection, and graceful error handling.
 """
 
+import os
 import platform
 import sys
 from pathlib import Path
@@ -24,14 +25,30 @@ except ImportError:
     PYGAME_AVAILABLE = False
     pygame = None
 
+try:
+    from utils.constants import SoundFiles
+
+    DEFAULT_SOUND = SoundFiles.TEK
+except ImportError:
+    # Fallback if constants module not available (standalone mode)
+    DEFAULT_SOUND = "sound_effect_tek.mp3"
+
 
 def get_sound_dir():
     """
-    Get the sound directory path relative to the script location.
+    Get the sound directory path - supports both plugin and standalone modes.
+
+    Plugin mode: Uses CLAUDE_PLUGIN_ROOT/sound
+    Standalone mode: Uses script directory/../sound
 
     Returns:
         Path: Path to the sound directory
     """
+    # Check if running in plugin mode
+    plugin_root = os.getenv("CLAUDE_PLUGIN_ROOT")
+    if plugin_root:
+        return Path(plugin_root) / "sound"
+    # Standalone mode: relative to script location
     return Path(__file__).parent.parent / "sound"
 
 
@@ -74,17 +91,19 @@ def get_available_sound_files():
         return []
 
 
-def play_sound(sound_file="sound_effect_tek.mp3", volume=0.5):
+def play_sound(sound_file=None, volume=0.5):
     """
     Play a sound effect using pygame for cross-platform compatibility.
 
     Args:
-        sound_file (str): Sound file name (default: "sound_effect_tek.mp3")
+        sound_file (str): Sound file name (default: SoundFiles.TEK)
         volume (float): Volume level 0.0-1.0 (default: 0.5)
 
     Returns:
         bool: True if sound played successfully, False otherwise
     """
+    if sound_file is None:
+        sound_file = DEFAULT_SOUND
     if not PYGAME_AVAILABLE:
         print(
             "[DEBUG] pygame not available - install with 'pip install pygame'",
@@ -130,7 +149,7 @@ def main():
     Command-line interface for sound player.
 
     Usage:
-    - ./sound_player.py                    # Play default sound (sound_effect_tek.mp3)
+    - ./sound_player.py                    # Play default sound (SoundFiles.TEK)
     - ./sound_player.py sound_effect_cetek.mp3          # Play specific sound
     - ./sound_player.py --list             # List available sounds
     - ./sound_player.py --volume 0.3 sound_effect_tek.mp3  # Play with custom volume
@@ -141,8 +160,8 @@ def main():
     parser.add_argument(
         "sound_file",
         nargs="?",
-        default="sound_effect_tek.mp3",
-        help="Sound file to play (default: sound_effect_tek.mp3)",
+        default=DEFAULT_SOUND,
+        help=f"Sound file to play (default: {DEFAULT_SOUND})",
     )
     parser.add_argument(
         "--volume",

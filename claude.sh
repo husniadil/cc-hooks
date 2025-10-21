@@ -1,145 +1,19 @@
 #!/bin/bash
-# Claude Code Wrapper
+# Claude Code Wrapper - Pure Proxy
+# SessionStart/SessionEnd hooks handle all server lifecycle and settings management
 
-# Get the directory where this script is located (absolute path)
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-
-# Detect WSL environment for optimized timeouts
-IS_WSL=false
-if grep -qi microsoft /proc/version 2>/dev/null || grep -qi wsl /proc/version 2>/dev/null; then
-    IS_WSL=true
-fi
-
-# Configuration
-SERVER_SCRIPT="$SCRIPT_DIR/server.py"
-REPL_COMMAND="claude"
-INSTANCES_DIR="$SCRIPT_DIR/.claude-instances"
-INSTANCE_PID=$$
-INSTANCE_UUID=$(uuidgen | tr '[:upper:]' '[:lower:]')
-
-# Timeout configurations (optimized for WSL)
-if [ "$IS_WSL" = true ]; then
-    CURL_TIMEOUT=1           # Shorter timeout for WSL networking overhead
-    MAX_EVENT_WAIT=5         # Reduced from 10s to 5s for faster shutdown
-    SERVER_SHUTDOWN_WAIT=2   # Reduced from 3s to 2s
-else
-    CURL_TIMEOUT=2
-    MAX_EVENT_WAIT=10
-    SERVER_SHUTDOWN_WAIT=3
-fi
-
-# Function to find available port starting from base port
-find_available_port() {
-    local base_port=12222
-    local port=$base_port
-    
-    # Override base port from .env if available
-    if [ -f "$SCRIPT_DIR/.env" ]; then
-        # Source .env file to get environment variables
-        export $(grep -v '^#' "$SCRIPT_DIR/.env" | grep -v '^$' | xargs)
-        if [ -n "$PORT" ]; then
-            base_port=$PORT
-            port=$base_port
-        fi
-    fi
-    
-    # Find first available port
-    while true; do
-        if ! curl -s --connect-timeout 1 http://localhost:$port/health >/dev/null 2>&1; then
-            # Check if port is actually free (not just unresponsive server)
-            if ! netstat -an 2>/dev/null | grep -q ":$port "; then
-                echo $port
-                return 0
-            fi
-        fi
-        port=$((port + 1))
-        
-        # Safety limit to prevent infinite loop
-        if [ $port -gt $((base_port + 100)) ]; then
-            echo "Error: Could not find available port in range $base_port-$((base_port + 100))" >&2
-            exit 1
-        fi
-    done
-}
-
-# Find and assign available port for this instance
-SERVER_PORT=$(find_available_port)
-
-# Function to check if server is responding
-check_server_health() {
-    curl -s --connect-timeout $CURL_TIMEOUT http://localhost:$SERVER_PORT/health >/dev/null 2>&1
-}
-
-# Function to check if last event is still pending for this instance
-check_last_event_pending() {
-    local response
-    response=$(curl -s --connect-timeout $CURL_TIMEOUT http://localhost:$SERVER_PORT/instances/$INSTANCE_UUID/last-event 2>/dev/null)
-    if [ $? -eq 0 ]; then
-        # Extract has_pending boolean from JSON response - improved pattern
-        echo "$response" | grep -o '"has_pending":\(true\|false\)' | grep -o '\(true\|false\)'
-    else
-        echo "false"  # Default to false if API call fails
-    fi
-}
-
-# Function to register this instance with its port
-register_instance() {
-    mkdir -p "$INSTANCES_DIR"
-    echo "$INSTANCE_UUID:$SERVER_PORT" > "$INSTANCES_DIR/$INSTANCE_PID.pid"
-    echo "Registered Claude Code instance: $INSTANCE_PID (UUID: $INSTANCE_UUID, Port: $SERVER_PORT)"
-}
-
-# Function to unregister this instance
-unregister_instance() {
-    rm -f "$INSTANCES_DIR/$INSTANCE_PID.pid" 2>/dev/null
-    echo "Unregistered Claude Code instance: $INSTANCE_PID (Port: $SERVER_PORT)"
-}
-
-# Function to count active instances
-count_active_instances() {
-    local count=0
-    if [ -d "$INSTANCES_DIR" ]; then
-        for pidfile in "$INSTANCES_DIR"/*.pid; do
-            if [ -f "$pidfile" ]; then
-                # Extract PID from filename (not file contents which contains UUID:port)
-                local pid=$(basename "$pidfile" .pid)
-                # Check if process is still running
-                if kill -0 "$pid" 2>/dev/null; then
-                    count=$((count + 1))
-                else
-                    # Clean up stale PID file
-                    rm -f "$pidfile"
-                fi
-            fi
-        done
-    fi
-    echo $count
-}
-
-# Clean up any stale PID files from previous runs
-if [ -d "$INSTANCES_DIR" ]; then
-    stale_count=0
-    for pidfile in "$INSTANCES_DIR"/*.pid; do
-        if [ -f "$pidfile" ]; then
-            # Extract PID from filename (not file contents which contains UUID)
-            pid=$(basename "$pidfile" .pid)
-            if ! kill -0 "$pid" 2>/dev/null; then
-                rm -f "$pidfile"
-                stale_count=$((stale_count + 1))
-            fi
-        fi
-    done
-    if [ $stale_count -gt 0 ]; then
-        echo "Cleaned up $stale_count stale instance(s)"
-    fi
-fi
-
-# Parse cc-hooks specific arguments BEFORE starting server
+# Parse cc-hooks specific arguments and set environment variables
 CC_TTS_LANGUAGE=""
 CC_ELEVENLABS_VOICE_ID=""
+CC_ELEVENLABS_MODEL_ID=""
 CC_TTS_PROVIDERS=""
+CC_TTS_CACHE_ENABLED=""
 CC_SILENT_ANNOUNCEMENTS=""
 CC_SILENT_EFFECTS=""
+CC_OPENROUTER_ENABLED=""
+CC_OPENROUTER_MODEL=""
+CC_OPENROUTER_CONTEXTUAL_STOP=""
+CC_OPENROUTER_CONTEXTUAL_PRETOOLUSE=""
 CLAUDE_ARGS=()
 
 for arg in "$@"; do
@@ -150,8 +24,51 @@ for arg in "$@"; do
         --elevenlabs-voice-id=*)
             CC_ELEVENLABS_VOICE_ID="${arg#*=}"
             ;;
+        --elevenlabs-model=*)
+            CC_ELEVENLABS_MODEL_ID="${arg#*=}"
+            ;;
         --tts-providers=*)
             CC_TTS_PROVIDERS="${arg#*=}"
+            ;;
+        --audio=*)
+            AUDIO_MODE="${arg#*=}"
+            case "$AUDIO_MODE" in
+                prerecorded)
+                    CC_TTS_PROVIDERS="prerecorded"
+                    ;;
+                gtts)
+                    CC_TTS_PROVIDERS="gtts,prerecorded"
+                    ;;
+                elevenlabs)
+                    CC_TTS_PROVIDERS="elevenlabs,gtts,prerecorded"
+                    ;;
+                *)
+                    echo "Warning: Unknown --audio value '$AUDIO_MODE'. Valid values: prerecorded, gtts, elevenlabs" >&2
+                    ;;
+            esac
+            ;;
+        --ai=*)
+            AI_MODE="${arg#*=}"
+            CC_OPENROUTER_ENABLED="true"
+            case "$AI_MODE" in
+                basic)
+                    CC_OPENROUTER_CONTEXTUAL_STOP="true"
+                    CC_OPENROUTER_CONTEXTUAL_PRETOOLUSE="false"
+                    ;;
+                full)
+                    CC_OPENROUTER_CONTEXTUAL_STOP="true"
+                    CC_OPENROUTER_CONTEXTUAL_PRETOOLUSE="true"
+                    ;;
+                *)
+                    echo "Warning: Unknown --ai value '$AI_MODE'. Valid values: basic, full" >&2
+                    ;;
+            esac
+            ;;
+        --openrouter-model=*)
+            CC_OPENROUTER_MODEL="${arg#*=}"
+            ;;
+        --no-cache)
+            CC_TTS_CACHE_ENABLED="false"
             ;;
         --silent=*)
             SILENT_MODE="${arg#*=}"
@@ -167,7 +84,7 @@ for arg in "$@"; do
                     CC_SILENT_EFFECTS="true"
                     ;;
                 *)
-                    echo "Warning: Unknown --silent value '$SILENT_MODE'. Valid values: announcements, sound-effects, all"
+                    echo "Warning: Unknown --silent value '$SILENT_MODE'. Valid values: announcements, sound-effects, all" >&2
                     ;;
             esac
             ;;
@@ -182,162 +99,8 @@ for arg in "$@"; do
     esac
 done
 
-# Register this instance BEFORE starting server
-register_instance
-
-# Show current active instances after registration
-active_count=$(count_active_instances)
-echo "Active Claude Code instances: $active_count"
-
-# Show WSL detection and optimizations
-if [ "$IS_WSL" = true ]; then
-    echo "WSL environment detected - using optimized timeouts (curl: ${CURL_TIMEOUT}s, shutdown: ${MAX_EVENT_WAIT}s)"
-fi
-
-# Show override information if provided
-if [ -n "$CC_TTS_LANGUAGE" ]; then
-    echo "Using language override: $CC_TTS_LANGUAGE"
-fi
-
-if [ -n "$CC_ELEVENLABS_VOICE_ID" ]; then
-    echo "Using ElevenLabs voice ID override: $CC_ELEVENLABS_VOICE_ID"
-fi
-
-if [ -n "$CC_TTS_PROVIDERS" ]; then
-    echo "Using TTS providers override: $CC_TTS_PROVIDERS"
-fi
-
-if [ -n "$CC_SILENT_ANNOUNCEMENTS" ] && [ -n "$CC_SILENT_EFFECTS" ]; then
-    echo "Silent mode: all (announcements + sound effects disabled)"
-elif [ -n "$CC_SILENT_ANNOUNCEMENTS" ]; then
-    echo "Silent mode: announcements only (sound effects enabled)"
-elif [ -n "$CC_SILENT_EFFECTS" ]; then
-    echo "Silent mode: sound effects only (announcements enabled)"
-fi
-
-# Each instance gets its own server, so always start one
-echo "Starting dedicated cc-hooks server on port $SERVER_PORT..."
-
-# Prepare environment variables for server startup
-SERVER_ENV="PORT=$SERVER_PORT CC_INSTANCE_ID=$INSTANCE_UUID"
-if [ -n "$CC_TTS_LANGUAGE" ]; then
-    SERVER_ENV="$SERVER_ENV CC_TTS_LANGUAGE=$CC_TTS_LANGUAGE"
-fi
-if [ -n "$CC_ELEVENLABS_VOICE_ID" ]; then
-    SERVER_ENV="$SERVER_ENV CC_ELEVENLABS_VOICE_ID=$CC_ELEVENLABS_VOICE_ID"
-fi
-if [ -n "$CC_TTS_PROVIDERS" ]; then
-    SERVER_ENV="$SERVER_ENV CC_TTS_PROVIDERS=$CC_TTS_PROVIDERS"
-fi
-if [ -n "$CC_SILENT_ANNOUNCEMENTS" ]; then
-    SERVER_ENV="$SERVER_ENV CC_SILENT_ANNOUNCEMENTS=$CC_SILENT_ANNOUNCEMENTS"
-fi
-if [ -n "$CC_SILENT_EFFECTS" ]; then
-    SERVER_ENV="$SERVER_ENV CC_SILENT_EFFECTS=$CC_SILENT_EFFECTS"
-fi
-
-# Start server in background with custom port and instance ID, capture errors
-STARTUP_LOG="/tmp/cc-hooks-startup-$INSTANCE_UUID.log"
-env $SERVER_ENV uv run "$SERVER_SCRIPT" >"$STARTUP_LOG" 2>&1 &
-SERVER_PID=$!
-
-# Wait for server to be ready
-for i in {1..10}; do
-    if check_server_health; then
-        echo "cc-hooks server started successfully on port $SERVER_PORT"
-        break
-    fi
-    
-    if ! kill -0 $SERVER_PID 2>/dev/null; then
-        echo "Failed to start cc-hooks server on port $SERVER_PORT"
-        echo "Server startup error log:"
-        cat "$STARTUP_LOG" 2>/dev/null || echo "No startup log available"
-        exit 1
-    fi
-    
-    sleep 1
-done
-
-if ! check_server_health; then
-    echo "cc-hooks server failed to respond on port $SERVER_PORT"
-    echo "Server startup log:"
-    cat "$STARTUP_LOG" 2>/dev/null || echo "No startup log available"
-    kill $SERVER_PID 2>/dev/null || true
-    exit 1
-fi
-
-# Cleanup function with graceful shutdown
-cleanup() {
-    echo "Initiating graceful shutdown for instance $INSTANCE_UUID (Port: $SERVER_PORT)..."
-    
-    # Check if last event is still pending before unregistering
-    local has_pending=$(check_last_event_pending)
-    echo "Last event pending status for this instance: $has_pending"
-    
-    # Wait for last event to complete (WSL-optimized timeout)
-    if [ "$has_pending" = "true" ]; then
-        echo "Waiting for last event to complete (timeout: ${MAX_EVENT_WAIT}s)..."
-        local wait_count=0
-        while [ "$has_pending" = "true" ] && [ "$wait_count" -lt $MAX_EVENT_WAIT ]; do
-            sleep 1
-            has_pending=$(check_last_event_pending)
-            wait_count=$((wait_count + 1))
-            if [ "$has_pending" = "true" ]; then
-                echo "Still waiting for last event... (${wait_count}s elapsed)"
-            fi
-        done
-
-        if [ "$has_pending" = "true" ]; then
-            echo "Warning: Force exiting with last event still pending after ${MAX_EVENT_WAIT}s timeout"
-        else
-            echo "Last event completed successfully"
-        fi
-    fi
-    
-    # Stop this instance's dedicated server
-    echo "Stopping dedicated cc-hooks server on port $SERVER_PORT..."
-    if [ ! -z "$SERVER_PID" ]; then
-        kill $SERVER_PID 2>/dev/null || true
-        # Wait for graceful shutdown (WSL-optimized timeout)
-        local shutdown_count=0
-        while [ $shutdown_count -lt $SERVER_SHUTDOWN_WAIT ]; do
-            if ! kill -0 $SERVER_PID 2>/dev/null; then
-                echo "cc-hooks server stopped (Port: $SERVER_PORT)"
-                break
-            fi
-            sleep 1
-            shutdown_count=$((shutdown_count + 1))
-        done
-        # Force kill if still running
-        if kill -0 $SERVER_PID 2>/dev/null; then
-            kill -9 $SERVER_PID 2>/dev/null || true
-            echo "cc-hooks server force stopped (Port: $SERVER_PORT)"
-        fi
-    fi
-    
-    # Unregister this instance after cleanup
-    unregister_instance
-    
-    # Show remaining instances
-    local remaining_instances=$(count_active_instances)
-    echo "Remaining Claude Code instances: $remaining_instances"
-    
-    # Clean up instances directory if empty
-    if [ "$remaining_instances" -eq 0 ] && [ -d "$INSTANCES_DIR" ]; then
-        rmdir "$INSTANCES_DIR" 2>/dev/null || true
-    fi
-    
-    exit
-}
-
-# Trap cleanup on script exit
-trap cleanup EXIT INT TERM
-
-# Set instance ID and port environment variables and start Claude Code with all user arguments
-export CC_INSTANCE_ID="$INSTANCE_UUID"
-export CC_HOOKS_PORT="$SERVER_PORT"
-
-# Export cc-hooks specific environment variables if provided (for hooks.py)
+# Export cc-hooks configuration for SessionStart hook to read
+# Config is passed via environment to hooks.py which stores in sessions table
 if [ -n "$CC_TTS_LANGUAGE" ]; then
     export CC_TTS_LANGUAGE
 fi
@@ -346,8 +109,16 @@ if [ -n "$CC_ELEVENLABS_VOICE_ID" ]; then
     export CC_ELEVENLABS_VOICE_ID
 fi
 
+if [ -n "$CC_ELEVENLABS_MODEL_ID" ]; then
+    export CC_ELEVENLABS_MODEL_ID
+fi
+
 if [ -n "$CC_TTS_PROVIDERS" ]; then
     export CC_TTS_PROVIDERS
+fi
+
+if [ -n "$CC_TTS_CACHE_ENABLED" ]; then
+    export CC_TTS_CACHE_ENABLED
 fi
 
 if [ -n "$CC_SILENT_ANNOUNCEMENTS" ]; then
@@ -358,12 +129,87 @@ if [ -n "$CC_SILENT_EFFECTS" ]; then
     export CC_SILENT_EFFECTS
 fi
 
+if [ -n "$CC_OPENROUTER_ENABLED" ]; then
+    export CC_OPENROUTER_ENABLED
+fi
+
+if [ -n "$CC_OPENROUTER_MODEL" ]; then
+    export CC_OPENROUTER_MODEL
+fi
+
+if [ -n "$CC_OPENROUTER_CONTEXTUAL_STOP" ]; then
+    export CC_OPENROUTER_CONTEXTUAL_STOP
+fi
+
+if [ -n "$CC_OPENROUTER_CONTEXTUAL_PRETOOLUSE" ]; then
+    export CC_OPENROUTER_CONTEXTUAL_PRETOOLUSE
+fi
+
 # If original directory was passed, change to it before starting Claude
+# This is NOT config - it's operational (where claude should run from)
 if [ -n "$CC_ORIGINAL_DIR" ] && [ -d "$CC_ORIGINAL_DIR" ]; then
     cd "$CC_ORIGINAL_DIR"
 fi
 
-echo "Claude Code starting with cc-hooks on port $SERVER_PORT..."
-# Clean up startup log on successful start
-rm -f "$STARTUP_LOG" 2>/dev/null
-$REPL_COMMAND "${CLAUDE_ARGS[@]}"
+# Find Claude CLI executable
+# Priority: CLAUDE_BIN env var > resolve via user's shell > command in PATH
+if [ -n "$CLAUDE_BIN" ] && [ -x "$CLAUDE_BIN" ]; then
+    CLAUDE_CMD="$CLAUDE_BIN"
+elif [ -n "$SHELL" ]; then
+    # Use user's shell to resolve claude (handles aliases and PATH)
+    case "$SHELL" in
+        */zsh)
+            # Use 'which' to resolve aliases in zsh
+            WHICH_OUTPUT=$(zsh -i -c 'which claude' 2>/dev/null)
+            if echo "$WHICH_OUTPUT" | grep -q "aliased to"; then
+                # Format: "claude: aliased to ~/.claude/local/claude"
+                CLAUDE_CMD=$(echo "$WHICH_OUTPUT" | sed 's/.*aliased to //')
+                CLAUDE_CMD="${CLAUDE_CMD/#\~/$HOME}"
+            else
+                CLAUDE_CMD="$WHICH_OUTPUT"
+            fi
+            ;;
+        */bash)
+            # Use 'type' to resolve aliases in bash
+            TYPE_OUTPUT=$(bash -i -c 'type claude' 2>/dev/null)
+            if echo "$TYPE_OUTPUT" | grep -q "is aliased to"; then
+                # Format: "claude is aliased to `~/.claude/local/claude'"
+                CLAUDE_CMD=$(echo "$TYPE_OUTPUT" | sed "s/.*is aliased to \`\(.*\)'/\1/")
+                CLAUDE_CMD="${CLAUDE_CMD/#\~/$HOME}"
+            else
+                CLAUDE_CMD=$(bash -i -c 'command -v claude' 2>/dev/null)
+            fi
+            ;;
+        */fish)
+            # Fish uses 'type' with different output format
+            TYPE_OUTPUT=$(fish -i -c 'type -P claude' 2>/dev/null)
+            if [ -n "$TYPE_OUTPUT" ]; then
+                CLAUDE_CMD="$TYPE_OUTPUT"
+            else
+                # Fallback: check if it's an alias and parse it
+                ALIAS_OUTPUT=$(fish -i -c 'alias claude' 2>/dev/null)
+                if [ -n "$ALIAS_OUTPUT" ]; then
+                    CLAUDE_CMD=$(echo "$ALIAS_OUTPUT" | sed "s/.*alias claude //")
+                    CLAUDE_CMD="${CLAUDE_CMD/#\~/$HOME}"
+                fi
+            fi
+            ;;
+        *)
+            CLAUDE_CMD=$(command -v claude 2>/dev/null)
+            ;;
+    esac
+else
+    CLAUDE_CMD=$(command -v claude 2>/dev/null)
+fi
+
+# Validate claude executable was found
+if [ -z "$CLAUDE_CMD" ] || [ ! -x "$CLAUDE_CMD" ]; then
+    echo "Error: Claude CLI not found." >&2
+    echo "Please either:" >&2
+    echo "  1. Ensure 'claude' is in your PATH or aliased in your shell config, or" >&2
+    echo "  2. Set CLAUDE_BIN environment variable: export CLAUDE_BIN=/path/to/claude" >&2
+    exit 1
+fi
+
+# Pure proxy - exec replaces this shell process with Claude
+exec "$CLAUDE_CMD" "${CLAUDE_ARGS[@]}"

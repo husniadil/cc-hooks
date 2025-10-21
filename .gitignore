@@ -32,11 +32,15 @@ wheels/
 # User config (should not be in repo)
 .claude/.user.yaml
 
-# Claude instances tracking
-.claude-instances/
-
 # TTS cache (generated files)
 .tts_cache/
+
+# Legacy: Instance tracking moved to sessions table (was filesystem-based)
+# Keeping this for backward compatibility with old installations
+.claude-instances/
+
+# Log files
+logs/
 
 # IDE
 .vscode/
