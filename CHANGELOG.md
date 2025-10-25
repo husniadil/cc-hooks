@@ -7,6 +7,28 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.0.1] - 2025-10-25
+
+### Fixed
+
+- **STANDALONE_README.md Corruption**: Fixed critical file corruption where STANDALONE_README.md
+  contained server.py content instead of proper markdown documentation
+  - File was corrupted in v1.0.0 release (commit 4e8fadd)
+  - Recreated with complete standalone installation guide (475 lines)
+  - Includes: installation steps, manual hooks configuration, usage examples, troubleshooting,
+    development workflow
+  - Mirrors README.md structure for standalone mode users (developers/contributors)
+
+### Added
+
+- **Troubleshooting Documentation**: New troubleshooting entry for `--dangerously-skip-permissions`
+  flag issue
+  - Documents issue where hooks don't execute with flag in new/untrusted folders
+  - Root cause: Claude Code trust prompt requires explicit acceptance before hooks can run
+  - Solution: Run without flag first to accept trust prompt, then subsequent runs work normally
+  - Added to both README.md and STANDALONE_README.md for consistency
+  - Affects both plugin and standalone installation modes
+
 ## [1.0.0] - 2025-10-18
 
 ### Added

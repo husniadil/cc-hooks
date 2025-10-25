@@ -446,6 +446,43 @@ background.
 **Solution:** Simply restart your Claude session. The error should disappear after the update
 completes.
 
+### cc-hooks not starting with `--dangerously-skip-permissions` in new folders?
+
+**Symptom:** When running Claude Code with `--dangerously-skip-permissions` flag in a new/untrusted
+folder, cc-hooks server doesn't start and hooks don't execute.
+
+**Cause:** Claude Code shows a trust prompt for new folders that requires explicit user approval:
+
+```
+ Do you trust the files in this folder?
+ /path/to/your/folder
+ ❯ 1. Yes, proceed
+   2. No, exit
+```
+
+When using `--dangerously-skip-permissions`, this prompt doesn't appear but hooks also fail to
+execute. This appears to be a limitation in how Claude Code handles the trust flow with this flag.
+
+**Solution:** Run Claude Code **without** the flag first to accept the trust prompt:
+
+```bash
+# First run: accept trust prompt (without skip-permissions flag)
+cld  # or: claude
+
+# Select "Yes, proceed" when prompted
+
+# Exit Claude Code
+
+# Subsequent runs: flag works normally
+cld --dangerously-skip-permissions  # Now hooks will work
+```
+
+**Why this works:** Once the folder is trusted, the approval is cached. Future sessions (even with
+`--dangerously-skip-permissions`) will execute hooks normally.
+
+**Note:** It's unclear whether this is a Claude Code bug or expected behavior. The flag is meant to
+skip permission prompts, but doesn't seem to handle the initial folder trust flow.
+
 ### No audio at all?
 
 1. Check system audio is working
