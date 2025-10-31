@@ -302,7 +302,7 @@ fi
 
 **Use Cases**:
 
-- Update scripts need to use different commands (`claude plugin update` vs `npm run update`)
+- Update scripts need to use different commands (`claude plugin marketplace update` vs `npm run update`)
 - Detection is used by `/cc-hooks-plugin:update` slash command
 - Diagnostic tools showing current installation configuration
 
