@@ -7,6 +7,19 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.0.2] - 2025-10-31
+
+### Removed
+
+- **Deprecated Output Style Feature**: Removed all references to deprecated output_style
+  functionality
+  - Removed `output_style` from status line Features list in docstring
+  - Removed `output_style` variable extraction from data model
+  - Removed output_style display logic from status line rendering (lines 908-909)
+  - Removed unused `style_color()` method that was only used for output_style display
+  - Anthropic has deprecated output styles in Claude Code, so this feature is no longer needed
+  - Status line now displays: directory, git, model, usage, and session information only
+
 ## [1.0.1] - 2025-10-25
 
 ### Fixed
