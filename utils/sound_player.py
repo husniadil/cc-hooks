@@ -14,6 +14,8 @@ Supports automatic sound file discovery, platform detection, and graceful error 
 
 import os
 import platform
+import shutil
+import subprocess
 import sys
 from pathlib import Path
 
@@ -91,9 +93,47 @@ def get_available_sound_files():
         return []
 
 
+def play_sound_ffplay(sound_path, volume=0.5):
+    """
+    Play a sound using ffplay (fallback when pygame mixer unavailable).
+
+    Args:
+        sound_path (Path): Path to sound file
+        volume (float): Volume level 0.0-1.0
+
+    Returns:
+        bool: True if sound played successfully, False otherwise
+    """
+    ffplay = shutil.which("ffplay")
+    if not ffplay:
+        print("[DEBUG] ffplay not found", file=sys.stderr)
+        return False
+
+    try:
+        result = subprocess.run(
+            [
+                ffplay,
+                "-nodisp",
+                "-autoexit",
+                "-loglevel",
+                "quiet",
+                "-af",
+                f"volume={volume}",
+                str(sound_path),
+            ],
+            capture_output=True,
+            timeout=30,
+        )
+        return result.returncode == 0
+    except Exception as e:
+        print(f"[DEBUG] ffplay error: {e}", file=sys.stderr)
+        return False
+
+
 def play_sound(sound_file=None, volume=0.5):
     """
     Play a sound effect using pygame for cross-platform compatibility.
+    Falls back to ffplay if pygame mixer is unavailable.
 
     Args:
         sound_file (str): Sound file name (default: SoundFiles.TEK)
@@ -104,12 +144,6 @@ def play_sound(sound_file=None, volume=0.5):
     """
     if sound_file is None:
         sound_file = DEFAULT_SOUND
-    if not PYGAME_AVAILABLE:
-        print(
-            "[DEBUG] pygame not available - install with 'pip install pygame'",
-            file=sys.stderr,
-        )
-        return False
 
     # Get sound file path
     sound_path = get_sound_file_path(sound_file)
@@ -117,31 +151,37 @@ def play_sound(sound_file=None, volume=0.5):
         print(f"[DEBUG] Sound file not found: {sound_file}", file=sys.stderr)
         return False
 
-    try:
-        # Initialize pygame mixer for audio playback
-        pygame.mixer.init()
-
-        # Load and play the audio
-        pygame.mixer.music.load(str(sound_path))
-        pygame.mixer.music.set_volume(volume)
-        pygame.mixer.music.play()
-
-        # Wait for playback to finish (blocking - queue manager handles async)
-        while pygame.mixer.music.get_busy():
-            pygame.time.wait(100)
-
-        # Cleanup
-        pygame.mixer.quit()
-        return True
-
-    except Exception as e:
-        print(f"[DEBUG] Pygame audio error: {e}", file=sys.stderr)
-        # Cleanup on error
+    # Try pygame first
+    if PYGAME_AVAILABLE:
         try:
+            # Initialize pygame mixer for audio playback
+            pygame.mixer.init()
+
+            # Load and play the audio
+            pygame.mixer.music.load(str(sound_path))
+            pygame.mixer.music.set_volume(volume)
+            pygame.mixer.music.play()
+
+            # Wait for playback to finish (blocking - queue manager handles async)
+            while pygame.mixer.music.get_busy():
+                pygame.time.wait(100)
+
+            # Cleanup
             pygame.mixer.quit()
-        except:
-            pass
-        return False
+            return True
+
+        except Exception as e:
+            print(f"[DEBUG] Pygame audio error: {e}", file=sys.stderr)
+            # Cleanup on error
+            try:
+                pygame.mixer.quit()
+            except:
+                pass
+            # Fall through to ffplay
+
+    # Fallback to ffplay
+    print("[DEBUG] Trying ffplay fallback...", file=sys.stderr)
+    return play_sound_ffplay(sound_path, volume)
 
 
 def main():
