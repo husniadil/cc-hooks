@@ -504,12 +504,20 @@ def _is_claude_process(pid: int) -> bool:
         # Use psutil for reliable cross-platform process detection
         try:
             proc = psutil.Process(pid)
+            cmdline_list = proc.cmdline()
             name = proc.name().lower()
-            cmdline = " ".join(proc.cmdline()).lower()
+            cmdline = " ".join(cmdline_list).lower()
 
-            # Match actual claude binary (same logic as detect_claude_pid)
+            # Detection strategies for Claude binary:
+            # 1. Name-based: process name is exactly "claude"
+            # 2. Cmdline-based: cmdline starts with "claude " or equals "claude"
+            # 3. Path-based: first cmdline arg ends with "/claude" (for Bun-compiled binary
+            #    where process name might be version number like "2.0.59")
             is_claude_binary = (
-                name == "claude" or cmdline.startswith("claude ") or cmdline == "claude"
+                name == "claude"
+                or cmdline.startswith("claude ")
+                or cmdline == "claude"
+                or (len(cmdline_list) > 0 and cmdline_list[0].endswith("/claude"))
             )
 
             return is_claude_binary

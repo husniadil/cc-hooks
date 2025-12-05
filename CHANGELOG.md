@@ -7,6 +7,20 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.0.3] - 2025-12-05
+
+### Fixed
+
+- **Bun-Compiled Binary PID Detection**: Fixed Claude process detection for Bun-compiled binaries
+  - Bun-compiled Claude CLI uses version number (e.g., "2.0.59") as process name instead of "claude"
+  - Added path-based detection strategy: checks if first cmdline argument ends with `/claude`
+  - Updated detection logic in three files for consistency:
+    - `hooks.py`: `detect_claude_pid()` function
+    - `status-lines/status_line.py`: `_detect_claude_pid()` method
+    - `app/event_db.py`: `_is_claude_process()` function
+  - Detection now uses three strategies: name-based, cmdline-based, and path-based
+  - Maintains backward compatibility with Node.js-based Claude CLI
+
 ## [1.0.2] - 2025-10-31
 
 ### Removed

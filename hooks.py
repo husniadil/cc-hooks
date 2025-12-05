@@ -54,13 +54,20 @@ def detect_claude_pid() -> int:
         # Walk up the process tree looking for actual 'claude' binary
         # Skip shell scripts and paths containing ".claude/"
         while current_process:
-            cmdline = " ".join(current_process.cmdline()).lower()
+            cmdline_list = current_process.cmdline()
+            cmdline = " ".join(cmdline_list).lower()
             name = current_process.name().lower()
 
-            # Only match actual claude binary, not paths containing ".claude/"
-            # Check if name is exactly "claude" or cmdline starts with "claude "
+            # Detection strategies for Claude binary:
+            # 1. Name-based: process name is exactly "claude"
+            # 2. Cmdline-based: cmdline starts with "claude " or equals "claude"
+            # 3. Path-based: first cmdline arg ends with "/claude" (for Bun-compiled binary
+            #    where process name might be version number like "2.0.59")
             is_claude_binary = (
-                name == "claude" or cmdline.startswith("claude ") or cmdline == "claude"
+                name == "claude"
+                or cmdline.startswith("claude ")
+                or cmdline == "claude"
+                or (len(cmdline_list) > 0 and cmdline_list[0].endswith("/claude"))
             )
 
             if is_claude_binary:
