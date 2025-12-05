@@ -7,6 +7,19 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.0.4] - 2025-12-05
+
+### Added
+
+- **ffplay Audio Fallback**: Added ffplay as fallback audio player when pygame mixer is unavailable
+  - On systems without SDL2-mixer (e.g., some Linux distributions) or Python 3.14 where pygame.mixer
+    may fail, audio playback now falls back to ffplay
+  - Uses ffplay with `-nodisp -autoexit` flags for headless playback
+  - Supports volume control via ffmpeg's volume filter
+  - 30-second timeout for safety
+  - Maintains backward compatibility - pygame is still tried first
+  - Contributed by [@MaxenceBouvier](https://github.com/MaxenceBouvier) in PR #2
+
 ## [1.0.3] - 2025-12-05
 
 ### Fixed
