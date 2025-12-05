@@ -19,6 +19,10 @@ import subprocess
 import sys
 from pathlib import Path
 
+from utils.colored_logger import setup_logger
+
+logger = setup_logger(__name__)
+
 try:
     import pygame
 
@@ -106,7 +110,7 @@ def play_sound_ffplay(sound_path, volume=0.5):
     """
     ffplay = shutil.which("ffplay")
     if not ffplay:
-        print("[DEBUG] ffplay not found", file=sys.stderr)
+        logger.debug("ffplay not found in PATH")
         return False
 
     try:
@@ -126,7 +130,7 @@ def play_sound_ffplay(sound_path, volume=0.5):
         )
         return result.returncode == 0
     except Exception as e:
-        print(f"[DEBUG] ffplay error: {e}", file=sys.stderr)
+        logger.warning(f"ffplay playback failed: {e}")
         return False
 
 
@@ -148,7 +152,7 @@ def play_sound(sound_file=None, volume=0.5):
     # Get sound file path
     sound_path = get_sound_file_path(sound_file)
     if not sound_path:
-        print(f"[DEBUG] Sound file not found: {sound_file}", file=sys.stderr)
+        logger.debug(f"Sound file not found: {sound_file}")
         return False
 
     # Try pygame first
@@ -171,7 +175,7 @@ def play_sound(sound_file=None, volume=0.5):
             return True
 
         except Exception as e:
-            print(f"[DEBUG] Pygame audio error: {e}", file=sys.stderr)
+            logger.warning(f"Pygame audio error: {e}")
             # Cleanup on error
             try:
                 pygame.mixer.quit()
@@ -180,7 +184,7 @@ def play_sound(sound_file=None, volume=0.5):
             # Fall through to ffplay
 
     # Fallback to ffplay
-    print("[DEBUG] Trying ffplay fallback...", file=sys.stderr)
+    logger.debug("Pygame unavailable or failed, trying ffplay fallback")
     return play_sound_ffplay(sound_path, volume)
 
 
