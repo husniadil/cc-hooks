@@ -11,7 +11,7 @@
 # ///
 """
 Claude Code statusline
-Theme: detailed | Colors: true | Features: directory, git, model, usage, session
+Theme: detailed | Colors: true | Features: directory, git, model, output_style, usage, session
 Cross-platform compatible (macOS/Linux/WSL)
 """
 
@@ -91,6 +91,9 @@ class StatusLine:
 
     def version_color(self):
         return self._color("1;33")  # yellow
+
+    def style_color(self):
+        return self._color("1;34")  # blue
 
     def project_color(self):
         return self._color("1;37")  # white
@@ -837,6 +840,8 @@ class StatusLine:
         model_name = model.get("display_name", "Claude")
         model_version = model.get("version", "")
 
+        output_style = data.get("output_style", {}).get("name", "")
+
         # Replace home directory with ~
         home = os.path.expanduser("~")
         if current_dir.startswith(home):
@@ -903,6 +908,10 @@ class StatusLine:
 
         # Model information
         line1_parts.append(f"💥 {self.model_color()}{model_name}{self._reset()}")
+
+        # Output style (persona)
+        if output_style and output_style != "null":
+            line1_parts.append(f"🎨 {self.style_color()}{output_style}{self._reset()}")
 
         # Model version
         if model_version and model_version != "null":
