@@ -24,8 +24,36 @@ logger = setup_logger(__name__)
 # Cache duration for version checks (1 hour)
 CACHE_DURATION_HOURS = 1
 
-# Path to repo root (assumes this file is in utils/)
-REPO_ROOT = Path(__file__).parent.parent
+
+def _resolve_repo_root() -> Path:
+    """
+    Resolve the actual git repository root.
+
+    Handles plugin mode where code runs from cache directory but git repo
+    is in marketplace directory.
+
+    Resolution order:
+    1. If running from plugin cache → use marketplace directory
+    2. Otherwise → use parent of utils/ directory
+    """
+    file_path = Path(__file__).resolve()
+    default_root = file_path.parent.parent
+
+    # Check if running from plugin cache directory
+    # Pattern: ~/.claude/plugins/cache/cc-hooks-plugin/cc-hooks/{version}/
+    path_str = str(file_path)
+    if "/.claude/plugins/cache/cc-hooks-plugin/" in path_str:
+        # Resolve to marketplace directory which has .git
+        marketplace_path = Path.home() / ".claude/plugins/marketplaces/cc-hooks-plugin"
+        if marketplace_path.exists() and (marketplace_path / ".git").exists():
+            logger.debug(f"Resolved repo root from cache to marketplace: {marketplace_path}")
+            return marketplace_path
+
+    return default_root
+
+
+# Path to repo root (handles both standalone and plugin modes)
+REPO_ROOT = _resolve_repo_root()
 
 
 class VersionCheckResult:
