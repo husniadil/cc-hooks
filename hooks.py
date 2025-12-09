@@ -539,26 +539,44 @@ def send_to_api(
                 if found_port:
                     port = found_port
                 else:
-                    # Session not found - only SessionStart creates server
-                    # SubagentStop and other events without SessionStart are skipped
-                    if hook_event_name != "SessionStart":
-                        logger.warning(
-                            f"Session {session_id} not found for {hook_event_name} event. "
-                            f"Skipping (SessionStart must run first)."
+                    # Session not found - handle based on event type
+                    if hook_event_name == "SessionStart":
+                        # SessionStart creates server
+                        logger.info(
+                            f"SessionStart for new session {session_id}. Starting server..."
                         )
-                        return True  # Skip event gracefully
+                        port = find_or_start_server(log_file_path)
 
-                    # SessionStart creates server
-                    logger.info(
-                        f"SessionStart for new session {session_id}. Starting server..."
-                    )
-                    port = find_or_start_server(log_file_path)
+                        # Register session
+                        if not register_session(session_id, claude_pid, port):
+                            logger.warning("Failed to register session, continuing anyway")
 
-                    # Register session
-                    if not register_session(session_id, claude_pid, port):
-                        logger.warning("Failed to register session, continuing anyway")
-
-                    logger.info(f"Started server on port {port} and registered session")
+                        logger.info(f"Started server on port {port} and registered session")
+                    else:
+                        # Non-SessionStart event: try to find running server and auto-register
+                        # This handles cases where session ID changes without SessionStart
+                        try:
+                            discovered_port = discover_server_port()
+                            logger.info(
+                                f"Session {session_id} not found, auto-registering on port {discovered_port}"
+                            )
+                            if register_session(session_id, claude_pid, discovered_port):
+                                port = discovered_port
+                                logger.info(
+                                    f"Auto-registered session {session_id} on port {discovered_port}"
+                                )
+                            else:
+                                logger.warning(
+                                    f"Failed to auto-register session {session_id}, skipping event"
+                                )
+                                return True  # Skip event gracefully
+                        except RuntimeError:
+                            # No running server found
+                            logger.warning(
+                                f"Session {session_id} not found and no running server for "
+                                f"{hook_event_name} event. Skipping (SessionStart must run first)."
+                            )
+                            return True  # Skip event gracefully
 
             except Exception as e:
                 logger.error(f"Could not find or start server: {e}")

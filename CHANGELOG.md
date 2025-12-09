@@ -7,6 +7,21 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.0.8] - 2025-12-09
+
+### Fixed
+
+- **Sound Effect Playback**: Fixed sound effects not playing due to module import error
+  - Added `cwd=script_dir` parameter to `create_subprocess_exec()` in `event_processor.py`
+  - Sound player now runs with correct working directory so Python can resolve `utils` module
+  - Previously failed with `ModuleNotFoundError: No module named 'utils'`
+
+- **Session Auto-Registration**: Fixed events being skipped when session ID changes without SessionStart
+  - Non-SessionStart events now auto-register new sessions to running server
+  - Uses existing `discover_server_port()` function instead of inline port scanning
+  - Handles cases where Claude Code session ID changes mid-conversation
+  - Previously all events were silently skipped with "Session not found" warning
+
 ## [1.0.7] - 2025-12-09
 
 ### Fixed

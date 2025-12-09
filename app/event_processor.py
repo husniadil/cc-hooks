@@ -177,11 +177,13 @@ async def play_sound(sound_file: str) -> bool:
             return False
 
         # Run sound player synchronously (blocking - wait for completion)
+        # Set cwd to project root so Python can resolve 'utils' module
         process = await asyncio.create_subprocess_exec(
             "uv",
             "run",
             str(sound_player_path),
             sound_file,
+            cwd=script_dir,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )
