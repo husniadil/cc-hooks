@@ -7,6 +7,15 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.0.7] - 2025-12-09
+
+### Fixed
+
+- **Version Synchronization**: Fixed version mismatch across plugin metadata files
+  - Synchronized versions in `plugin.json`, `marketplace.json`, and `package.json` to 1.0.7
+  - Previously `marketplace.json` and `plugin.json` were stuck at 1.0.0 while `package.json` had 1.0.5
+  - Ensures consistent versioning across all distribution metadata files
+
 ## [1.0.6] - 2025-12-09
 
 ### Fixed
