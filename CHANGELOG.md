@@ -7,6 +7,20 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.0.5] - 2025-12-09
+
+### Added
+
+- **Output Style (Persona) Display**: Restored output_style/persona display in status line
+  - Anthropic delayed the deprecation of output_styles feature, so restoring the functionality
+  - Added `style_color()` method for blue color styling (`1;34`)
+  - Displays persona name with 🎨 icon after model name in status line
+  - Example: `💥 Claude Opus 4.5  🎨 Aisyah  🏷️ claude-opus-4-5-20251101`
+
+### Changed
+
+- **Development Dependencies**: Updated prettier to v3.7.4
+
 ## [1.0.4] - 2025-12-05
 
 ### Added
