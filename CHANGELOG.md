@@ -7,6 +7,19 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.0.6] - 2025-12-09
+
+### Fixed
+
+- **Version Checker Plugin Cache Support**: Fixed version checker failing with "not a git repository"
+  error when running in plugin mode
+  - Added `_resolve_repo_root()` function to detect plugin cache directory and resolve to marketplace
+    path
+  - Plugin mode runs code from `~/.claude/plugins/cache/cc-hooks-plugin/` which doesn't have `.git`
+  - Now correctly resolves to `~/.claude/plugins/marketplaces/cc-hooks-plugin/` which contains the
+    actual git repository
+  - Standalone mode continues to work as before (uses parent of utils/ directory)
+
 ## [1.0.5] - 2025-12-09
 
 ### Added
