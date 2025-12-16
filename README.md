@@ -89,7 +89,7 @@ _Watch cc-hooks in action with premium ElevenLabs text-to-speech_
 claude plugin marketplace add https://github.com/husniadil/cc-hooks.git
 
 # Install plugin
-claude plugin install cc-hooks@cc-hooks-plugin
+claude plugin install cc-hooks-plugin@cc-hooks-plugin
 
 # Done! Start Claude to use
 claude
@@ -103,7 +103,7 @@ claude
 
 # Then in the REPL:
 /plugin marketplace add https://github.com/husniadil/cc-hooks.git
-/plugin install cc-hooks@cc-hooks-plugin
+/plugin install cc-hooks-plugin@cc-hooks-plugin
 
 # Restart Claude Code
 ```
@@ -420,7 +420,7 @@ claude plugin marketplace update cc-hooks-plugin
 claude plugin marketplace update cc-hooks-plugin
 
 # Inside Claude REPL
-/plugin update cc-hooks@cc-hooks-plugin
+/plugin update cc-hooks-plugin@cc-hooks-plugin
 ```
 
 **Important**: Restart Claude Code session after updating.
@@ -669,7 +669,7 @@ migration guide.
 **Quick summary:**
 
 1. Remove hooks from `~/.claude/settings.json`
-2. Install plugin via `claude plugin install cc-hooks@cc-hooks-plugin`
+2. Install plugin via `claude plugin install cc-hooks-plugin@cc-hooks-plugin`
 3. Update shell alias to point to plugin path
 4. Export API keys to shell environment (if using)
 5. Test with `/cc-hooks-plugin:setup check`

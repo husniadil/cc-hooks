@@ -7,6 +7,23 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.0.9] - 2025-12-16
+
+### Changed
+
+- **Plugin Name Standardization**: Renamed plugin from `cc-hooks` to `cc-hooks-plugin` for consistency
+  - Updated `marketplace.json` plugin name to match directory name (`cc-hooks-plugin`)
+  - All plugin commands now use consistent format: `cc-hooks-plugin@cc-hooks-plugin`
+  - Previously: `cc-hooks@cc-hooks-plugin` → Now: `cc-hooks-plugin@cc-hooks-plugin`
+  - Affected commands: `install`, `uninstall`, `update`
+
+### Documentation
+
+- **Installation Commands Updated**: All documentation reflects new plugin naming
+  - Updated `README.md` with correct install/update commands
+  - Updated `CLAUDE.md` development guide with new plugin commands
+  - Updated `MIGRATION.md` with correct migration steps
+
 ## [1.0.8] - 2025-12-09
 
 ### Fixed

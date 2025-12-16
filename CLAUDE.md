@@ -167,11 +167,11 @@ system)
 ```bash
 # Via CLI (recommended)
 claude plugin marketplace add https://github.com/husniadil/cc-hooks.git
-claude plugin install cc-hooks@cc-hooks-plugin
+claude plugin install cc-hooks-plugin@cc-hooks-plugin
 
 # Or inside Claude REPL
 /plugin marketplace add https://github.com/husniadil/cc-hooks.git
-/plugin install cc-hooks@cc-hooks-plugin
+/plugin install cc-hooks-plugin@cc-hooks-plugin
 ```
 
 **Key Differences**:
@@ -180,7 +180,7 @@ claude plugin install cc-hooks@cc-hooks-plugin
 | ----------------- | ---------------------------------- | ------------------------------------------------ |
 | Installation path | User-defined                       | `~/.claude/plugins/marketplaces/cc-hooks-plugin` |
 | Hooks config      | Manual (`~/.claude/settings.json`) | Automatic (`hooks/hooks.json` in plugin)         |
-| Updates           | Git pull                           | `/plugin update cc-hooks@cc-hooks-plugin`        |
+| Updates           | Git pull                           | `/plugin update cc-hooks-plugin@cc-hooks-plugin`        |
 | Data directory    | `~/.claude/.cc-hooks/` (shared)    | `~/.claude/.cc-hooks/` (shared)                  |
 
 **Note**: Both modes share the same data directory (`~/.claude/.cc-hooks/`) for seamless migration
@@ -810,7 +810,7 @@ sqlite3 ~/.claude/.cc-hooks/events.db "DELETE FROM events WHERE status = 'failed
 claude plugin marketplace update cc-hooks-plugin
 
 # Or inside Claude REPL
-/plugin update cc-hooks@cc-hooks-plugin
+/plugin update cc-hooks-plugin@cc-hooks-plugin
 
 # Check for updates (via API)
 curl http://localhost:12222/version/status

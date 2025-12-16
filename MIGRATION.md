@@ -160,13 +160,13 @@ cc-hooks entries.
 claude plugin marketplace add https://github.com/husniadil/cc-hooks.git
 
 # Install cc-hooks plugin
-claude plugin install cc-hooks@cc-hooks-plugin
+claude plugin install cc-hooks-plugin@cc-hooks-plugin
 
 # Verify installation
 claude plugin list
 ```
 
-You should see `cc-hooks@cc-hooks-plugin` in the list.
+You should see `cc-hooks-plugin@cc-hooks-plugin` in the list.
 
 ### Step 4: Update Shell Alias
 
@@ -317,7 +317,7 @@ cld
 
 1. Make sure plugin is installed: `claude plugin list`
 2. Try reinstalling:
-   `claude plugin uninstall cc-hooks@cc-hooks-plugin && claude plugin install cc-hooks@cc-hooks-plugin`
+   `claude plugin uninstall cc-hooks-plugin@cc-hooks-plugin && claude plugin install cc-hooks-plugin@cc-hooks-plugin`
 3. Restart Claude Code
 
 ### "Hooks still running from old standalone installation"
@@ -333,7 +333,7 @@ If you need to rollback:
 1. **Uninstall plugin**:
 
    ```bash
-   claude plugin uninstall cc-hooks@cc-hooks-plugin
+   claude plugin uninstall cc-hooks-plugin@cc-hooks-plugin
    ```
 
 2. **Restore hooks** in `~/.claude/settings.json` (from your backup)
