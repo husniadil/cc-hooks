@@ -7,6 +7,32 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.0.10] - 2025-12-26
+
+### Changed
+
+- **Status Line Redesign**: Complete visual overhaul with improved color palette and native Claude
+  Code data integration
+  - Migrated from basic ANSI colors to 256-color palette for better visual distinction and
+    compatibility
+  - Replaced ccusage dependency with native Claude Code JSON data for usage/cost information
+  - New context window progress bar showing current usage percentage with dynamic coloring
+    (green/yellow/red based on usage)
+  - Token display now shows input/output breakdown (↓in ↑out format)
+  - Cost display uses native `cost.total_cost_usd` from Claude Code
+  - Duration tracking shows total session time (minutes:seconds or hours:minutes format)
+  - Lines changed indicator (+added -removed) from native Claude Code metrics
+  - Updated emoji icons for cleaner appearance (Nerd Font icons where applicable)
+  - Always-on color support (removed TTY check that broke Claude Code statusline rendering)
+
+### Removed
+
+- **ccusage Dependency**: Removed external ccusage package dependency
+  - Status line now uses native Claude Code JSON data instead of ccusage binary
+  - Simplified installation - no Node.js/npm dependency required for status line
+  - Removed ccusage from package.json dependencies
+  - Better reliability with direct data access vs subprocess calls
+
 ## [1.0.9] - 2025-12-16
 
 ### Changed
