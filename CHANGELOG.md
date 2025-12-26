@@ -7,6 +7,23 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.0.11] - 2025-12-26
+
+### Changed
+
+- **Status Line Theme System Redesign**: Centralized color configuration with per-line theming
+  - New `THEME` dictionary for easy color customization at the top of the file
+  - One-color-per-line approach: line1 (orange/peach), line2 (teal), line3 (lavender)
+  - True Color (24-bit RGB) for precise color control
+  - Muted pastel palette with lower saturation for calm, subdued appearance
+  - Warning states (coral/warm) for high context usage (>60%, >80%)
+  - Semantic color aliases maintain backward compatibility
+  - Cleaner code with DRY principle - removed duplicate color definitions
+  - New `SEPARATOR` constant (`|`) with gray color for widget separation
+  - Simplified labels: `TTS:`, `SFX:`, `OR:` prefixes for cleaner display
+  - SFX status always visible (`On`/`Muted`) instead of only when muted
+  - OpenRouter status uses text indicators (`●`, `○`, `?`) instead of emojis
+
 ## [1.0.10] - 2025-12-26
 
 ### Changed

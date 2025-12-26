@@ -84,62 +84,73 @@ class StatusLine:
         """Reset ANSI colors"""
         return "\033[0m" if self.use_color else ""
 
-    # Color helpers - 256 color palette for better compatibility
-    # Approximations: cyan=81, pink=204, yellow=221, green=150, orange=209, purple=141, gray=243
-    def dir_color(self):
-        return self._color("38;5;81")  # cyan
+    # ==========================================================================
+    # THEME CONFIGURATION - Edit colors here for easy customization
+    # ==========================================================================
+    # Format: (R, G, B) - values 0-255
+    THEME = {
+        # Line colors - one color per status line row
+        "line1": (210, 140, 100),  # muted orange/peach
+        "line2": (120, 165, 160),  # muted teal
+        "line3": (160, 145, 180),  # muted lavender
+        # Warning states (for context/session usage)
+        "warning_high": (185, 130, 130),  # muted coral (>80%)
+        "warning_mid": (175, 155, 145),  # warm muted (>60%)
+        # Shared
+        "gray": (140, 140, 145),  # neutral gray (offline states)
+        "alert": (200, 160, 100),  # update notifications
+    }
 
-    def model_color(self):
-        return self._color("38;5;204")  # pink
+    # Separator between widgets/sections
+    SEPARATOR = " | "
 
-    def version_color(self):
-        return self._color("38;5;221")  # yellow
+    # ==========================================================================
+    # Color helpers - TRUE COLOR (24-bit RGB)
+    # ==========================================================================
+    def _rgb(self, r, g, b):
+        """Apply true color (24-bit) RGB"""
+        return self._color(f"38;2;{r};{g};{b}")
 
-    def style_color(self):
-        return self._color("38;5;150")  # green
+    def _theme_color(self, key):
+        """Get color from theme by key"""
+        return self._rgb(*self.THEME[key])
 
-    def project_color(self):
-        return self._color("38;5;141")  # purple
+    # Line color accessors
+    def _line1_color(self):
+        return self._theme_color("line1")
 
-    def git_color(self):
-        return self._color("38;5;150")  # green
+    def _line2_color(self):
+        return self._theme_color("line2")
 
-    def usage_color(self):
-        return self._color("38;5;141")  # purple
+    def _line3_color(self):
+        return self._theme_color("line3")
 
-    def cost_color(self):
-        return self._color("38;5;209")  # orange
+    # Semantic aliases (for backward compatibility and clarity in render())
+    dir_color = model_color = version_color = style_color = project_color = (
+        git_color
+    ) = _line1_color
+    tts_color = elevenlabs_color = openrouter_color = _line2_color
+    usage_color = cost_color = _line3_color
+
+    def gray_color(self):
+        return self._theme_color("gray")
+
+    def _warning_color(self, pct, high_threshold=80, mid_threshold=60):
+        """Get warning color based on percentage threshold"""
+        if pct >= high_threshold:
+            return self._theme_color("warning_high")
+        elif pct >= mid_threshold:
+            return self._theme_color("warning_mid")
+        return self._line3_color()
 
     def context_color(self, usage_pct):
         """Dynamic context color based on usage percentage"""
-        if usage_pct >= 80:
-            return self._color("38;5;204")  # pink/red
-        elif usage_pct >= 60:
-            return self._color("38;5;221")  # yellow
-        else:
-            return self._color("38;5;150")  # green
-
-    def tts_color(self):
-        return self._color("38;5;221")  # yellow
-
-    def elevenlabs_color(self):
-        return self.tts_color()  # backward compatibility
-
-    def openrouter_color(self):
-        return self._color("38;5;81")  # cyan
-
-    def gray_color(self):
-        return self._color("38;5;243")  # gray
+        return self._warning_color(usage_pct)
 
     def session_color(self, session_pct):
         """Dynamic session color based on remaining percentage"""
         rem_pct = 100 - session_pct
-        if rem_pct <= 10:
-            return self._color("38;5;204")  # pink/red
-        elif rem_pct <= 25:
-            return self._color("38;5;221")  # yellow
-        else:
-            return self._color("38;5;150")  # green
+        return self._warning_color(100 - rem_pct)  # invert for remaining
 
     def _run_command(self, cmd, shell=False, capture_output=True, text=True):
         """Run shell command safely"""
@@ -770,7 +781,7 @@ class StatusLine:
                 openrouter_info = f"{model_display}"
 
             # Try to verify connection with a simple API check
-            status_emoji = ""
+            status_indicator = ""
             try:
                 import requests
 
@@ -780,21 +791,21 @@ class StatusLine:
                     timeout=2,
                 )
                 if response.status_code == 200:
-                    status_emoji = "🟢"  # online
+                    status_indicator = "●"  # online
                 else:
-                    status_emoji = "❌"  # error
+                    status_indicator = "○"  # error
             except ImportError:
                 self._debug_log("requests package not available for OpenRouter check")
-                status_emoji = "❓"  # no-requests
+                status_indicator = "?"  # no-requests
             except requests.exceptions.RequestException:
-                status_emoji = "🔴"  # offline
+                status_indicator = "○"  # offline
             except Exception as e:
                 self._debug_log(f"Unexpected error in OpenRouter check: {e}")
-                status_emoji = "⚠️"  # unknown
+                status_indicator = "○"  # unknown
 
-            # Format: emoji model (features)
-            if status_emoji:
-                openrouter_info = f"{status_emoji} {openrouter_info}"
+            # Format: indicator model (features)
+            if status_indicator:
+                openrouter_info = f"{status_indicator} {openrouter_info}"
 
         except Exception as e:
             self._debug_log(f"Error getting OpenRouter info: {e}")
@@ -958,16 +969,17 @@ class StatusLine:
         # Build line 2: CC-Hooks features
         line2_parts = []
 
-        # CC-Hooks health status (● green = online, ○ gray = offline)
+        # CC-Hooks health status (● online, ○ offline) - all line 2 color
+        line2_col = self._line2_color()
         if cc_hooks_emoji == "●":
-            dot_color = self.git_color()  # green
+            dot_color = line2_col
         else:
             dot_color = self.gray_color()
         line2_parts.append(
-            f"{dot_color}{cc_hooks_emoji}{self._reset()} {self.gray_color()}cc-hooks:{cc_hooks_port}{self._reset()}"
+            f"{dot_color}{cc_hooks_emoji}{self._reset()} {line2_col}cc-hooks:{cc_hooks_port}{self._reset()}"
         )
 
-        # TTS information
+        # TTS information - line 2 color
         if tts_enabled and tts_info:
             tts_display = tts_info
             if (
@@ -976,46 +988,41 @@ class StatusLine:
                 and not tts_info.startswith(voice_name)
             ):
                 tts_display = f"{voice_name}: {tts_info}"
-            # Use muted icon for muted state, speaker icon otherwise
-            tts_icon = "婢" if tts_info == "Muted" else ""
-            line2_parts.append(
-                f"{tts_icon} {self.tts_color()}{tts_display}{self._reset()}"
-            )
+            # Format: "TTS: info" or "TTS: Muted"
+            line2_parts.append(f"{line2_col}TTS: {tts_display}{self._reset()}")
 
-        # Sound effects information (only show when muted)
-        if effects_muted and effects_info:
-            line2_parts.append(f"婢 {self.gray_color()}{effects_info}{self._reset()}")
+        # Sound effects information - always show status
+        sfx_status = "Muted" if effects_muted else "On"
+        line2_parts.append(f"{line2_col}SFX: {sfx_status}{self._reset()}")
 
-        # OpenRouter information
+        # OpenRouter information - line 2 color
         if openrouter_enabled and openrouter_info:
-            line2_parts.append(
-                f" {self.openrouter_color()}{openrouter_info}{self._reset()}"
-            )
+            line2_parts.append(f"{line2_col}OR: {openrouter_info}{self._reset()}")
 
         # Build line 3: Usage & Cost (from Claude Code JSON - replaces ccusage)
         line3_parts = []
 
+        # Line 3 color (with dynamic warning for high context usage)
+        line3_col = self.context_color(context_pct)
+
         # Context window with progress bar
-        ctx_col = self.context_color(context_pct)
         total_k = total_tokens / 1000
         size_k = context_size / 1000
         line3_parts.append(
-            f" {ctx_col}{context_pct}% {context_bar} {total_k:.0f}k/{size_k:.0f}k{self._reset()}"
+            f" {line3_col}{context_pct}% {context_bar} {total_k:.0f}k/{size_k:.0f}k{self._reset()}"
         )
 
-        # Total tokens (input/output)
+        # Total tokens (input/output) - line 3 color
         if total_input_tokens > 0 or total_output_tokens > 0:
             in_k = total_input_tokens / 1000
             out_k = total_output_tokens / 1000
-            line3_parts.append(
-                f" {self.usage_color()}↓{in_k:.1f}k ↑{out_k:.1f}k{self._reset()}"
-            )
+            line3_parts.append(f" {line3_col}↓{in_k:.1f}k ↑{out_k:.1f}k{self._reset()}")
 
-        # Cost information
+        # Cost information - line 3 color
         if cost_usd and cost_usd > 0:
-            line3_parts.append(f" {self.cost_color()}${cost_usd:.4f}{self._reset()}")
+            line3_parts.append(f" {line3_col}${cost_usd:.4f}{self._reset()}")
 
-        # Duration (format as minutes:seconds or hours:minutes)
+        # Duration (format as minutes:seconds or hours:minutes) - line 3 color
         if total_duration_ms > 0:
             total_secs = total_duration_ms / 1000
             if total_secs >= 3600:
@@ -1026,25 +1033,23 @@ class StatusLine:
                 mins = int(total_secs // 60)
                 secs = int(total_secs % 60)
                 duration_str = f"{mins}m {secs}s"
-            line3_parts.append(f" {self.gray_color()}{duration_str}{self._reset()}")
+            line3_parts.append(f" {line3_col}{duration_str}{self._reset()}")
 
-        # Lines changed
+        # Lines changed - line 3 color
         if lines_added > 0 or lines_removed > 0:
-            lines_part = f" {self.git_color()}+{lines_added}{self._reset()} {self._color('38;5;204')}-{lines_removed}{self._reset()}"
+            lines_part = f" {line3_col}+{lines_added} -{lines_removed}{self._reset()}"
             line3_parts.append(lines_part)
 
-        # Print the final status line (2-4 lines)
-        print("  ".join(line1_parts))
+        # Print the final status line (2-4 lines) with separator
+        sep = f"{self.gray_color()}{self.SEPARATOR}{self._reset()}"
+        print(sep.join(line1_parts))
         if line2_parts:  # Only print line 2 if there's cc-hooks info
-            print("  ".join(line2_parts))
+            print(sep.join(line2_parts))
         if line3_parts:  # Only print line 3 if there's usage info
-            print("  ".join(line3_parts))
+            print(sep.join(line3_parts))
         if update_available and update_msg:  # Print update notification on line 4
-            # Add yellow color to warning message
-            yellow = self._color("1;33")
-            reset = self._reset()
-            colored_msg = f"{yellow}{update_msg}{reset}"
-            print(colored_msg)
+            alert_col = self._theme_color("alert")
+            print(f"{alert_col}{update_msg}{self._reset()}")
 
 
 def main():
