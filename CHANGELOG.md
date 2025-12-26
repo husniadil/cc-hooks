@@ -11,7 +11,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
-- **Plugin Name Standardization**: Renamed plugin from `cc-hooks` to `cc-hooks-plugin` for consistency
+- **Plugin Name Standardization**: Renamed plugin from `cc-hooks` to `cc-hooks-plugin` for
+  consistency
   - Updated `marketplace.json` plugin name to match directory name (`cc-hooks-plugin`)
   - All plugin commands now use consistent format: `cc-hooks-plugin@cc-hooks-plugin`
   - Previously: `cc-hooks@cc-hooks-plugin` → Now: `cc-hooks-plugin@cc-hooks-plugin`
@@ -33,7 +34,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - Sound player now runs with correct working directory so Python can resolve `utils` module
   - Previously failed with `ModuleNotFoundError: No module named 'utils'`
 
-- **Session Auto-Registration**: Fixed events being skipped when session ID changes without SessionStart
+- **Session Auto-Registration**: Fixed events being skipped when session ID changes without
+  SessionStart
   - Non-SessionStart events now auto-register new sessions to running server
   - Uses existing `discover_server_port()` function instead of inline port scanning
   - Handles cases where Claude Code session ID changes mid-conversation
@@ -45,17 +47,18 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - **Version Synchronization**: Fixed version mismatch across plugin metadata files
   - Synchronized versions in `plugin.json`, `marketplace.json`, and `package.json` to 1.0.7
-  - Previously `marketplace.json` and `plugin.json` were stuck at 1.0.0 while `package.json` had 1.0.5
+  - Previously `marketplace.json` and `plugin.json` were stuck at 1.0.0 while `package.json` had
+    1.0.5
   - Ensures consistent versioning across all distribution metadata files
 
 ## [1.0.6] - 2025-12-09
 
 ### Fixed
 
-- **Version Checker Plugin Cache Support**: Fixed version checker failing with "not a git repository"
-  error when running in plugin mode
-  - Added `_resolve_repo_root()` function to detect plugin cache directory and resolve to marketplace
-    path
+- **Version Checker Plugin Cache Support**: Fixed version checker failing with "not a git
+  repository" error when running in plugin mode
+  - Added `_resolve_repo_root()` function to detect plugin cache directory and resolve to
+    marketplace path
   - Plugin mode runs code from `~/.claude/plugins/cache/cc-hooks-plugin/` which doesn't have `.git`
   - Now correctly resolves to `~/.claude/plugins/marketplaces/cc-hooks-plugin/` which contains the
     actual git repository

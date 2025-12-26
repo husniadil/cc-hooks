@@ -549,9 +549,13 @@ def send_to_api(
 
                         # Register session
                         if not register_session(session_id, claude_pid, port):
-                            logger.warning("Failed to register session, continuing anyway")
+                            logger.warning(
+                                "Failed to register session, continuing anyway"
+                            )
 
-                        logger.info(f"Started server on port {port} and registered session")
+                        logger.info(
+                            f"Started server on port {port} and registered session"
+                        )
                     else:
                         # Non-SessionStart event: try to find running server and auto-register
                         # This handles cases where session ID changes without SessionStart
@@ -560,7 +564,9 @@ def send_to_api(
                             logger.info(
                                 f"Session {session_id} not found, auto-registering on port {discovered_port}"
                             )
-                            if register_session(session_id, claude_pid, discovered_port):
+                            if register_session(
+                                session_id, claude_pid, discovered_port
+                            ):
                                 port = discovered_port
                                 logger.info(
                                     f"Auto-registered session {session_id} on port {discovered_port}"

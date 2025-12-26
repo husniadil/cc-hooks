@@ -46,7 +46,9 @@ def _resolve_repo_root() -> Path:
         # Resolve to marketplace directory which has .git
         marketplace_path = Path.home() / ".claude/plugins/marketplaces/cc-hooks-plugin"
         if marketplace_path.exists() and (marketplace_path / ".git").exists():
-            logger.debug(f"Resolved repo root from cache to marketplace: {marketplace_path}")
+            logger.debug(
+                f"Resolved repo root from cache to marketplace: {marketplace_path}"
+            )
             return marketplace_path
 
     return default_root

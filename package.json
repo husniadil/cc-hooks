@@ -28,9 +28,7 @@
     "update": "./update.sh",
     "version:check": "uv run utils/version_checker.py"
   },
-  "dependencies": {
-    "ccusage": "^16.2.5"
-  },
+  "dependencies": {},
   "devDependencies": {
     "prettier": "^3.7.4"
   },

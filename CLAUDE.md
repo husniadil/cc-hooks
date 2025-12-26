@@ -180,7 +180,7 @@ claude plugin install cc-hooks-plugin@cc-hooks-plugin
 | ----------------- | ---------------------------------- | ------------------------------------------------ |
 | Installation path | User-defined                       | `~/.claude/plugins/marketplaces/cc-hooks-plugin` |
 | Hooks config      | Manual (`~/.claude/settings.json`) | Automatic (`hooks/hooks.json` in plugin)         |
-| Updates           | Git pull                           | `/plugin update cc-hooks-plugin@cc-hooks-plugin`        |
+| Updates           | Git pull                           | `/plugin update cc-hooks-plugin@cc-hooks-plugin` |
 | Data directory    | `~/.claude/.cc-hooks/` (shared)    | `~/.claude/.cc-hooks/` (shared)                  |
 
 **Note**: Both modes share the same data directory (`~/.claude/.cc-hooks/`) for seamless migration
@@ -302,7 +302,8 @@ fi
 
 **Use Cases**:
 
-- Update scripts need to use different commands (`claude plugin marketplace update` vs `npm run update`)
+- Update scripts need to use different commands (`claude plugin marketplace update` vs
+  `npm run update`)
 - Detection is used by `/cc-hooks-plugin:update` slash command
 - Diagnostic tools showing current installation configuration
 

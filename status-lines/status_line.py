@@ -63,10 +63,12 @@ class StatusLine:
             )
 
     def _should_use_color(self):
-        """Determine if colors should be used (TTY-aware, respect no_color flag)"""
+        """Determine if colors should be used (always enabled for Claude Code statusline)"""
         if self.no_color:
             return False
-        return sys.stdout.isatty()
+        # Always enable colors - Claude Code statusline supports ANSI colors
+        # even when running via pipe (sys.stdout.isatty() would be False)
+        return True
 
     def _debug_log(self, message):
         """Debug logging helper"""
@@ -82,49 +84,62 @@ class StatusLine:
         """Reset ANSI colors"""
         return "\033[0m" if self.use_color else ""
 
-    # Color helpers
+    # Color helpers - 256 color palette for better compatibility
+    # Approximations: cyan=81, pink=204, yellow=221, green=150, orange=209, purple=141, gray=243
     def dir_color(self):
-        return self._color("1;36")  # cyan
+        return self._color("38;5;81")  # cyan
 
     def model_color(self):
-        return self._color("1;35")  # magenta
+        return self._color("38;5;204")  # pink
 
     def version_color(self):
-        return self._color("1;33")  # yellow
+        return self._color("38;5;221")  # yellow
 
     def style_color(self):
-        return self._color("1;34")  # blue
+        return self._color("38;5;150")  # green
 
     def project_color(self):
-        return self._color("1;37")  # white
+        return self._color("38;5;141")  # purple
 
     def git_color(self):
-        return self._color("1;32")  # green
+        return self._color("38;5;150")  # green
 
     def usage_color(self):
-        return self._color("1;35")  # magenta
+        return self._color("38;5;141")  # purple
 
     def cost_color(self):
-        return self._color("1;36")  # cyan
+        return self._color("38;5;209")  # orange
+
+    def context_color(self, usage_pct):
+        """Dynamic context color based on usage percentage"""
+        if usage_pct >= 80:
+            return self._color("38;5;204")  # pink/red
+        elif usage_pct >= 60:
+            return self._color("38;5;221")  # yellow
+        else:
+            return self._color("38;5;150")  # green
 
     def tts_color(self):
-        return self._color("1;33")  # yellow
+        return self._color("38;5;221")  # yellow
 
     def elevenlabs_color(self):
         return self.tts_color()  # backward compatibility
 
     def openrouter_color(self):
-        return self._color("1;36")  # cyan
+        return self._color("38;5;81")  # cyan
+
+    def gray_color(self):
+        return self._color("38;5;243")  # gray
 
     def session_color(self, session_pct):
         """Dynamic session color based on remaining percentage"""
         rem_pct = 100 - session_pct
         if rem_pct <= 10:
-            return self._color("1;31")  # red
+            return self._color("38;5;204")  # pink/red
         elif rem_pct <= 25:
-            return self._color("1;33")  # yellow
+            return self._color("38;5;221")  # yellow
         else:
-            return self._color("1;32")  # green
+            return self._color("38;5;150")  # green
 
     def _run_command(self, cmd, shell=False, capture_output=True, text=True):
         """Run shell command safely"""
@@ -176,11 +191,11 @@ class StatusLine:
             return ""
 
     def _progress_bar(self, pct, width=10):
-        """Generate ASCII progress bar"""
+        """Generate progress bar (▰▱)"""
         pct = max(0, min(100, int(pct) if str(pct).isdigit() else 0))
         filled = pct * width // 100
         empty = width - filled
-        return "=" * filled + "-" * empty
+        return "▰" * filled + "▱" * empty
 
     def _detect_claude_pid(self):
         """Detect Claude binary PID by walking up the process tree.
@@ -335,18 +350,18 @@ class StatusLine:
 
             response = requests.get(get_server_url(port, "/health"), timeout=2)
             if response.status_code == 200:
-                return True, "🟢", "online", port
+                return True, "●", "online", port
             else:
-                return False, "❌", "error", port
+                return False, "○", "error", port
 
         except ImportError:
             self._debug_log("requests package not available")
-            return False, "❓", "no-deps", port
+            return False, "○", "no-deps", port
         except requests.exceptions.RequestException:
-            return False, "🔴", "offline", port
+            return False, "○", "offline", port
         except Exception as e:
             self._debug_log(f"Unexpected error in health check: {e}")
-            return False, "⚠️", "unknown", port
+            return False, "○", "unknown", port
 
     def _get_cc_hooks_update_status(self):
         """Check if cc-hooks update is available"""
@@ -647,10 +662,13 @@ class StatusLine:
                 self._debug_log(f"Error fetching voice name: {e}")
                 voice_name = f"ElevenLabs{language_display}"
 
-            # Format the usage info
+            # Format the usage info with progress bar
             if char_limit > 0:
                 usage_pct = (char_used * 100) // char_limit
-                elevenlabs_info = f"{char_used:,}/{char_limit:,} chars ({usage_pct}%)"
+                usage_bar = self._progress_bar(usage_pct, 10)
+                elevenlabs_info = (
+                    f"[{usage_bar}] {usage_pct}% ({char_used:,}/{char_limit:,} chars)"
+                )
                 if not can_do_tts:
                     elevenlabs_info += " [LIMIT REACHED]"
             else:
@@ -870,11 +888,6 @@ class StatusLine:
         # CC-Hooks update check
         update_available, update_msg = self._get_cc_hooks_update_status()
 
-        # Usage information
-        session_txt, session_pct, session_bar, cost_usd, cost_per_hour = (
-            self._get_ccusage_info()
-        )
-
         # TTS information
         tts_info, tts_enabled, voice_name = self._get_tts_info()
 
@@ -886,44 +899,73 @@ class StatusLine:
         # Sound effects information
         effects_info, effects_muted = self._get_sound_effects_info()
 
+        # Context window information (following official docs calculation)
+        context_window = data.get("context_window", {})
+
+        context_size = context_window.get("context_window_size", 200000)
+        current_usage = context_window.get("current_usage", {})
+
+        # Calculate current context from current_usage fields (official docs formula)
+        input_tokens = current_usage.get("input_tokens", 0) or 0
+        cache_creation_tokens = current_usage.get("cache_creation_input_tokens", 0) or 0
+        cache_read_tokens = current_usage.get("cache_read_input_tokens", 0) or 0
+        total_tokens = input_tokens + cache_creation_tokens + cache_read_tokens
+
+        context_pct = (total_tokens * 100 // context_size) if context_size > 0 else 0
+        context_bar = self._progress_bar(context_pct, 10)
+
+        # Total tokens (for display)
+        total_input_tokens = context_window.get("total_input_tokens", 0) or 0
+        total_output_tokens = context_window.get("total_output_tokens", 0) or 0
+
+        # Cost information from Claude Code JSON (replaces ccusage)
+        cost_data = data.get("cost", {})
+        cost_usd = cost_data.get("total_cost_usd", 0) or 0
+        total_duration_ms = cost_data.get("total_duration_ms", 0) or 0
+        api_duration_ms = cost_data.get("total_api_duration_ms", 0) or 0
+        lines_added = cost_data.get("total_lines_added", 0) or 0
+        lines_removed = cost_data.get("total_lines_removed", 0) or 0
+
         # Build line 1: Main context + cc-hooks features
         line1_parts = []
 
         # Project context (if different from current dir)
         if project_name:
-            line1_parts.append(
-                f"📦 {self.project_color()}{project_name}{self._reset()}"
-            )
+            line1_parts.append(f" {self.project_color()}{project_name}{self._reset()}")
 
         # Current directory
-        line1_parts.append(f"📁 {self.dir_color()}{current_dir}{self._reset()}")
+        line1_parts.append(f" {self.dir_color()}{current_dir}{self._reset()}")
 
         # Git information
         if git_branch:
-            git_part = f"🌿 {self.git_color()}{git_branch}"
+            git_part = f" {self.git_color()}{git_branch}"
             if git_status:
                 git_part += f" {git_status}"
             git_part += self._reset()
             line1_parts.append(git_part)
 
         # Model information
-        line1_parts.append(f"💥 {self.model_color()}{model_name}{self._reset()}")
+        line1_parts.append(f" {self.model_color()}{model_name}{self._reset()}")
 
         # Output style (persona)
         if output_style and output_style != "null":
-            line1_parts.append(f"🎨 {self.style_color()}{output_style}{self._reset()}")
+            line1_parts.append(f" {self.style_color()}{output_style}{self._reset()}")
 
         # Model version
         if model_version and model_version != "null":
-            line1_parts.append(
-                f"🏷️ {self.version_color()}{model_version}{self._reset()}"
-            )
+            line1_parts.append(f" {self.version_color()}{model_version}{self._reset()}")
 
         # Build line 2: CC-Hooks features
         line2_parts = []
 
-        # CC-Hooks health status
-        line2_parts.append(f"🎧 {cc_hooks_emoji} cc-hooks:{cc_hooks_port}")
+        # CC-Hooks health status (● green = online, ○ gray = offline)
+        if cc_hooks_emoji == "●":
+            dot_color = self.git_color()  # green
+        else:
+            dot_color = self.gray_color()
+        line2_parts.append(
+            f"{dot_color}{cc_hooks_emoji}{self._reset()} {self.gray_color()}cc-hooks:{cc_hooks_port}{self._reset()}"
+        )
 
         # TTS information
         if tts_enabled and tts_info:
@@ -935,37 +977,61 @@ class StatusLine:
             ):
                 tts_display = f"{voice_name}: {tts_info}"
             # Use muted icon for muted state, speaker icon otherwise
-            tts_icon = "🔇" if tts_info == "Muted" else "🔊"
+            tts_icon = "婢" if tts_info == "Muted" else ""
             line2_parts.append(
                 f"{tts_icon} {self.tts_color()}{tts_display}{self._reset()}"
             )
 
         # Sound effects information (only show when muted)
         if effects_muted and effects_info:
-            line2_parts.append(f"🔕 {effects_info}")
+            line2_parts.append(f"婢 {self.gray_color()}{effects_info}{self._reset()}")
 
         # OpenRouter information
         if openrouter_enabled and openrouter_info:
             line2_parts.append(
-                f"🔀 {self.openrouter_color()}{openrouter_info}{self._reset()}"
+                f" {self.openrouter_color()}{openrouter_info}{self._reset()}"
             )
 
-        # Build line 3: Usage & Cost (ccusage dedicated)
+        # Build line 3: Usage & Cost (from Claude Code JSON - replaces ccusage)
         line3_parts = []
 
-        # Session information
-        if session_txt:
-            session_col = self.session_color(session_pct)
-            line3_parts.append(f"⌛ {session_col}{session_txt}{self._reset()}")
-            line3_parts.append(f"{session_col}[{session_bar}]{self._reset()}")
+        # Context window with progress bar
+        ctx_col = self.context_color(context_pct)
+        total_k = total_tokens / 1000
+        size_k = context_size / 1000
+        line3_parts.append(
+            f" {ctx_col}{context_pct}% {context_bar} {total_k:.0f}k/{size_k:.0f}k{self._reset()}"
+        )
+
+        # Total tokens (input/output)
+        if total_input_tokens > 0 or total_output_tokens > 0:
+            in_k = total_input_tokens / 1000
+            out_k = total_output_tokens / 1000
+            line3_parts.append(
+                f" {self.usage_color()}↓{in_k:.1f}k ↑{out_k:.1f}k{self._reset()}"
+            )
 
         # Cost information
-        if cost_usd and re.match(r"^[\d.]+$", str(cost_usd)):
-            cost_part = f"💵 {self.cost_color()}${float(cost_usd):.2f}"
-            if cost_per_hour and re.match(r"^[\d.]+$", str(cost_per_hour)):
-                cost_part += f" (${float(cost_per_hour):.2f}/h)"
-            cost_part += self._reset()
-            line3_parts.append(cost_part)
+        if cost_usd and cost_usd > 0:
+            line3_parts.append(f" {self.cost_color()}${cost_usd:.4f}{self._reset()}")
+
+        # Duration (format as minutes:seconds or hours:minutes)
+        if total_duration_ms > 0:
+            total_secs = total_duration_ms / 1000
+            if total_secs >= 3600:
+                hours = int(total_secs // 3600)
+                mins = int((total_secs % 3600) // 60)
+                duration_str = f"{hours}h {mins}m"
+            else:
+                mins = int(total_secs // 60)
+                secs = int(total_secs % 60)
+                duration_str = f"{mins}m {secs}s"
+            line3_parts.append(f" {self.gray_color()}{duration_str}{self._reset()}")
+
+        # Lines changed
+        if lines_added > 0 or lines_removed > 0:
+            lines_part = f" {self.git_color()}+{lines_added}{self._reset()} {self._color('38;5;204')}-{lines_removed}{self._reset()}"
+            line3_parts.append(lines_part)
 
         # Print the final status line (2-4 lines)
         print("  ".join(line1_parts))
@@ -1002,11 +1068,19 @@ def main():
 
     status_line = StatusLine(debug=debug, no_color=no_color)
 
-    # Read input from stdin
-    input_data = sys.stdin.read() if not sys.stdin.isatty() else ""
+    # Read input from stdin (always try to read, don't check isatty)
+    try:
+        input_data = sys.stdin.read()
+    except Exception:
+        input_data = ""
     if debug:
         print(
             f"[DEBUG StatusLine] Input data length: {len(input_data)}",
+            file=sys.stderr,
+            flush=True,
+        )
+        print(
+            f"[DEBUG StatusLine] Input data preview: {input_data[:500]}",
             file=sys.stderr,
             flush=True,
         )
