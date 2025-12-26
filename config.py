@@ -80,6 +80,35 @@ def resolve_api_key(env_var_name: str) -> str:
     return ""
 
 
+def get_env_with_fallback(base_name: str, default: str = "") -> str:
+    """Get environment variable with CC_ prefix fallback priority.
+
+    Priority:
+    1. CC_<base_name> (per-session from SessionStart hook)
+    2. <base_name> (global from .env or environment)
+    3. default value
+
+    Args:
+        base_name: Base name of the environment variable (e.g., "OPENROUTER_MODEL")
+        default: Default value if neither env var exists
+
+    Returns:
+        Environment variable value or default
+    """
+    # Check CC_ prefixed version first (per-session)
+    cc_var = os.getenv(f"CC_{base_name}")
+    if cc_var:
+        return cc_var
+
+    # Fallback to non-CC_ version (global)
+    global_var = os.getenv(base_name)
+    if global_var:
+        return global_var
+
+    # Fallback to default
+    return default
+
+
 @dataclass
 class Config:
     """Configuration settings loaded from environment variables."""
@@ -127,26 +156,32 @@ class Config:
             db_path=db_path,
             max_retry_count=max_retry_count,
             # TTS Configuration (global defaults from .env)
-            tts_providers=os.getenv("TTS_PROVIDERS", "prerecorded"),
+            tts_providers=get_env_with_fallback("TTS_PROVIDERS", "prerecorded"),
             tts_cache_enabled=parse_bool_env(
-                os.getenv("TTS_CACHE_ENABLED", "true"), True
+                get_env_with_fallback("TTS_CACHE_ENABLED", "true"), True
             ),
-            tts_language=os.getenv("TTS_LANGUAGE", "en"),
+            tts_language=get_env_with_fallback("TTS_LANGUAGE", "en"),
             # ElevenLabs Configuration
             elevenlabs_api_key=resolve_api_key("ELEVENLABS_API_KEY"),
-            elevenlabs_voice_id=os.getenv(
+            elevenlabs_voice_id=get_env_with_fallback(
                 "ELEVENLABS_VOICE_ID", "21m00Tcm4TlvDq8ikWAM"
             ),
-            elevenlabs_model_id=os.getenv("ELEVENLABS_MODEL_ID", "eleven_flash_v2_5"),
+            elevenlabs_model_id=get_env_with_fallback(
+                "ELEVENLABS_MODEL_ID", "eleven_flash_v2_5"
+            ),
             # OpenRouter Configuration
-            openrouter_enabled=parse_bool_env(os.getenv("OPENROUTER_ENABLED", "false")),
+            openrouter_enabled=parse_bool_env(
+                get_env_with_fallback("OPENROUTER_ENABLED", "false")
+            ),
             openrouter_api_key=resolve_api_key("OPENROUTER_API_KEY"),
-            openrouter_model=os.getenv("OPENROUTER_MODEL", "openai/gpt-4o-mini"),
+            openrouter_model=get_env_with_fallback(
+                "OPENROUTER_MODEL", "openai/gpt-4o-mini"
+            ),
             openrouter_contextual_stop=parse_bool_env(
-                os.getenv("OPENROUTER_CONTEXTUAL_STOP", "false")
+                get_env_with_fallback("OPENROUTER_CONTEXTUAL_STOP", "false")
             ),
             openrouter_contextual_pretooluse=parse_bool_env(
-                os.getenv("OPENROUTER_CONTEXTUAL_PRETOOLUSE", "false")
+                get_env_with_fallback("OPENROUTER_CONTEXTUAL_PRETOOLUSE", "false")
             ),
         )
 
@@ -158,6 +193,16 @@ class Config:
 
 
 config = Config.from_env()
+
+
+def reload_config() -> None:
+    """Reload config from environment variables.
+
+    Call this after apply_config_to_env() to pick up CC_* variables
+    that were set from config.yaml.
+    """
+    global config
+    config = Config.from_env()
 
 
 def initialize_openrouter_service_lazy():

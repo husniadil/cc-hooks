@@ -7,6 +7,19 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.0.12] - 2025-12-26
+
+### Fixed
+
+- **Config Environment Variable Priority**: Fixed CC\_ prefixed variables not being detected
+  correctly
+  - Added `get_env_with_fallback()` function to properly handle priority: CC\_\* (per-session) →
+    global env → default
+  - Per-session config from SessionStart hook (CC_TTS_PROVIDERS, CC_OPENROUTER_MODEL, etc.) now
+    correctly override global .env settings
+  - Added `reload_config()` function to refresh config after applying YAML config to environment
+  - Updated model examples in config.yaml template (gemini-2.5-flash-lite, claude-haiku-4.5)
+
 ## [1.0.11] - 2025-12-26
 
 ### Changed

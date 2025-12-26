@@ -196,7 +196,7 @@ openrouter:
   enabled: false
 
   # Model to use for contextual messages
-  # Examples: openai/gpt-4o-mini, google/gemini-2.0-flash-exp, anthropic/claude-3.5-sonnet
+  # Examples: openai/gpt-4o-mini, google/gemini-2.5-flash-lite, anthropic/claude-haiku-4.5
   model: openai/gpt-4o-mini
 
   # Generate contextual completion messages on Stop event
