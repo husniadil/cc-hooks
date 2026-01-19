@@ -10,6 +10,7 @@ from .base import TTSProvider
 from .prerecorded_provider import PrerecordedProvider
 from .gtts_provider import GTTSProvider
 from .elevenlabs_provider import ElevenLabsProvider
+from .kokoro_provider import KokoroProvider
 from utils.colored_logger import setup_logger
 
 logger = setup_logger(__name__)
@@ -19,6 +20,7 @@ PROVIDER_REGISTRY: Dict[str, Type[TTSProvider]] = {
     "prerecorded": PrerecordedProvider,
     "gtts": GTTSProvider,
     "elevenlabs": ElevenLabsProvider,
+    "kokoro": KokoroProvider,
 }
 
 # Provider configuration mapping (what parameters each provider supports)
@@ -37,6 +39,14 @@ PROVIDER_CONFIGS = {
         "supports_api_key": True,
         "supports_voice_id": True,
         "supports_model_id": True,
+    },
+    "kokoro": {
+        "supports_language": True,
+        "supports_cache": True,
+        "supports_base_url": True,
+        "supports_voice": True,
+        "supports_model": True,
+        "supports_response_format": True,
     },
 }
 
@@ -84,6 +94,19 @@ def create_provider(provider_name: str, **kwargs) -> Optional[TTSProvider]:
 
         if provider_config.get("supports_model_id", False) and "model_id" in kwargs:
             filtered_kwargs["model_id"] = kwargs["model_id"]
+
+        # Add Kokoro-specific parameters
+        if provider_config.get("supports_base_url", False) and "base_url" in kwargs:
+            filtered_kwargs["base_url"] = kwargs["base_url"]
+
+        if provider_config.get("supports_voice", False) and "voice" in kwargs:
+            filtered_kwargs["voice"] = kwargs["voice"]
+
+        if provider_config.get("supports_model", False) and "model" in kwargs:
+            filtered_kwargs["model"] = kwargs["model"]
+
+        if provider_config.get("supports_response_format", False) and "response_format" in kwargs:
+            filtered_kwargs["response_format"] = kwargs["response_format"]
 
         # Create provider with filtered parameters
         provider = provider_class(**filtered_kwargs)
