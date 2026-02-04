@@ -945,16 +945,16 @@ This pattern allows:
 
 | File                        | Lines | Purpose                           |
 | --------------------------- | ----- | --------------------------------- |
-| hooks.py                    | 723   | Entry point, lifecycle management |
-| server.py                   | 157   | FastAPI server startup            |
-| app/event_processor.py      | 546   | Background event processing       |
-| app/event_db.py             | 871   | SQLite operations, orphan cleanup |
-| app/api.py                  | 537   | REST API endpoints                |
-| utils/tts_announcer.py      | 749   | TTS orchestration                 |
-| utils/transcript_parser.py  | 552   | Conversation context extraction   |
-| utils/openrouter_service.py | 688   | AI service integration            |
-| utils/tts_manager.py        | 194   | Provider chain management         |
-| utils/version_checker.py    | 337   | Update detection                  |
+| hooks.py                    | 651   | Entry point, lifecycle management |
+| server.py                   | 132   | FastAPI server startup            |
+| app/event_processor.py      | 395   | Background event processing       |
+| app/event_db.py             | 791   | SQLite operations, orphan cleanup |
+| app/api.py                  | 467   | REST API endpoints                |
+| utils/tts_announcer.py      | 651   | TTS orchestration                 |
+| utils/transcript_parser.py  | 558   | Conversation context extraction   |
+| utils/openrouter_service.py | 504   | AI service integration            |
+| utils/tts_manager.py        | 195   | Provider chain management         |
+| utils/version_checker.py    | 369   | Update detection                  |
 
 ## Environment Variables Reference
 
