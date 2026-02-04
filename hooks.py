@@ -14,9 +14,6 @@
 # ]
 # ///
 
-# Claude Code hooks entry point
-# Receives hook events from Claude Code via stdin and forwards them to the API server
-
 import json
 import os
 import sys
@@ -38,7 +35,6 @@ from utils.process_utils import detect_claude_pid
 configure_root_logging()
 logger = setup_logger(__name__)
 
-# Track if file logging already setup
 _file_logging_initialized = False
 
 
@@ -46,38 +42,29 @@ def discover_server_port(
     start_port: int = NetworkConstants.PORT_DISCOVERY_START,
     max_attempts: int = NetworkConstants.PORT_DISCOVERY_MAX_ATTEMPTS,
 ) -> int:
-    """
-    Discover the server port by trying sequential ports.
-    Returns the first working port.
-    Raises RuntimeError if no working port found.
-    """
+    """Discover the server port by trying sequential ports. Raises RuntimeError if none found."""
     for offset in range(max_attempts):
         port = start_port + offset
         try:
-            url = get_server_url(port, "/health")
-            response = requests.get(url, timeout=0.5)
-            if response.status_code == 200:
+            if (
+                requests.get(get_server_url(port, "/health"), timeout=0.5).status_code
+                == 200
+            ):
                 logger.debug(f"Found server on port {port}")
                 return port
         except requests.exceptions.RequestException:
             continue
 
-    error_msg = (
-        f"Could not find running server on ports {start_port}-{start_port + max_attempts - 1}. "
-        f"Troubleshooting: Check if server is running, verify network connectivity, "
-        f"or check logs for startup errors."
+    raise RuntimeError(
+        f"Could not find running server on ports {start_port}-{start_port + max_attempts - 1}"
     )
-    raise RuntimeError(error_msg)
 
 
 def find_available_port(
     start_port: int = NetworkConstants.PORT_DISCOVERY_START,
     max_attempts: int = NetworkConstants.PORT_DISCOVERY_MAX_ATTEMPTS,
 ) -> int:
-    """
-    Find an available port for starting server.
-    Returns first port that's not in use.
-    """
+    """Find an available port for starting server. Raises RuntimeError if none found."""
     import socket
 
     for offset in range(max_attempts):
@@ -89,25 +76,17 @@ def find_available_port(
             except OSError:
                 continue
 
-    error_msg = (
-        f"Could not find available port in range {start_port}-{start_port + max_attempts - 1}. "
-        f"All ports are in use. Try closing other applications or increasing max_attempts."
+    raise RuntimeError(
+        f"Could not find available port in range {start_port}-{start_port + max_attempts - 1}"
     )
-    raise RuntimeError(error_msg)
 
 
 def start_server(port: int, log_file_path: Optional[str] = None) -> bool:
-    """Start server in background on specified port.
-
-    Returns True if started successfully.
-    If log_file_path provided, server output will be appended to that file.
-    """
+    """Start server in background on specified port. Returns True if started successfully."""
     try:
         import subprocess
+        import time
 
-        # Get script directory - supports both plugin and standalone modes
-        # Plugin mode: Use CLAUDE_PLUGIN_ROOT
-        # Standalone mode: Use script directory
         script_dir = Path(os.getenv("CLAUDE_PLUGIN_ROOT", Path(__file__).parent))
         server_script = script_dir / "server.py"
 
@@ -115,46 +94,35 @@ def start_server(port: int, log_file_path: Optional[str] = None) -> bool:
             logger.error(f"Server script not found: {server_script}")
             return False
 
-        # Prepare environment variables for server
         server_env = {**os.environ, "PORT": str(port)}
-
-        # Pass log file path to server via env var
-        # Server will open and manage its own log file internally
-        # This prevents file descriptor issues when hooks.py exits
         if log_file_path:
             server_env["LOG_FILE"] = str(log_file_path)
-            logger.debug(f"Server will log to: {log_file_path}")
 
-        # Start server in background
-        # Use DEVNULL for stdout/stderr - server handles its own logging
         process = subprocess.Popen(
             ["uv", "run", str(server_script)],
             env=server_env,
-            stdout=subprocess.DEVNULL,  # Server logs internally via LOG_FILE
-            stderr=subprocess.DEVNULL,  # Server logs internally via LOG_FILE
-            start_new_session=True,  # Detach from parent
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            start_new_session=True,
         )
-
         logger.debug(f"Server process started (PID: {process.pid})")
 
-        # Wait for server to be ready
-        for attempt in range(NetworkConstants.SERVER_STARTUP_MAX_ATTEMPTS):
+        for _ in range(NetworkConstants.SERVER_STARTUP_MAX_ATTEMPTS):
             try:
-                url = get_server_url(port, "/health")
-                response = requests.get(url, timeout=0.5)
-                if response.status_code == 200:
+                if (
+                    requests.get(
+                        get_server_url(port, "/health"), timeout=0.5
+                    ).status_code
+                    == 200
+                ):
                     logger.info(f"Started server on port {port}")
                     return True
             except requests.exceptions.RequestException:
-                import time
-
                 time.sleep(NetworkConstants.SERVER_STARTUP_RETRY_DELAY)
 
-        # Server failed to start - kill the leaked subprocess
         logger.error(f"Server failed to start on port {port}")
         if log_file_path:
             logger.error(f"Check log file for details: {log_file_path}")
-
         try:
             process.terminate()
             process.wait(timeout=5)
@@ -167,7 +135,6 @@ def start_server(port: int, log_file_path: Optional[str] = None) -> bool:
                 process.kill()
             except Exception:
                 pass
-
         return False
 
     except Exception as e:
@@ -176,30 +143,22 @@ def start_server(port: int, log_file_path: Optional[str] = None) -> bool:
 
 
 def find_or_start_server(log_file_path: Optional[str] = None) -> int:
-    """Start dedicated server for this Claude session.
-
-    Each session gets its own server on a unique port.
-    Returns port number of the started server.
-    """
-    # Start new dedicated server (each session has its own server)
+    """Start dedicated server for this Claude session. Returns port number."""
     logger.info("Starting dedicated server for this session...")
     port = find_available_port()
-    if start_server(port, log_file_path):
-        return port
-    else:
+    if not start_server(port, log_file_path):
         raise RuntimeError("Failed to start server")
+    return port
+
+
+def _env_bool(name: str) -> bool:
+    """Read an environment variable as boolean (true if value is 'true')."""
+    return os.getenv(name, "").lower() == "true"
 
 
 def register_session(session_id: str, claude_pid: int, port: int) -> bool:
-    """
-    Register session with settings at SessionStart.
-    Reads CC_* env vars and POSTs to DB.
-
-    Note: Handles /clear command case where same claude_pid starts new session.
-    The API handles cleanup of sessions for this PID.
-    """
+    """Register session with settings at SessionStart. Reads CC_* env vars and POSTs to DB."""
     try:
-        api_url = get_server_url(port, "/sessions")
         payload = {
             "session_id": session_id,
             "claude_pid": claude_pid,
@@ -210,75 +169,61 @@ def register_session(session_id: str, claude_pid: int, port: int) -> bool:
             == "true",
             "elevenlabs_voice_id": os.getenv("CC_ELEVENLABS_VOICE_ID"),
             "elevenlabs_model_id": os.getenv("CC_ELEVENLABS_MODEL_ID"),
-            "silent_announcements": os.getenv("CC_SILENT_ANNOUNCEMENTS", "").lower()
-            == "true",
-            "silent_effects": os.getenv("CC_SILENT_EFFECTS", "").lower() == "true",
-            "openrouter_enabled": os.getenv("CC_OPENROUTER_ENABLED", "").lower()
-            == "true",
+            "silent_announcements": _env_bool("CC_SILENT_ANNOUNCEMENTS"),
+            "silent_effects": _env_bool("CC_SILENT_EFFECTS"),
+            "openrouter_enabled": _env_bool("CC_OPENROUTER_ENABLED"),
             "openrouter_model": os.getenv("CC_OPENROUTER_MODEL"),
-            "openrouter_contextual_stop": os.getenv(
-                "CC_OPENROUTER_CONTEXTUAL_STOP", ""
-            ).lower()
-            == "true",
-            "openrouter_contextual_pretooluse": os.getenv(
-                "CC_OPENROUTER_CONTEXTUAL_PRETOOLUSE", ""
-            ).lower()
-            == "true",
+            "openrouter_contextual_stop": _env_bool("CC_OPENROUTER_CONTEXTUAL_STOP"),
+            "openrouter_contextual_pretooluse": _env_bool(
+                "CC_OPENROUTER_CONTEXTUAL_PRETOOLUSE"
+            ),
         }
 
-        # cleanup_pid parameter deletes sessions for same claude_pid before insert
         response = requests.post(
-            api_url, json=payload, params={"cleanup_pid": claude_pid}, timeout=10
+            get_server_url(port, "/sessions"),
+            json=payload,
+            params={"cleanup_pid": claude_pid},
+            timeout=10,
         )
         response.raise_for_status()
-
         logger.info(
             f"Registered session {session_id} for claude_pid {claude_pid} on port {port}"
         )
         return True
 
-    except requests.exceptions.RequestException as e:
-        logger.error(f"Error registering session: {e}")
-        return False
     except Exception as e:
-        logger.error(f"Unexpected error registering session: {e}")
+        logger.error(f"Error registering session: {e}")
         return False
 
 
 def read_json_from_stdin() -> Dict[str, Any]:
     """Read and parse JSON data from stdin."""
     try:
-        data = sys.stdin.read()
-        if not data.strip():
+        data = sys.stdin.read().strip()
+        if not data:
             raise ValueError("No data received from stdin")
-
         result = json.loads(data)
         if not isinstance(result, dict):
             raise ValueError("Expected JSON object")
-        result_dict: Dict[str, Any] = result
-        return result_dict
-    except json.JSONDecodeError as e:
-        logger.error(f"Invalid JSON format - {e}")
+        return result
+    except (json.JSONDecodeError, ValueError) as e:
+        logger.error(f"Error reading from stdin: {e}")
         sys.exit(1)
     except Exception as e:
-        logger.error(f"Error reading from stdin: {e}")
+        logger.error(f"Unexpected error reading from stdin: {e}")
         sys.exit(1)
 
 
 def delete_session(session_id: str, port: int) -> bool:
-    """
-    Delete session at SessionEnd.
-    """
+    """Delete session at SessionEnd."""
     try:
-        api_url = get_server_url(port, f"/sessions/{session_id}")
-        response = requests.delete(api_url, timeout=10)
+        response = requests.delete(
+            get_server_url(port, f"/sessions/{session_id}"), timeout=10
+        )
         response.raise_for_status()
-
         logger.info(f"Deleted session {session_id}")
         return True
-
     except requests.exceptions.ConnectionError as e:
-        # Connection refused is expected during shutdown - server already closed
         if "Connection refused" in str(e) or "Errno 61" in str(e):
             logger.debug(
                 "Server already shut down, session cleanup skipped (expected during exit)"
@@ -286,11 +231,8 @@ def delete_session(session_id: str, port: int) -> bool:
         else:
             logger.error(f"Connection error deleting session: {e}")
         return False
-    except requests.exceptions.RequestException as e:
-        logger.error(f"Error deleting session: {e}")
-        return False
     except Exception as e:
-        logger.error(f"Unexpected error deleting session: {e}")
+        logger.error(f"Error deleting session: {e}")
         return False
 
 

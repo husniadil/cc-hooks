@@ -1,9 +1,4 @@
-"""
-Factory for creating TTS providers based on configuration.
-
-This module handles instantiation of different TTS providers
-and provides a clean interface for provider creation.
-"""
+"""Factory for creating TTS providers based on configuration."""
 
 from typing import Dict, Type, Optional, List
 from .base import TTSProvider

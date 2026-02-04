@@ -1,11 +1,4 @@
-"""
-Config file loader for cc-hooks
-
-Loads YAML configuration from ~/.claude/.cc-hooks/config.yaml
-and sets environment variables as defaults (only if not already set).
-
-Priority: CLI flags > Environment variables > Config file > Defaults
-"""
+"""Config file loader - loads YAML configuration from ~/.claude/.cc-hooks/config.yaml."""
 
 import os
 from pathlib import Path

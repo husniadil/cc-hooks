@@ -1,9 +1,4 @@
-"""
-Shared mappings and utilities for TTS providers.
-
-This module contains the common data structures and utility functions
-used by all TTS providers to avoid duplication and ensure consistency.
-"""
+"""Shared mappings and utilities for TTS providers."""
 
 from typing import Dict, Tuple, Optional, Any, Union
 from utils.constants import HookEvent, SoundFiles, EventSource
@@ -242,14 +237,5 @@ def get_sound_file_for_event(
 
 
 def get_audio_description(sound_file: str) -> Optional[str]:
-    """
-    Get descriptive text for a sound file.
-
-    Args:
-        sound_file (str): Name of the sound file (e.g., "session_start_startup.mp3")
-
-    Returns:
-        str or None: Description text if found, None otherwise
-    """
-    result: str | None = AUDIO_DESCRIPTIONS_MAP.get(sound_file)
-    return result
+    """Get descriptive text for a sound file."""
+    return AUDIO_DESCRIPTIONS_MAP.get(sound_file)

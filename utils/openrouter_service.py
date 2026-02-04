@@ -1,9 +1,4 @@
-"""
-Generic OpenRouter service for Claude Code hooks system.
-
-This service provides a unified interface to OpenRouter's LLM API,
-supporting translation and other text generation tasks for future extensibility.
-"""
+"""OpenRouter service for Claude Code hooks - provides LLM API integration."""
 
 from typing import Optional, Dict, Any
 from utils.colored_logger import setup_logger, configure_root_logging
@@ -41,17 +36,6 @@ class OpenRouterService:
         contextual_stop: bool = False,
         contextual_pretooluse: bool = False,
     ):
-        """
-        Initialize OpenRouter service.
-
-        Args:
-            api_key (str): OpenRouter API key
-            model (str): Default model to use
-            enabled (bool): Whether the service is enabled
-            contextual_stop (bool): Whether contextual Stop messages are enabled
-            contextual_pretooluse (bool): Whether contextual PreToolUse messages are enabled
-        """
-        # Strip and validate API key (empty or whitespace-only strings become empty)
         self.api_key = api_key.strip() if api_key else ""
         self.model = model
         self.enabled = enabled
@@ -82,17 +66,47 @@ class OpenRouterService:
         return self._client
 
     def _is_valid_api_key(self, api_key: str) -> bool:
-        """Check if API key is valid (non-empty, not placeholder, reasonable length)"""
+        """Check if API key is valid (non-empty, not placeholder, reasonable length)."""
         if not api_key or not api_key.strip():
             return False
-        # Check for common placeholder values
-        placeholders = ["your_key_here", "your_api_key", "null", "none", "undefined"]
-        if api_key.lower() in placeholders:
-            return False
-        # OpenRouter keys should be at least 20 characters (reasonable minimum)
-        if len(api_key) < 20:
-            return False
-        return True
+        placeholders = {"your_key_here", "your_api_key", "null", "none", "undefined"}
+        return api_key.lower() not in placeholders and len(api_key) >= 20
+
+    @staticmethod
+    def _strip_quotes(text: str) -> str:
+        """Strip surrounding quotes the LLM might add."""
+        for quote in ('"', "'"):
+            if text.startswith(quote) and text.endswith(quote):
+                return text[1:-1]
+        return text
+
+    def _is_api_ready(self, override_enabled: Optional[bool] = None) -> bool:
+        """Check if API key and SDK are available, optionally skipping enabled check."""
+        if override_enabled is not None:
+            return self._is_valid_api_key(self.api_key) and OPENAI_AVAILABLE
+        return self.is_available()
+
+    def _call_api(
+        self, system_prompt: str, user_prompt: str, max_tokens: int = 50
+    ) -> Optional[str]:
+        """Make an API call and return stripped response text, or None on failure."""
+        messages: list[dict[str, str]] = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt},
+        ]
+        response = self.client.chat.completions.create(  # type: ignore[arg-type,union-attr]
+            model=self.model,
+            messages=messages,  # type: ignore[arg-type]
+            max_tokens=max_tokens,
+            temperature=0.3,
+            extra_headers={
+                "HTTP-Referer": "https://github.com/husniadil/cc-hooks",
+                "X-Title": "Claude Code Hooks",
+            },
+        )
+        if not response.choices or not response.choices[0].message.content:
+            return None
+        return self._strip_quotes(response.choices[0].message.content.strip())
 
     def is_available(self, for_translation: bool = False) -> bool:
         """
@@ -141,76 +155,32 @@ class OpenRouterService:
         hook_event_name: Optional[str] = None,
         event_data: Optional[dict] = None,
     ) -> Optional[str]:
-        """
-        Translate text from source language to target language with Claude Code context.
-
-        Args:
-            text (str): Text to translate
-            target_language (str): Target language code (e.g., "id", "es", "fr")
-            source_language (str): Source language code (default: "en")
-            hook_event_name (str, optional): Claude Code hook event name for context
-            event_data (dict, optional): Event data for additional context
-
-        Returns:
-            str or None: Translated text if successful, None if failed
-        """
+        """Translate text with Claude Code context. Returns None on failure."""
         if not self.is_available(for_translation=True):
-            logger.debug("Service not available for translation")
             return None
 
         if not text or not text.strip():
             logger.warning("Empty text provided for translation")
             return None
 
-        # Allow English-to-English processing for context enhancement
         if source_language == target_language and not (hook_event_name or event_data):
-            logger.debug(
-                f"Source and target languages are the same ({target_language}) with no context, returning original text"
-            )
             return text
 
         try:
-            # Create context-aware translation prompt
             prompt = self._create_context_aware_translation_prompt(
                 text, source_language, target_language, hook_event_name, event_data
             )
-
             logger.info(
                 f"Translating from {source_language} to {target_language}: '{text}'"
-                + (f" (event: {hook_event_name})" if hook_event_name else "")
             )
 
-            # Make API call with system prompt
-            messages: list[dict[str, str]] = [
-                {"role": "system", "content": TRANSLATION_SYSTEM_PROMPT},
-                {"role": "user", "content": prompt},
-            ]
-
-            response = self.client.chat.completions.create(  # type: ignore[arg-type,union-attr]
-                model=self.model,
-                messages=messages,  # type: ignore[arg-type]
-                max_tokens=150,  # Allow more tokens for context-aware translations
-                temperature=0.3,  # Slightly creative but consistent
-                extra_headers={
-                    "HTTP-Referer": "https://github.com/husniadil/cc-hooks",
-                    "X-Title": "Claude Code Hooks",
-                },
-            )
-
-            if not response.choices or not response.choices[0].message.content:
+            result = self._call_api(TRANSLATION_SYSTEM_PROMPT, prompt, max_tokens=150)
+            if not result:
                 logger.error("Empty response from API")
                 return None
 
-            translated_text = response.choices[0].message.content.strip()
-
-            # Remove surrounding quotes that the LLM might add
-            if translated_text.startswith('"') and translated_text.endswith('"'):
-                translated_text = translated_text[1:-1]
-            elif translated_text.startswith("'") and translated_text.endswith("'"):
-                translated_text = translated_text[1:-1]
-
-            logger.info(f"Translation successful: '{text}' → '{translated_text}'")
-            return translated_text
+            logger.info(f"Translation successful: '{text}' -> '{result}'")
+            return result
 
         except Exception as e:
             logger.error(f"Translation failed: {e}")
@@ -224,93 +194,35 @@ class OpenRouterService:
         target_language: str = "en",
         override_contextual_stop: Optional[bool] = None,
     ) -> Optional[str]:
-        """
-        Generate a contextual completion message based on conversation context.
-
-        Args:
-            session_id (str): Claude Code session ID
-            user_prompt (str, optional): Last user prompt from conversation
-            claude_response (str, optional): Last Claude response from conversation
-            target_language (str): Target language for the message (default: "en")
-            override_contextual_stop (bool, optional): Override contextual_stop setting (for session-specific config)
-
-        Returns:
-            str or None: Generated completion message if successful, None if failed
-        """
-        # Use override if provided, otherwise use instance setting
-        contextual_stop_enabled = (
+        """Generate a contextual completion message based on conversation context."""
+        enabled = (
             override_contextual_stop
             if override_contextual_stop is not None
             else self.contextual_stop
         )
-
-        if not contextual_stop_enabled:
-            logger.debug("Contextual completion messages are disabled")
+        if not enabled:
             return None
 
-        # When using session-specific override, skip the global enabled check
-        # Only check API key availability
-        if override_contextual_stop is not None:
-            # Session-specific mode: only check API key and SDK availability
-            if not (self._is_valid_api_key(self.api_key) and OPENAI_AVAILABLE):
-                logger.debug("Service not available (missing API key or SDK)")
-                return None
-        else:
-            # Global mode: check full availability including enabled flag
-            if not self.is_available():
-                logger.debug("Service not available for completion message generation")
-                return None
+        if not self._is_api_ready(override_contextual_stop):
+            return None
 
         if not user_prompt and not claude_response:
-            logger.debug("No conversation context available for completion message")
             return None
 
         try:
-            # Create context-aware completion message prompt
             prompt = self._create_completion_message_prompt(
                 user_prompt, claude_response, target_language
             )
-
             logger.info(
                 f"Generating completion message for session {session_id} in {target_language}"
             )
-            # Debug logging for input context
-            logger.debug(f"User Prompt: {user_prompt}")
-            logger.debug(f"Claude Response: {claude_response}")
 
-            # Make API call with system prompt
-            messages: list[dict[str, str]] = [
-                {"role": "system", "content": COMPLETION_SYSTEM_PROMPT},
-                {"role": "user", "content": prompt},
-            ]
-
-            response = self.client.chat.completions.create(  # type: ignore[arg-type,union-attr]
-                model=self.model,
-                messages=messages,  # type: ignore[arg-type]
-                max_tokens=50,  # Short completion messages
-                temperature=0.3,  # Consistent but natural
-                extra_headers={
-                    "HTTP-Referer": "https://github.com/husniadil/cc-hooks",
-                    "X-Title": "Claude Code Hooks",
-                },
-            )
-
-            if not response.choices or not response.choices[0].message.content:
+            result = self._call_api(COMPLETION_SYSTEM_PROMPT, prompt)
+            if result:
+                logger.info(f"Generated completion message: '{result}'")
+            else:
                 logger.error("Empty response from API for completion message")
-                return None
-
-            completion_message = response.choices[0].message.content.strip()
-
-            # Remove surrounding quotes that the LLM might add
-            if completion_message.startswith('"') and completion_message.endswith('"'):
-                completion_message = completion_message[1:-1]
-            elif completion_message.startswith("'") and completion_message.endswith(
-                "'"
-            ):
-                completion_message = completion_message[1:-1]
-
-            logger.info(f"Generated completion message: '{completion_message}'")
-            return completion_message
+            return result
 
         except Exception as e:
             logger.error(f"Completion message generation failed: {e}")
@@ -325,93 +237,35 @@ class OpenRouterService:
         target_language: str = "en",
         override_contextual_pretooluse: Optional[bool] = None,
     ) -> Optional[str]:
-        """
-        Generate a contextual PreToolUse message based on conversation context and tool info.
-
-        Args:
-            session_id (str): Claude Code session ID
-            tool_name (str): Name of the tool about to be used
-            user_prompt (str, optional): Last user prompt from conversation
-            claude_response (str, optional): Last Claude response from conversation
-            target_language (str): Target language for the message (default: "en")
-            override_contextual_pretooluse (bool, optional): Override contextual_pretooluse setting (for session-specific config)
-
-        Returns:
-            str or None: Generated PreToolUse message if successful, None if failed
-        """
-        # Use override if provided, otherwise use instance setting
-        contextual_pretooluse_enabled = (
+        """Generate a contextual PreToolUse message based on conversation context."""
+        enabled = (
             override_contextual_pretooluse
             if override_contextual_pretooluse is not None
             else self.contextual_pretooluse
         )
-
-        if not contextual_pretooluse_enabled:
-            logger.debug("Contextual PreToolUse messages are disabled")
+        if not enabled:
             return None
 
-        # When using session-specific override, skip the global enabled check
-        # Only check API key availability
-        if override_contextual_pretooluse is not None:
-            # Session-specific mode: only check API key and SDK availability
-            if not (self._is_valid_api_key(self.api_key) and OPENAI_AVAILABLE):
-                logger.debug("Service not available (missing API key or SDK)")
-                return None
-        else:
-            # Global mode: check full availability including enabled flag
-            if not self.is_available():
-                logger.debug("Service not available for PreToolUse message generation")
-                return None
+        if not self._is_api_ready(override_contextual_pretooluse):
+            return None
 
         if not user_prompt and not claude_response:
-            logger.debug("No conversation context available for PreToolUse message")
             return None
 
         try:
-            # Create context-aware PreToolUse message prompt
             prompt = self._create_pre_tool_message_prompt(
                 tool_name, user_prompt, claude_response, target_language
             )
-
             logger.info(
                 f"Generating PreToolUse message for session {session_id} using {tool_name} in {target_language}"
             )
-            # Debug logging for input context
-            logger.debug(f"Tool Name: {tool_name}")
-            logger.debug(f"User Prompt: {user_prompt}")
-            logger.debug(f"Claude Response: {claude_response}")
 
-            # Make API call with system prompt
-            messages: list[dict[str, str]] = [
-                {"role": "system", "content": PRE_TOOL_SYSTEM_PROMPT},
-                {"role": "user", "content": prompt},
-            ]
-
-            response = self.client.chat.completions.create(  # type: ignore[arg-type,union-attr]
-                model=self.model,
-                messages=messages,  # type: ignore[arg-type]
-                max_tokens=50,  # Short action messages
-                temperature=0.3,  # Consistent but natural
-                extra_headers={
-                    "HTTP-Referer": "https://github.com/husniadil/cc-hooks",
-                    "X-Title": "Claude Code Hooks",
-                },
-            )
-
-            if not response.choices or not response.choices[0].message.content:
+            result = self._call_api(PRE_TOOL_SYSTEM_PROMPT, prompt)
+            if result:
+                logger.info(f"Generated PreToolUse message: '{result}'")
+            else:
                 logger.error("Empty response from API for PreToolUse message")
-                return None
-
-            pre_tool_message = response.choices[0].message.content.strip()
-
-            # Remove surrounding quotes that the LLM might add
-            if pre_tool_message.startswith('"') and pre_tool_message.endswith('"'):
-                pre_tool_message = pre_tool_message[1:-1]
-            elif pre_tool_message.startswith("'") and pre_tool_message.endswith("'"):
-                pre_tool_message = pre_tool_message[1:-1]
-
-            logger.info(f"Generated PreToolUse message: '{pre_tool_message}'")
-            return pre_tool_message
+            return result
 
         except Exception as e:
             logger.error(f"PreToolUse message generation failed: {e}")
@@ -596,39 +450,21 @@ def generate_completion_message_if_available(
     fallback_message: str = "Task completed successfully",
     override_contextual_stop: Optional[bool] = None,
 ) -> str:
-    """
-    Convenience function to generate completion message if OpenRouter is available.
-    Falls back to default message if generation fails or service unavailable.
-
-    Args:
-        session_id (str): Claude Code session ID
-        user_prompt (str, optional): Last user prompt from conversation
-        claude_response (str, optional): Last Claude response from conversation
-        target_language (str): Target language for the message (default: "en")
-        fallback_message (str): Default message if generation fails
-        override_contextual_stop (bool, optional): Override contextual_stop setting (for session-specific config)
-
-    Returns:
-        str: Generated contextual completion message or fallback message
-    """
+    """Generate completion message if OpenRouter is available, else return fallback."""
     service = get_openrouter_service()
     if not service:
-        logger.debug("Service not available, using fallback completion message")
         return fallback_message
 
-    completion_message = service.generate_completion_message(
-        session_id=session_id,
-        user_prompt=user_prompt,
-        claude_response=claude_response,
-        target_language=target_language,
-        override_contextual_stop=override_contextual_stop,
+    return (
+        service.generate_completion_message(
+            session_id=session_id,
+            user_prompt=user_prompt,
+            claude_response=claude_response,
+            target_language=target_language,
+            override_contextual_stop=override_contextual_stop,
+        )
+        or fallback_message
     )
-
-    if completion_message:
-        return completion_message
-    else:
-        logger.debug("Failed to generate completion message, using fallback")
-        return fallback_message
 
 
 def generate_pre_tool_message_if_available(
@@ -640,23 +476,7 @@ def generate_pre_tool_message_if_available(
     fallback_message: Optional[str] = None,
     override_contextual_pretooluse: Optional[bool] = None,
 ) -> str:
-    """
-    Convenience function to generate PreToolUse message if OpenRouter is available.
-    Falls back to default message if generation fails or service unavailable.
-
-    Args:
-        session_id (str): Claude Code session ID
-        tool_name (str): Name of the tool about to be used
-        user_prompt (str, optional): Last user prompt from conversation
-        claude_response (str, optional): Last Claude response from conversation
-        target_language (str): Target language for the message (default: "en")
-        fallback_message (str, optional): Default message if generation fails (auto-generated if None)
-        override_contextual_pretooluse (bool, optional): Override contextual_pretooluse setting (for session-specific config)
-
-    Returns:
-        str: Generated contextual PreToolUse message or fallback message
-    """
-    # Import the tool name shortening function
+    """Generate PreToolUse message if OpenRouter is available, else return fallback."""
     try:
         from utils.tts_announcer import _shorten_tool_name_for_tts
 
@@ -664,26 +484,21 @@ def generate_pre_tool_message_if_available(
     except ImportError:
         short_tool_name = tool_name
 
+    if fallback_message is None:
+        fallback_message = f"Running {short_tool_name} tool"
+
     service = get_openrouter_service()
     if not service:
-        if fallback_message is None:
-            fallback_message = f"Running {short_tool_name} tool"
-        logger.debug("Service not available, using fallback PreToolUse message")
         return fallback_message
 
-    pre_tool_message = service.generate_pre_tool_message(
-        session_id=session_id,
-        tool_name=tool_name,
-        user_prompt=user_prompt,
-        claude_response=claude_response,
-        target_language=target_language,
-        override_contextual_pretooluse=override_contextual_pretooluse,
+    return (
+        service.generate_pre_tool_message(
+            session_id=session_id,
+            tool_name=tool_name,
+            user_prompt=user_prompt,
+            claude_response=claude_response,
+            target_language=target_language,
+            override_contextual_pretooluse=override_contextual_pretooluse,
+        )
+        or fallback_message
     )
-
-    if pre_tool_message:
-        return pre_tool_message
-    else:
-        if fallback_message is None:
-            fallback_message = f"Running {short_tool_name} tool"
-        logger.debug("Failed to generate PreToolUse message, using fallback")
-        return fallback_message

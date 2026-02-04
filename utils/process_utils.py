@@ -1,9 +1,4 @@
-"""
-Shared process utilities for Claude Code hooks system.
-
-Provides Claude process detection functions used across multiple components
-(hooks.py, event_db.py, status_line.py) to maintain DRY principle.
-"""
+"""Shared process utilities for Claude Code hooks system."""
 
 import os
 from typing import Optional
@@ -22,23 +17,7 @@ except ImportError:
 
 
 def is_claude_binary(name: str, cmdline: str, cmdline_list: list[str]) -> bool:
-    """
-    Check if a process matches Claude binary signatures.
-
-    Detection strategies:
-    1. Name-based: process name is exactly "claude"
-    2. Cmdline-based: cmdline starts with "claude " or equals "claude"
-    3. Path-based: first cmdline arg ends with "/claude" (for Bun-compiled binary
-       where process name might be version number like "2.0.59")
-
-    Args:
-        name: Lowercase process name
-        cmdline: Lowercase joined cmdline string
-        cmdline_list: Original cmdline list (for path-based check)
-
-    Returns:
-        True if process matches Claude binary pattern
-    """
+    """Check if a process matches Claude binary signatures."""
     return (
         name == "claude"
         or cmdline.startswith("claude ")
@@ -48,15 +27,7 @@ def is_claude_binary(name: str, cmdline: str, cmdline_list: list[str]) -> bool:
 
 
 def detect_claude_pid() -> int:
-    """
-    Detect Claude binary PID by walking up the process tree.
-
-    Returns:
-        PID of the Claude process
-
-    Raises:
-        RuntimeError: If Claude process not found or psutil unavailable
-    """
+    """Detect Claude binary PID by walking up the process tree."""
     if not PSUTIL_AVAILABLE:
         raise RuntimeError("psutil not available for Claude PID detection")
 
@@ -91,15 +62,7 @@ def detect_claude_pid() -> int:
 
 
 def detect_claude_pid_safe() -> Optional[int]:
-    """
-    Detect Claude binary PID, returning None instead of raising.
-
-    Suitable for non-critical callers like status_line.py where
-    PID detection failure should not crash the caller.
-
-    Returns:
-        PID of the Claude process or None if not found
-    """
+    """Detect Claude binary PID, returning None instead of raising."""
     try:
         return detect_claude_pid()
     except (RuntimeError, Exception) as e:
@@ -108,18 +71,7 @@ def detect_claude_pid_safe() -> Optional[int]:
 
 
 def is_claude_process(pid: int) -> bool:
-    """
-    Check if a process with given PID is a Claude Code process.
-
-    IMPORTANT: Returns True (conservative) when unable to determine,
-    to prevent accidentally cleaning up valid Claude sessions.
-
-    Args:
-        pid: Process ID to check
-
-    Returns:
-        True if process is Claude or cannot be determined (conservative)
-    """
+    """Check if a PID is a Claude process. Returns True when uncertain (conservative)."""
     if not PSUTIL_AVAILABLE:
         logger.warning(f"psutil not available, assuming PID {pid} is Claude")
         return True
@@ -147,24 +99,11 @@ def is_claude_process(pid: int) -> bool:
 
 
 def is_process_running(pid: int) -> bool:
-    """
-    Check if a process with given PID exists.
-
-    Args:
-        pid: Process ID to check
-
-    Returns:
-        True if process exists, False otherwise
-    """
+    """Check if a process with given PID exists."""
     try:
         import errno
 
         os.kill(pid, 0)
         return True
     except OSError as e:
-        if e.errno == errno.ESRCH:  # No such process
-            return False
-        elif e.errno == errno.EPERM:  # No permission, but process exists
-            return True
-        else:
-            return False
+        return e.errno == errno.EPERM

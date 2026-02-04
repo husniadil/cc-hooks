@@ -1,6 +1,3 @@
-# FastAPI endpoints for Claude Code hooks processing system
-# Provides REST API for event submission, status monitoring, and migrations
-
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 from typing import Dict, Any, Optional
@@ -132,29 +129,22 @@ def create_app(lifespan=None) -> FastAPI:
 
     @app.post("/events", response_model=EventResponse)
     async def create_event(event: Event) -> EventResponse:
-        """Endpoint to receive JSON events and emit them asynchronously.
-
-        Returns OK immediately after queuing the event for processing.
-        """
+        """Queue an event for async processing. Returns immediately."""
         try:
-            # Extract session_id and hook_event_name from event data
             session_id = event.data.get("session_id")
             hook_event_name = event.data.get("hook_event_name")
 
-            # Reject events with missing required fields
             if not session_id or not hook_event_name:
                 raise HTTPException(
                     status_code=HTTPStatusConstants.BAD_REQUEST,
                     detail="Both session_id and hook_event_name are required",
                 )
 
-            # Validate hook event name (warning only, still process unknown events)
             if not is_valid_hook_event(hook_event_name):
                 logger.warning(
-                    f"Unknown hook event received: {hook_event_name} (session: {session_id})"
+                    f"Unknown hook event: {hook_event_name} (session: {session_id})"
                 )
 
-            # Queue event using database module
             event_id = await queue_event(
                 session_id,
                 hook_event_name,
@@ -182,30 +172,15 @@ def create_app(lifespan=None) -> FastAPI:
         status: Optional[str] = None,
         limit: int = 10,
     ):
-        """Query events with optional filters.
-
-        Query Parameters:
-            hook_event_name: Filter by hook event name (e.g., "SessionEnd")
-            session_id: Filter by session ID
-            status: Filter by event status (e.g., "completed", "failed", "pending")
-            limit: Maximum number of results (default: 10, max: 100)
-
-        Returns list of events matching the filters.
-        """
+        """Query events with optional filters."""
         try:
-            # Limit max results to prevent abuse
-            if limit > 100:
-                limit = 100
-
-            events = await query_events(
+            limit = min(limit, 100)
+            return await query_events(
                 hook_event_name=hook_event_name,
                 session_id=session_id,
                 status=status,
                 limit=limit,
             )
-
-            return events
-
         except Exception as e:
             logger.error(f"Error querying events: {e}", exc_info=True)
             raise HTTPException(
@@ -215,10 +190,7 @@ def create_app(lifespan=None) -> FastAPI:
 
     @app.get("/migrations/status")
     async def get_migrations_status():
-        """Get current database migration status.
-
-        Shows applied migrations and pending count.
-        """
+        """Get current database migration status."""
         try:
             return await get_migration_status()
         except Exception as e:
@@ -230,14 +202,7 @@ def create_app(lifespan=None) -> FastAPI:
 
     @app.get("/version/status")
     async def get_version_status(force: bool = False):
-        """Get version status and check for updates.
-
-        Query Parameters:
-            force: Skip cache and force fresh check (default: false)
-
-        Returns version information including current version, latest version,
-        commits behind, and update availability status.
-        """
+        """Get version status and check for updates."""
         try:
             result = await version_checker.check_for_updates(force=force)
 
@@ -260,17 +225,8 @@ def create_app(lifespan=None) -> FastAPI:
     async def register_session(
         session: SessionInfo, cleanup: bool = False, cleanup_pid: int | None = None
     ):
-        """Register session with settings in unified sessions table.
-
-        Query Parameters:
-            cleanup: Run orphan cleanup before inserting (default: false)
-            cleanup_pid: Delete sessions for this claude_pid before insert (handles /clear case)
-
-        Stores session info and configuration for a Claude Code session.
-        Optionally cleans up orphaned entries or sessions for same PID.
-        """
+        """Register session with settings. Optionally cleans up orphaned entries."""
         try:
-            # Validate session_id format (should be valid UUID)
             import uuid
 
             try:
@@ -281,14 +237,12 @@ def create_app(lifespan=None) -> FastAPI:
                     detail=f"Invalid session_id format: {session.session_id} (must be UUID)",
                 )
 
-            # Validate claude_pid (must be positive integer)
             if session.claude_pid <= 0:
                 raise HTTPException(
                     status_code=HTTPStatusConstants.BAD_REQUEST,
                     detail=f"Invalid claude_pid: {session.claude_pid} (must be positive)",
                 )
 
-            # Validate server_port (must be in valid range)
             if not (
                 NetworkConstants.PORT_RANGE_MIN
                 <= session.server_port
@@ -300,7 +254,6 @@ def create_app(lifespan=None) -> FastAPI:
                     f"(must be {NetworkConstants.PORT_RANGE_MIN}-{NetworkConstants.PORT_RANGE_MAX})",
                 )
 
-            # Run orphan cleanup if requested (best-effort, non-blocking)
             if cleanup:
                 try:
                     cleaned_count = await cleanup_orphaned_sessions()
@@ -308,7 +261,6 @@ def create_app(lifespan=None) -> FastAPI:
                 except Exception as e:
                     logger.warning(f"Cleanup failed (non-fatal): {e}")
 
-            # Cleanup old sessions for same claude_pid (handles /clear command)
             if cleanup_pid:
                 try:
                     from app.event_db import delete_session_by_pid
@@ -319,7 +271,6 @@ def create_app(lifespan=None) -> FastAPI:
                 except Exception as e:
                     logger.warning(f"PID cleanup failed (non-fatal): {e}")
 
-            # Store the session
             success = await store_session(
                 session_id=session.session_id,
                 claude_pid=session.claude_pid,
@@ -365,19 +316,7 @@ def create_app(lifespan=None) -> FastAPI:
     async def get_session_count(
         server_port: Optional[int] = None,
     ) -> SessionCountResponse:
-        """Get count of active Claude Code sessions.
-
-        Query Parameters:
-            server_port: Optional server port to filter sessions.
-                        If provided, only counts sessions for that specific server.
-                        If omitted, counts all sessions globally.
-
-        Returns the number of sessions currently registered in the database.
-        Useful for determining if server should shutdown on SessionEnd.
-
-        Note: This route MUST be defined before /sessions/{session_id}
-        to avoid FastAPI routing conflicts where "count" is interpreted as a session_id.
-        """
+        """Get count of active sessions. Must be defined before /sessions/{session_id}."""
         try:
             count = await get_active_session_count(server_port)
             return SessionCountResponse(count=count, server_port=server_port)
@@ -390,14 +329,9 @@ def create_app(lifespan=None) -> FastAPI:
 
     @app.get("/sessions/{session_id}")
     async def get_session(session_id: str):
-        """Get session by session_id.
-
-        Returns session info and settings.
-        Returns 404 if session not found.
-        """
+        """Get session by session_id. Returns 404 if not found."""
         try:
             session = await get_session_by_id(session_id)
-
             if not session:
                 raise HTTPException(
                     status_code=HTTPStatusConstants.NOT_FOUND,
@@ -417,14 +351,9 @@ def create_app(lifespan=None) -> FastAPI:
 
     @app.delete("/sessions/{session_id}")
     async def remove_session(session_id: str):
-        """Delete session from database.
-
-        Removes session and settings.
-        Typically called during SessionEnd cleanup.
-        """
+        """Delete session from database."""
         try:
             success = await delete_session(session_id)
-
             if not success:
                 raise HTTPException(
                     status_code=HTTPStatusConstants.INTERNAL_SERVER_ERROR,
@@ -452,16 +381,7 @@ def create_app(lifespan=None) -> FastAPI:
     async def get_instance_last_event_status(
         instance_id: str,
     ) -> InstanceStatusResponse:
-        """Get status of last event for a specific instance.
-
-        Useful for graceful shutdown logic to wait for the last event to complete.
-        Returns the status of the most recent event or null if no events exist.
-
-        Response includes:
-        - instance_id: The instance identifier
-        - last_event_status: Status of the last event (pending/processing/completed/failed) or null
-        - has_pending: True if last event is pending or processing, False otherwise
-        """
+        """Get status of last event for a specific instance."""
         try:
             status = await get_last_event_status_for_instance(instance_id)
             has_pending = (
@@ -486,14 +406,9 @@ def create_app(lifespan=None) -> FastAPI:
 
     @app.get("/instances/{claude_pid}/settings")
     async def get_instance_settings(claude_pid: int):
-        """Get session by claude_pid.
-
-        Returns session info and settings for the given PID.
-        Returns 404 if session not found.
-        """
+        """Get session settings by claude_pid. Returns 404 if not found."""
         try:
             session = await get_session_by_pid(claude_pid)
-
             if not session:
                 raise HTTPException(
                     status_code=HTTPStatusConstants.NOT_FOUND,
@@ -515,15 +430,9 @@ def create_app(lifespan=None) -> FastAPI:
 
     @app.post("/shutdown")
     async def shutdown_server():
-        """Shutdown the server gracefully.
-
-        Triggers graceful shutdown sequence via SIGTERM signal.
-        This allows the lifespan context manager to handle cleanup properly.
-        """
+        """Shutdown the server gracefully via SIGTERM."""
         logger.info("Shutdown requested via API endpoint")
         try:
-            # Send SIGTERM to current process to trigger graceful shutdown
-            # This will be caught by the lifespan context manager
             os.kill(os.getpid(), signal.SIGTERM)
 
             return {"status": "ok", "message": "Server shutdown initiated"}

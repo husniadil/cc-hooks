@@ -1,6 +1,3 @@
-# Database migration system for Claude Code hooks
-# Manages schema changes and version tracking for SQLite database
-
 import aiosqlite
 from typing import Dict, Any
 from pathlib import Path
@@ -9,7 +6,6 @@ from utils.colored_logger import setup_logger
 
 logger = setup_logger(__name__)
 
-# Migration definitions
 MIGRATIONS = [
     {
         "version": 1,
@@ -28,7 +24,6 @@ MIGRATIONS = [
             )
         """,
     },
-    # Add future migrations here with incremented version numbers
     {
         "version": 2,
         "description": "Add arguments column for hook parameters",

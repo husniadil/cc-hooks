@@ -55,19 +55,9 @@ class StatusLine:
     def __init__(self, debug=False, no_color=False):
         self.debug = debug
         self.no_color = no_color
-        self.use_color = self._should_use_color()
+        self.use_color = not no_color
         if self.debug:
-            self._debug_log(
-                f"StatusLine initialized with debug={debug}, no_color={no_color}, use_color={self.use_color}"
-            )
-
-    def _should_use_color(self):
-        """Determine if colors should be used (always enabled for Claude Code statusline)"""
-        if self.no_color:
-            return False
-        # Always enable colors - Claude Code statusline supports ANSI colors
-        # even when running via pipe (sys.stdout.isatty() would be False)
-        return True
+            self._debug_log(f"StatusLine initialized with use_color={self.use_color}")
 
     def _debug_log(self, message):
         """Debug logging helper"""
@@ -150,6 +140,21 @@ class StatusLine:
         """Dynamic session color based on remaining percentage"""
         rem_pct = 100 - session_pct
         return self._warning_color(100 - rem_pct)  # invert for remaining
+
+    def _setting(self, session_settings, key, config_default):
+        """Get value from session settings, falling back to config default.
+
+        Uses truthiness for strings (empty string falls through to default),
+        'is not None' for booleans/ints (0 and False are valid values).
+        """
+        if session_settings:
+            val = session_settings.get(key)
+            if val is not None:
+                # For string values, treat empty string as unset
+                if isinstance(val, str) and not val:
+                    return config_default
+                return val
+        return config_default
 
     def _run_command(self, cmd, shell=False, capture_output=True, text=True):
         """Run shell command safely"""
@@ -527,39 +532,28 @@ class StatusLine:
             return None
 
     def _get_tts_info(self, session_settings=None):
-        """Get TTS provider information from session settings.
-
-        Args:
-            session_settings: Pre-fetched session settings (avoids redundant HTTP call)
-        """
+        """Get TTS provider information from session settings."""
         tts_info = ""
         tts_enabled = False
         voice_name = ""
 
         try:
-            # Use provided settings or fetch fresh
             if session_settings is None:
                 session_settings = self._get_session_settings()
-            if not session_settings:
-                self._debug_log("No session settings available, using config defaults")
-                # Fallback to config defaults
-                if config is None:
-                    return tts_info, tts_enabled, voice_name
-                tts_providers_str = config.tts_providers
-                tts_language = config.tts_language
-                silent_announcements = False
-            else:
-                tts_providers_str = (
-                    session_settings.get("tts_providers") or config.tts_providers
-                )
-                tts_language = (
-                    session_settings.get("tts_language") or config.tts_language
-                )
-                silent_announcements = session_settings.get(
-                    "silent_announcements", False
-                )
+            if config is None and not session_settings:
+                return tts_info, tts_enabled, voice_name
 
-            # If announcements are silenced, show muted indicator
+            config_providers = config.tts_providers if config else "prerecorded"
+            config_lang = config.tts_language if config else "en"
+
+            tts_providers_str = self._setting(
+                session_settings, "tts_providers", config_providers
+            )
+            tts_language = self._setting(session_settings, "tts_language", config_lang)
+            silent_announcements = self._setting(
+                session_settings, "silent_announcements", False
+            )
+
             if silent_announcements:
                 self._debug_log("Silent announcements mode - showing muted indicator")
                 tts_info = "Muted"
@@ -620,8 +614,9 @@ class StatusLine:
 
     def _get_elevenlabs_details(self, session_settings=None):
         """Get detailed ElevenLabs information"""
-        elevenlabs_info = ""
-        voice_name = ""
+        config_lang = config.tts_language if config else "en"
+        language = self._setting(session_settings, "tts_language", config_lang)
+        language_display = f" ({language.upper()})"
 
         try:
             api_key = config.elevenlabs_api_key if config else None
@@ -633,121 +628,81 @@ class StatusLine:
             client = ElevenLabs(api_key=api_key)
             subscription = client.user.subscription.get()
 
-            self._debug_log(f"ElevenLabs subscription: {subscription}")
-
-            # Extract subscription info
             char_limit = getattr(subscription, "character_limit", 0)
             char_used = getattr(subscription, "character_count", 0)
-            can_do_tts = char_used < char_limit if char_limit > 0 else True
 
-            # Get language for display from session settings or config
-            if session_settings:
-                language = session_settings.get("tts_language") or (
-                    config.tts_language if config else "en"
-                )
-            else:
-                language = config.tts_language if config else "en"
-            language_display = f" ({language.upper()})"
-
-            # Fetch voice name from session settings or config
+            # Resolve voice name
+            config_voice = config.elevenlabs_voice_id if config else None
+            voice_id = self._setting(
+                session_settings, "elevenlabs_voice_id", config_voice
+            )
             try:
-                if session_settings:
-                    voice_id = session_settings.get("elevenlabs_voice_id") or (
-                        config.elevenlabs_voice_id if config else None
-                    )
-                else:
-                    voice_id = config.elevenlabs_voice_id if config else None
-
                 if voice_id:
                     voice = client.voices.get(voice_id)
-                    base_voice_name = getattr(voice, "name", "ElevenLabs")
-                    voice_name = f"{base_voice_name}{language_display}"
-                    self._debug_log(
-                        f"ElevenLabs voice name with language: {voice_name}"
+                    voice_name = (
+                        f"{getattr(voice, 'name', 'ElevenLabs')}{language_display}"
                     )
                 else:
                     voice_name = f"ElevenLabs{language_display}"
-            except Exception as e:
-                self._debug_log(f"Error fetching voice name: {e}")
+            except Exception:
                 voice_name = f"ElevenLabs{language_display}"
 
-            # Format the usage info with progress bar
             if char_limit > 0:
                 usage_pct = (char_used * 100) // char_limit
                 usage_bar = self._progress_bar(usage_pct, 10)
                 elevenlabs_info = (
                     f"[{usage_bar}] {usage_pct}% ({char_used:,}/{char_limit:,} chars)"
                 )
-                if not can_do_tts:
+                if char_used >= char_limit:
                     elevenlabs_info += " [LIMIT REACHED]"
             else:
                 elevenlabs_info = (
                     f"{char_used:,} chars used" if char_used > 0 else "Connected"
                 )
 
+            return elevenlabs_info, voice_name
+
         except ImportError:
-            self._debug_log("elevenlabs package not available")
-            elevenlabs_info = "Not installed"
-            if session_settings:
-                language = session_settings.get("tts_language") or (
-                    config.tts_language if config else "en"
-                )
-            else:
-                language = config.tts_language if config else "en"
-            voice_name = f"ElevenLabs ({language.upper()})"
+            return "Not installed", f"ElevenLabs{language_display}"
         except Exception as e:
             self._debug_log(f"Error fetching ElevenLabs details: {e}")
-            elevenlabs_info = f"Error: {type(e).__name__}"
-            if session_settings:
-                language = session_settings.get("tts_language") or (
-                    config.tts_language if config else "en"
-                )
-            else:
-                language = config.tts_language if config else "en"
-            voice_name = f"ElevenLabs ({language.upper()})"
-
-        return elevenlabs_info, voice_name
+            return f"Error: {type(e).__name__}", f"ElevenLabs{language_display}"
 
     def _get_openrouter_info(self, session_settings=None):
-        """Get OpenRouter status and model information from session settings.
-
-        Args:
-            session_settings: Pre-fetched session settings (avoids redundant HTTP call)
-        """
+        """Get OpenRouter status and model information from session settings."""
         openrouter_info = ""
         openrouter_enabled = False
         openrouter_model = ""
 
         try:
-            # Use provided settings or fetch fresh
             if session_settings is None:
                 session_settings = self._get_session_settings()
-            if not session_settings:
-                self._debug_log("No session settings available, using config defaults")
-                if config is None:
-                    return openrouter_info, openrouter_enabled, openrouter_model
-                # Fallback to config defaults
-                openrouter_enabled = config.openrouter_enabled
-                openrouter_model = config.openrouter_model
-                contextual_stop = config.openrouter_contextual_stop
-                contextual_pretooluse = config.openrouter_contextual_pretooluse
-                silent_announcements = False
-            else:
-                openrouter_enabled = session_settings.get("openrouter_enabled", False)
-                openrouter_model = session_settings.get("openrouter_model") or (
-                    config.openrouter_model if config else "openai/gpt-4o-mini"
-                )
-                contextual_stop = session_settings.get(
-                    "openrouter_contextual_stop", False
-                )
-                contextual_pretooluse = session_settings.get(
-                    "openrouter_contextual_pretooluse", False
-                )
-                silent_announcements = session_settings.get(
-                    "silent_announcements", False
-                )
+            if config is None and not session_settings:
+                return openrouter_info, openrouter_enabled, openrouter_model
 
-            self._debug_log(f"OpenRouter enabled: {openrouter_enabled}")
+            openrouter_enabled = self._setting(
+                session_settings,
+                "openrouter_enabled",
+                config.openrouter_enabled if config else False,
+            )
+            openrouter_model = self._setting(
+                session_settings,
+                "openrouter_model",
+                config.openrouter_model if config else "openai/gpt-4o-mini",
+            )
+            contextual_stop = self._setting(
+                session_settings,
+                "openrouter_contextual_stop",
+                config.openrouter_contextual_stop if config else False,
+            )
+            contextual_pretooluse = self._setting(
+                session_settings,
+                "openrouter_contextual_pretooluse",
+                config.openrouter_contextual_pretooluse if config else False,
+            )
+            silent_announcements = self._setting(
+                session_settings, "silent_announcements", False
+            )
 
             # If silent announcements mode is active, show disabled status
             # (OpenRouter calls are skipped to save costs)
@@ -817,40 +772,15 @@ class StatusLine:
         return openrouter_info, openrouter_enabled, openrouter_model
 
     def _get_sound_effects_info(self, session_settings=None):
-        """Get sound effects status from session settings.
-
-        Args:
-            session_settings: Pre-fetched session settings (avoids redundant HTTP call)
-
-        Returns tuple of (effects_info, effects_muted):
-        - effects_info: Display string (empty if not muted, "Effects" if muted)
-        - effects_muted: Boolean indicating if effects are muted
-        """
-        effects_info = ""
-        effects_muted = False
-
+        """Get sound effects status. Returns (info_text, is_muted)."""
         try:
-            # Use provided settings or fetch fresh
             if session_settings is None:
                 session_settings = self._get_session_settings()
-            if not session_settings:
-                self._debug_log("No session settings available for sound effects check")
-                return effects_info, effects_muted
-
-            # Check if sound effects are muted
-            effects_muted = session_settings.get("silent_effects", False)
-
-            if effects_muted:
-                self._debug_log("Silent effects mode - showing muted indicator")
-                effects_info = "Effects"
-            else:
-                self._debug_log("Sound effects active - no indicator needed")
-
+            effects_muted = self._setting(session_settings, "silent_effects", False)
+            return ("Effects" if effects_muted else "", effects_muted)
         except Exception as e:
             self._debug_log(f"Error getting sound effects info: {e}")
-            return effects_info, effects_muted
-
-        return effects_info, effects_muted
+            return "", False
 
     def render(self, input_data=None):
         """Render the complete status line"""

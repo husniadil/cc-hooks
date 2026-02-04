@@ -1,9 +1,4 @@
-"""
-Base abstract class for TTS providers in Claude Code hooks system.
-
-Defines the common interface that all TTS providers must implement,
-ensuring consistent behavior across different TTS services.
-"""
+"""Base abstract class for TTS providers."""
 
 from abc import ABC, abstractmethod
 from pathlib import Path

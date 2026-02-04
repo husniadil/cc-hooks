@@ -4,13 +4,7 @@
 #     "aiosqlite>=0.21.0,<0.22",
 # ]
 # ///
-"""
-Version checking utility for cc-hooks update mechanism.
-
-Provides Git-based version checking to detect available updates by comparing
-local repository state with remote origin. Results are cached to minimize
-network overhead and API rate limiting.
-"""
+"""Version checking utility - Git-based update detection with caching."""
 
 import asyncio
 from datetime import datetime, timezone, timedelta

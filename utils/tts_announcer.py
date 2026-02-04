@@ -233,230 +233,121 @@ def _translate_fallback_text(
         return text
 
 
+def _prepare_contextual_text(
+    hook_event_name: str,
+    event_data: Dict[str, Any],
+    language: str,
+    session_settings: Optional[Dict[str, Any]],
+    fallback_text: str,
+    contextual_setting_key: str,
+    generate_fn_name: str,
+    extra_kwargs: Optional[Dict[str, Any]] = None,
+) -> Optional[str]:
+    """Shared logic for Stop and PreToolUse contextual text preparation."""
+    session_id = event_data.get("session_id")
+    if not session_id:
+        logger.warning(f"No session_id in {hook_event_name} event data, using fallback")
+        return _translate_fallback_text(
+            fallback_text, language, hook_event_name, event_data
+        )
+
+    transcript_path = event_data.get("transcript_path")
+    if not transcript_path:
+        logger.info(f"No transcript found for session {session_id}, using fallback")
+        return _translate_fallback_text(
+            fallback_text, language, hook_event_name, event_data
+        )
+
+    from utils.transcript_parser import extract_conversation_context
+
+    context = extract_conversation_context(transcript_path)
+    if not context.has_context():
+        logger.info("No meaningful conversation context found, skipping announcement")
+        return None
+
+    override = (
+        session_settings.get(contextual_setting_key) if session_settings else None
+    )
+
+    import importlib
+
+    openrouter = importlib.import_module("utils.openrouter_service")
+    generate_fn = getattr(openrouter, generate_fn_name)
+
+    kwargs = {
+        "session_id": session_id,
+        "user_prompt": context.last_user_prompt,
+        "claude_response": context.last_claude_response,
+        "target_language": language,
+        "fallback_message": fallback_text,
+    }
+    if extra_kwargs:
+        kwargs.update(extra_kwargs)
+
+    override_key = f"override_{contextual_setting_key.replace('openrouter_', '')}"
+    kwargs[override_key] = override
+
+    result: str | None = generate_fn(**kwargs)
+    logger.info(f"Generated contextual {hook_event_name} message: '{result}'")
+    return result
+
+
 def _prepare_text_for_event(
     hook_event_name: str,
     event_data: Dict[str, Any],
     language: str = "en",
     session_settings: Optional[Dict[str, Any]] = None,
 ) -> Optional[str]:
-    """
-    Prepare text for TTS providers by determining base text and applying translation.
-
-    This function handles text determination logic for TTS providers:
-    - For Stop events: Use transcript parser to generate contextual completion messages
-    - For other events: Sound file mapping to get base descriptions + OpenRouter translation
-    - Fallback to event name if no description found
-
-    Args:
-        hook_event_name (str): Name of the hook event
-        event_data (dict): Hook event data from Claude Code
-        language (str): Target language for text (default: "en")
-        session_settings (dict): Optional session-specific settings (for OpenRouter contextual flags)
-
-    Returns:
-        str or None: Prepared text ready for TTS conversion
-    """
-    # Special handling for Stop events - use transcript parser for contextual messages
+    """Prepare text for TTS providers by determining base text and applying translation."""
     if hook_event_name == "Stop":
+        fallback = (
+            get_audio_description(SoundFiles.STOP_TASK_COMPLETED)
+            or "Task completed successfully"
+        )
         try:
-            from utils.transcript_parser import extract_conversation_context
-            from utils.openrouter_service import (
-                generate_completion_message_if_available,
+            return _prepare_contextual_text(
+                hook_event_name,
+                event_data,
+                language,
+                session_settings,
+                fallback,
+                "openrouter_contextual_stop",
+                "generate_completion_message_if_available",
             )
-
-            # Get session_id from event data
-            session_id = event_data.get("session_id")
-            if not session_id:
-                logger.warning(
-                    "No session_id in Stop event data, using fallback message"
-                )
-                fallback_text = (
-                    get_audio_description(SoundFiles.STOP_TASK_COMPLETED)
-                    or "Task completed successfully"
-                )
-                # Apply translation to fallback text
-                return _translate_fallback_text(
-                    fallback_text, language, hook_event_name, event_data
-                )
-
-            # Get transcript path from event data
-            transcript_path = event_data.get("transcript_path")
-            if not transcript_path:
-                logger.info(
-                    f"No transcript found for session {session_id}, using fallback message"
-                )
-                fallback_text = (
-                    get_audio_description(SoundFiles.STOP_TASK_COMPLETED)
-                    or "Task completed successfully"
-                )
-                # Apply translation to fallback text
-                return _translate_fallback_text(
-                    fallback_text, language, hook_event_name, event_data
-                )
-
-            # Extract conversation context
-            context = extract_conversation_context(transcript_path)
-            if not context.has_context():
-                logger.info(
-                    "No meaningful conversation context found, skipping announcement"
-                )
-                return None
-
-            # Get session-specific contextual_stop setting
-            override_contextual_stop = None
-            if session_settings:
-                override_contextual_stop = session_settings.get(
-                    "openrouter_contextual_stop"
-                )
-                logger.debug(
-                    f"Using session contextual_stop setting: {override_contextual_stop}"
-                )
-
-            # Generate contextual completion message
-            completion_message = generate_completion_message_if_available(
-                session_id=session_id,
-                user_prompt=context.last_user_prompt,
-                claude_response=context.last_claude_response,
-                target_language=language,
-                fallback_message="Task completed successfully",
-                override_contextual_stop=override_contextual_stop,
-            )
-
-            logger.info(
-                f"Generated contextual completion message: '{completion_message}'"
-            )
-            return completion_message
-
         except Exception as e:
             logger.error(f"Error generating contextual completion message: {e}")
-            # Fall back to default Stop message
-            fallback_text = (
-                get_audio_description(SoundFiles.STOP_TASK_COMPLETED)
-                or "Task completed successfully"
+            return _translate_fallback_text(
+                fallback, language, hook_event_name, event_data
             )
-            # Apply translation to fallback text
-            try:
-                from utils.openrouter_service import translate_text_if_available
 
-                return translate_text_if_available(
-                    fallback_text, language, hook_event_name, event_data
-                )
-            except ImportError:
-                return fallback_text
-
-    # Special handling for PreToolUse events - use transcript parser for contextual messages
     if hook_event_name == "PreToolUse":
+        tool_name = event_data.get("tool_name", "unknown")
+        short_tool_name = _shorten_tool_name_for_tts(tool_name)
+        fallback = f"Running {short_tool_name} tool"
         try:
-            from utils.transcript_parser import extract_conversation_context
-            from utils.openrouter_service import (
-                generate_pre_tool_message_if_available,
+            return _prepare_contextual_text(
+                hook_event_name,
+                event_data,
+                language,
+                session_settings,
+                fallback,
+                "openrouter_contextual_pretooluse",
+                "generate_pre_tool_message_if_available",
+                extra_kwargs={"tool_name": tool_name},
             )
-
-            # Get session_id and tool_name from event data
-            session_id = event_data.get("session_id")
-            tool_name = event_data.get("tool_name", "unknown")
-
-            if not session_id:
-                logger.warning(
-                    "No session_id in PreToolUse event data, using fallback message"
-                )
-                short_tool_name = _shorten_tool_name_for_tts(tool_name)
-                fallback_text = f"Running {short_tool_name} tool"
-                # Apply translation to fallback text
-                return _translate_fallback_text(
-                    fallback_text, language, hook_event_name, event_data
-                )
-
-            # Get transcript path from event data
-            transcript_path = event_data.get("transcript_path")
-            if not transcript_path:
-                logger.info(
-                    f"No transcript found for session {session_id}, using fallback message"
-                )
-                short_tool_name = _shorten_tool_name_for_tts(tool_name)
-                fallback_text = f"Running {short_tool_name} tool"
-                # Apply translation to fallback text
-                return _translate_fallback_text(
-                    fallback_text, language, hook_event_name, event_data
-                )
-
-            # Extract conversation context
-            context = extract_conversation_context(transcript_path)
-            if not context.has_context():
-                logger.info(
-                    "No meaningful conversation context found, skipping announcement"
-                )
-                return None
-
-            # Get session-specific contextual_pretooluse setting
-            override_contextual_pretooluse = None
-            if session_settings:
-                override_contextual_pretooluse = session_settings.get(
-                    "openrouter_contextual_pretooluse"
-                )
-                logger.debug(
-                    f"Using session contextual_pretooluse setting: {override_contextual_pretooluse}"
-                )
-
-            # Generate contextual PreToolUse message
-            pre_tool_message = generate_pre_tool_message_if_available(
-                session_id=session_id,
-                tool_name=tool_name,
-                user_prompt=context.last_user_prompt,
-                claude_response=context.last_claude_response,
-                target_language=language,
-                fallback_message=f"Running {_shorten_tool_name_for_tts(tool_name)} tool",
-                override_contextual_pretooluse=override_contextual_pretooluse,
-            )
-
-            logger.info(
-                f"Generated contextual PreToolUse message: '{pre_tool_message}'"
-            )
-            return pre_tool_message
-
         except Exception as e:
             logger.error(f"Error generating contextual PreToolUse message: {e}")
-            # Fall back to default PreToolUse message
-            tool_name = event_data.get("tool_name", "unknown")
-            short_tool_name = _shorten_tool_name_for_tts(tool_name)
-            fallback_text = f"Running {short_tool_name} tool"
-            # Apply translation to fallback text
-            try:
-                from utils.openrouter_service import translate_text_if_available
+            return _translate_fallback_text(
+                fallback, language, hook_event_name, event_data
+            )
 
-                return translate_text_if_available(
-                    fallback_text, language, hook_event_name, event_data
-                )
-            except ImportError:
-                return fallback_text
-
-    # For all other events, use existing logic
-    # Get sound file name from shared mapping
+    # For all other events, use sound file mapping
     sound_file = get_sound_file_for_event(hook_event_name, event_data)
+    base_text = (
+        get_audio_description(sound_file) if sound_file else None
+    ) or hook_event_name.replace("_", " ")
 
-    # Get base text (English description)
-    base_text = None
-    if sound_file:
-        # Get descriptive text for the sound file
-        description = get_audio_description(sound_file)
-        if description:
-            base_text = description
-
-    # Fallback: use event name as text
-    if not base_text:
-        base_text = hook_event_name.replace("_", " ")
-
-    # Apply OpenRouter translation if available and needed
-    try:
-        from utils.openrouter_service import translate_text_if_available
-
-        translated_text = translate_text_if_available(
-            base_text, language, hook_event_name, event_data
-        )
-        return translated_text
-    except ImportError:
-        # OpenRouter service not available, use original text
-        return base_text
+    return _translate_fallback_text(base_text, language, hook_event_name, event_data)
 
 
 def announce_event(
@@ -485,34 +376,26 @@ def announce_event(
             )
             return False
 
-        # Get TTS configuration (session-specific or global defaults)
         from config import config
 
-        tts_language = (
-            session_settings.get("tts_language")
-            if session_settings and session_settings.get("tts_language")
-            else config.tts_language
+        def _session_or_config(key: str, config_default: Any) -> Any:
+            """Get value from session settings, falling back to config default."""
+            if session_settings:
+                val = session_settings.get(key)
+                if val is not None:
+                    return val
+            return config_default
+
+        tts_language = _session_or_config("tts_language", config.tts_language)
+        tts_providers = _session_or_config("tts_providers", config.tts_providers)
+        elevenlabs_voice_id = _session_or_config(
+            "elevenlabs_voice_id", config.elevenlabs_voice_id
         )
-        tts_providers = (
-            session_settings.get("tts_providers")
-            if session_settings and session_settings.get("tts_providers")
-            else config.tts_providers
+        elevenlabs_model_id = _session_or_config(
+            "elevenlabs_model_id", config.elevenlabs_model_id
         )
-        elevenlabs_voice_id = (
-            session_settings.get("elevenlabs_voice_id")
-            if session_settings and session_settings.get("elevenlabs_voice_id")
-            else config.elevenlabs_voice_id
-        )
-        elevenlabs_model_id = (
-            session_settings.get("elevenlabs_model_id")
-            if session_settings and session_settings.get("elevenlabs_model_id")
-            else config.elevenlabs_model_id
-        )
-        tts_cache_enabled = (
-            session_settings.get("tts_cache_enabled")
-            if session_settings
-            and session_settings.get("tts_cache_enabled") is not None
-            else config.tts_cache_enabled
+        tts_cache_enabled = _session_or_config(
+            "tts_cache_enabled", config.tts_cache_enabled
         )
 
         voice_id_preview = elevenlabs_voice_id[:8] if elevenlabs_voice_id else "None"
@@ -577,8 +460,7 @@ def announce_event(
             # Add prepared text to event_data for TTS providers
             enhanced_event_data = event_data.copy()
             enhanced_event_data["_prepared_text"] = cleaned_text
-            # Mark contextual completion messages as no-cache
-            if hook_event_name == "Stop" or hook_event_name == "PreToolUse":
+            if hook_event_name in ("Stop", "PreToolUse"):
                 enhanced_event_data["_no_cache"] = True
         else:
             enhanced_event_data = event_data

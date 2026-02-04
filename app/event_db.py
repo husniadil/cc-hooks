@@ -1,6 +1,3 @@
-# Database operations for Claude Code hooks event queue
-# Handles SQLite storage, retrieval, and status tracking for hook events
-
 import aiosqlite
 import json
 from typing import Dict, Any, Tuple, Optional, List
@@ -8,15 +5,13 @@ from config import config
 from utils.constants import EventStatus, DateTimeConstants
 from app.types import SessionRow
 
-# Global variable to track server start time
-_server_start_time: Optional[str] = None
-
 from utils.colored_logger import setup_logger  # noqa: E402
 
 logger = setup_logger(__name__)
 
+_server_start_time: Optional[str] = None
 
-# Server start time management
+
 async def set_server_start_time(start_time: str) -> None:
     """Set the server start time for filtering events."""
     global _server_start_time
@@ -29,7 +24,6 @@ def get_server_start_time() -> Optional[str]:
     return _server_start_time
 
 
-# Database initialization
 async def init_db() -> None:
     """Initialize the events database using migration system."""
     from app.migrations import run_migrations
@@ -38,23 +32,13 @@ async def init_db() -> None:
     logger.debug("Database initialized")
 
 
-# Event storage functions
 async def queue_event(
     session_id: str,
     hook_event_name: str,
     event_data: Dict[Any, Any],
     instance_id: Optional[str] = None,
 ) -> int:
-    """
-    Queue an event for processing by storing it in the database.
-    Returns the event ID.
-
-    Args:
-        session_id: Claude session ID
-        hook_event_name: Name of the hook event
-        event_data: Event payload data
-        instance_id: Optional instance identifier in "claude_pid:server_port" format
-    """
+    """Queue an event for processing. Returns the event ID."""
     async with aiosqlite.connect(config.db_path) as db:
         cursor = await db.execute(
             "INSERT INTO events (session_id, hook_event_name, payload, instance_id) VALUES (?, ?, ?, ?)",
@@ -74,30 +58,16 @@ async def queue_event(
         return event_id or 0
 
 
-# Event status and monitoring functions
 async def get_next_pending_event() -> Optional[Tuple[int, str, str, str, int]]:
-    """
-    Get the next pending event from the queue.
-    Only returns events created at or after server start time.
-    Returns tuple of (event_id, session_id, hook_event_name, payload, retry_count) or None.
-
-    Event isolation is handled by checking session ownership in the event processor
-    (via server_port filter), not during database query.
-    """
-
+    """Get the next pending event created at or after server start time."""
     async with aiosqlite.connect(config.db_path) as db:
         server_start = get_server_start_time()
-
-        # Require server start time for temporal filtering
         if not server_start:
-            error_msg = "Server start time not set - cannot process events without temporal filtering"
-            logger.critical(error_msg)
-            raise RuntimeError(error_msg)
+            raise RuntimeError("Server start time not set - cannot process events")
 
-        # Process ALL events created at or after server start time
-        # Event filtering by session ownership happens in event processor
         cursor = await db.execute(
-            "SELECT id, session_id, hook_event_name, payload, retry_count FROM events WHERE status = ? AND created_at >= ? ORDER BY id LIMIT 1",
+            "SELECT id, session_id, hook_event_name, payload, retry_count "
+            "FROM events WHERE status = ? AND created_at >= ? ORDER BY id LIMIT 1",
             (EventStatus.PENDING.value, server_start),
         )
         row = await cursor.fetchone()
@@ -177,51 +147,39 @@ async def query_events(
     status: Optional[str] = None,
     limit: int = 10,
 ) -> List[Dict[str, Any]]:
-    """Query events with optional filters.
-
-    Args:
-        hook_event_name: Filter by hook event name (e.g., "SessionEnd")
-        session_id: Filter by session ID
-        status: Filter by status (e.g., "completed", "failed", "pending")
-        limit: Maximum number of results to return
-
-    Returns:
-        List of event dictionaries
-    """
+    """Query events with optional filters."""
     async with aiosqlite.connect(config.db_path) as db:
         db.row_factory = aiosqlite.Row
 
-        # Build query dynamically based on filters
-        query = "SELECT id, session_id, hook_event_name, status, created_at, processed_at, error_message FROM events WHERE 1=1"
+        conditions: list[str] = []
         params: list[str | int] = []
 
         if hook_event_name:
-            query += " AND hook_event_name = ?"
+            conditions.append("hook_event_name = ?")
             params.append(hook_event_name)
-
         if session_id:
-            query += " AND session_id = ?"
+            conditions.append("session_id = ?")
             params.append(session_id)
-
         if status:
-            query += " AND status = ?"
+            conditions.append("status = ?")
             params.append(status)
 
-        query += " ORDER BY created_at DESC LIMIT ?"
+        where = f" WHERE {' AND '.join(conditions)}" if conditions else ""
+        query = f"SELECT id, session_id, hook_event_name, status, created_at, processed_at, error_message FROM events{where} ORDER BY created_at DESC LIMIT ?"
         params.append(limit)
 
         cursor = await db.execute(query, params)
-        rows = await cursor.fetchall()
-
-        # Convert rows to dictionaries
-        events = []
-        for row in rows:
-            events.append(dict(row))
-
-        return events
+        return [dict(row) for row in await cursor.fetchall()]
 
 
-# Session management functions (unified sessions table)
+_SESSION_COLUMNS = (
+    "session_id, claude_pid, server_port, tts_language, tts_providers, tts_cache_enabled, "
+    "elevenlabs_voice_id, elevenlabs_model_id, silent_announcements, silent_effects, "
+    "openrouter_enabled, openrouter_model, openrouter_contextual_stop, openrouter_contextual_pretooluse, "
+    "created_at"
+)
+
+
 async def store_session(
     session_id: str,
     claude_pid: int,
@@ -238,35 +196,30 @@ async def store_session(
     openrouter_contextual_stop: bool = False,
     openrouter_contextual_pretooluse: bool = False,
 ) -> bool:
-    """
-    Store session info with settings in unified sessions table.
-    Returns True if successful, False otherwise.
-    """
+    """Store session info with settings. Returns True if successful."""
     try:
         async with aiosqlite.connect(config.db_path) as db:
             await db.execute(
-                """
-                INSERT OR REPLACE INTO sessions
+                """INSERT OR REPLACE INTO sessions
                 (session_id, claude_pid, server_port, tts_language, tts_providers, tts_cache_enabled,
                  elevenlabs_voice_id, elevenlabs_model_id, silent_announcements, silent_effects,
                  openrouter_enabled, openrouter_model, openrouter_contextual_stop, openrouter_contextual_pretooluse)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
                     session_id,
                     claude_pid,
                     server_port,
                     tts_language,
                     tts_providers,
-                    1 if tts_cache_enabled else 0,
+                    int(tts_cache_enabled),
                     elevenlabs_voice_id,
                     elevenlabs_model_id,
-                    1 if silent_announcements else 0,
-                    1 if silent_effects else 0,
-                    1 if openrouter_enabled else 0,
+                    int(silent_announcements),
+                    int(silent_effects),
+                    int(openrouter_enabled),
                     openrouter_model,
-                    1 if openrouter_contextual_stop else 0,
-                    1 if openrouter_contextual_pretooluse else 0,
+                    int(openrouter_contextual_stop),
+                    int(openrouter_contextual_pretooluse),
                 ),
             )
             await db.commit()
@@ -280,14 +233,7 @@ async def store_session(
 
 
 def _parse_session_row(result: Any) -> SessionRow:
-    """Parse a database row tuple into a SessionRow TypedDict.
-
-    Args:
-        result: Tuple from database query result
-
-    Returns:
-        SessionRow TypedDict with parsed session data
-    """
+    """Parse a database row tuple into a SessionRow TypedDict."""
     return {
         "session_id": result[0],
         "claude_pid": result[1],
@@ -307,102 +253,48 @@ def _parse_session_row(result: Any) -> SessionRow:
     }
 
 
-async def get_session_by_id(session_id: str) -> Optional[SessionRow]:
-    """
-    Get session by session_id.
-    Returns session dict or None if not found.
-    """
+async def _query_sessions(where_clause: str, params: tuple) -> list[SessionRow]:
+    """Query sessions table with given WHERE clause and return parsed rows."""
     try:
         async with aiosqlite.connect(config.db_path) as db:
             cursor = await db.execute(
-                """
-                SELECT session_id, claude_pid, server_port, tts_language, tts_providers, tts_cache_enabled,
-                       elevenlabs_voice_id, elevenlabs_model_id, silent_announcements, silent_effects,
-                       openrouter_enabled, openrouter_model, openrouter_contextual_stop, openrouter_contextual_pretooluse,
-                       created_at
-                FROM sessions
-                WHERE session_id = ?
-                """,
-                (session_id,),
+                f"SELECT {_SESSION_COLUMNS} FROM sessions WHERE {where_clause}", params
             )
-            result = await cursor.fetchone()
-            if result:
-                return _parse_session_row(result)
-            return None
+            return [_parse_session_row(row) for row in await cursor.fetchall()]
     except Exception as e:
-        logger.error(f"Failed to get session {session_id}: {e}")
-        return None
-
-
-async def get_session_by_pid(claude_pid: int) -> Optional[SessionRow]:
-    """Get session by claude_pid.
-
-    Returns session dict or None if not found.
-    """
-    try:
-        async with aiosqlite.connect(config.db_path) as db:
-            cursor = await db.execute(
-                """
-                SELECT session_id, claude_pid, server_port, tts_language, tts_providers, tts_cache_enabled,
-                       elevenlabs_voice_id, elevenlabs_model_id, silent_announcements, silent_effects,
-                       openrouter_enabled, openrouter_model, openrouter_contextual_stop, openrouter_contextual_pretooluse,
-                       created_at
-                FROM sessions
-                WHERE claude_pid = ?
-                """,
-                (claude_pid,),
-            )
-            result = await cursor.fetchone()
-            if result:
-                return _parse_session_row(result)
-            return None
-    except Exception as e:
-        logger.error(f"Failed to get session for PID {claude_pid}: {e}")
-        return None
-
-
-async def get_sessions_by_port(server_port: int) -> list[SessionRow]:
-    """Get all sessions for a given server port.
-
-    Returns list of session dicts (may be empty if no sessions found).
-    """
-    try:
-        async with aiosqlite.connect(config.db_path) as db:
-            cursor = await db.execute(
-                """
-                SELECT session_id, claude_pid, server_port, tts_language, tts_providers, tts_cache_enabled,
-                       elevenlabs_voice_id, elevenlabs_model_id, silent_announcements, silent_effects,
-                       openrouter_enabled, openrouter_model, openrouter_contextual_stop, openrouter_contextual_pretooluse,
-                       created_at
-                FROM sessions
-                WHERE server_port = ?
-                """,
-                (server_port,),
-            )
-            results = await cursor.fetchall()
-            return [_parse_session_row(row) for row in results]
-    except Exception as e:
-        logger.error(f"Failed to get sessions for port {server_port}: {e}")
+        logger.error(
+            f"Failed to query sessions (WHERE {where_clause}, params={params}): {e}"
+        )
         return []
 
 
+async def get_session_by_id(session_id: str) -> Optional[SessionRow]:
+    """Get session by session_id. Returns None if not found."""
+    results = await _query_sessions("session_id = ?", (session_id,))
+    return results[0] if results else None
+
+
+async def get_session_by_pid(claude_pid: int) -> Optional[SessionRow]:
+    """Get session by claude_pid. Returns None if not found."""
+    results = await _query_sessions("claude_pid = ?", (claude_pid,))
+    return results[0] if results else None
+
+
+async def get_sessions_by_port(server_port: int) -> list[SessionRow]:
+    """Get all sessions for a given server port."""
+    return await _query_sessions("server_port = ?", (server_port,))
+
+
 async def delete_session(session_id: str) -> bool:
-    """
-    Delete session from database and cleanup related events.
-    Returns True if successful, False otherwise.
-    """
+    """Delete session and its related events. Returns True if successful."""
     try:
         async with aiosqlite.connect(config.db_path) as db:
-            # Delete all events for this session
             cursor = await db.execute(
                 "DELETE FROM events WHERE session_id = ?", (session_id,)
             )
             events_deleted = cursor.rowcount
-
-            # Delete session record
             await db.execute("DELETE FROM sessions WHERE session_id = ?", (session_id,))
             await db.commit()
-
             logger.info(
                 f"Deleted session {session_id} and cleaned up {events_deleted} event(s)"
             )
@@ -454,28 +346,16 @@ async def delete_session_by_pid(claude_pid: int) -> bool:
 
 
 async def get_active_session_count(server_port: Optional[int] = None) -> int:
-    """
-    Get count of active Claude sessions.
-
-    Args:
-        server_port: Optional server port to filter sessions.
-                    If provided, only counts sessions for that specific server.
-                    If None, counts all sessions globally.
-
-    Returns the number of rows in sessions table (optionally filtered by server_port).
-    """
+    """Get count of active sessions, optionally filtered by server_port."""
     try:
         async with aiosqlite.connect(config.db_path) as db:
             if server_port is not None:
-                # Filter by server_port for per-instance count
                 cursor = await db.execute(
                     "SELECT COUNT(*) FROM sessions WHERE server_port = ?",
                     (server_port,),
                 )
             else:
-                # Global count (all servers)
                 cursor = await db.execute("SELECT COUNT(*) FROM sessions")
-
             result = await cursor.fetchone()
             return result[0] if result else 0
     except Exception as e:
@@ -484,21 +364,14 @@ async def get_active_session_count(server_port: Optional[int] = None) -> int:
 
 
 def _is_process_running(pid: int) -> bool:
-    """Check if a process with given PID exists.
-
-    Delegates to shared utility in utils.process_utils.
-    """
+    """Check if a process with given PID exists."""
     from utils.process_utils import is_process_running
 
     return is_process_running(pid)
 
 
 def _is_claude_process(pid: int) -> bool:
-    """Check if a process with given PID is a Claude Code process.
-
-    Delegates to shared utility in utils.process_utils.
-    IMPORTANT: Returns True (conservative) when unable to determine.
-    """
+    """Check if a PID is a Claude process. Returns True (conservative) when uncertain."""
     from utils.process_utils import is_claude_process
 
     return is_claude_process(pid)

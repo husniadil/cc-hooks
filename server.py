@@ -16,12 +16,10 @@
 # ]
 # ///
 
-# Main server entry point for Claude Code hooks processing system
-# Manages FastAPI server lifecycle and event processing
-
 import uvicorn
 import asyncio
 import os
+import re
 import sys
 from datetime import datetime, timezone
 from contextlib import asynccontextmanager
@@ -40,34 +38,26 @@ from utils.constants import DateTimeConstants, NetworkConstants
 configure_root_logging()
 logger = setup_logger(__name__)
 
-# Setup file logging if LOG_FILE environment variable is provided
-log_file = os.getenv("LOG_FILE")
-if log_file:
-    # Extract claude_pid from log file name (format: logs/<claude_pid>.log)
-    import re
-
-    match = re.search(r"/(\d+)\.log$", log_file)
-    if match:
-        claude_pid = int(match.group(1))
-        log_dir = os.path.dirname(log_file)
-        setup_file_logging(claude_pid, log_dir)
-        logger.debug(f"Server file logging configured: {log_file}")
+if (log_file := os.getenv("LOG_FILE")) and (
+    match := re.search(r"/(\d+)\.log$", log_file)
+):
+    setup_file_logging(int(match.group(1)), os.path.dirname(log_file))
+    logger.debug(f"Server file logging configured: {log_file}")
 
 
 @asynccontextmanager
 async def lifespan(app):
     """Manage application lifecycle for startup and shutdown."""
-    # Startup
+    import psutil
+
     server_start_time = datetime.now(timezone.utc).strftime(
         DateTimeConstants.ISO_DATETIME_FORMAT
     )
     await init_db()
     await set_server_start_time(server_start_time)
 
-    # Get server port from environment variable
     server_port = int(os.getenv("PORT", str(NetworkConstants.DEFAULT_PORT)))
 
-    # Initialize TTS system
     providers = config.get_tts_providers_list()
     tts_manager = initialize_tts(
         providers=providers,
@@ -82,45 +72,35 @@ async def lifespan(app):
     else:
         logger.warning("TTS system initialization failed, continuing without TTS")
 
-    # Log process information for debugging
-    import psutil
-
-    current_pid = os.getpid()
-    current_process = psutil.Process(current_pid)
-    parent_process = current_process.parent()
-
+    current_process = psutil.Process(os.getpid())
     logger.info(
-        f"Server process info: PID={current_pid}, name={current_process.name()}"
+        f"Server process info: PID={current_process.pid}, name={current_process.name()}"
     )
-    if parent_process:
+    if parent := current_process.parent():
         logger.info(
-            f"Parent process: PID={parent_process.pid}, name={parent_process.name()}, cmdline={' '.join(parent_process.cmdline()[:3])}"
+            f"Parent process: PID={parent.pid}, name={parent.name()}, "
+            f"cmdline={' '.join(parent.cmdline()[:3])}"
         )
 
-    # Start background tasks
-    # 1. Event processor - processes queued events for this server's sessions
-    # 2. PID monitor - checks if Claude process is alive, shutdown if gone
     event_processor_task = asyncio.create_task(process_events(server_port=server_port))
     pid_monitor_task = asyncio.create_task(monitor_claude_pid(server_port=server_port))
     logger.info(f"Server started successfully at {server_start_time}")
     yield
-    # Shutdown — cancel both tasks and await concurrently
+
     event_processor_task.cancel()
     pid_monitor_task.cancel()
-    results = await asyncio.gather(
-        event_processor_task, pid_monitor_task, return_exceptions=True
-    )
-    for i, result in enumerate(results):
+    for i, result in enumerate(
+        await asyncio.gather(
+            event_processor_task, pid_monitor_task, return_exceptions=True
+        )
+    ):
         if isinstance(result, Exception) and not isinstance(
             result, asyncio.CancelledError
         ):
             logger.warning(f"Background task {i} raised during shutdown: {result}")
 
-    # Cleanup TTS system
     if tts_manager:
         tts_manager.cleanup()
-        logger.info("TTS system cleaned up")
-
     logger.info("Server shutdown complete")
 
 
@@ -128,27 +108,21 @@ app = create_app(lifespan=lifespan)
 
 if __name__ == "__main__":
     try:
-        # Check if we're in development mode (with --reload flag or specific argument)
         reload = "--reload" in sys.argv or "--dev" in sys.argv
-
-        # Get port from environment variable (set by claude.sh) or default
         port = int(os.getenv("PORT", str(NetworkConstants.DEFAULT_PORT)))
         host = NetworkConstants.DEFAULT_HOST
 
         if reload:
-            # Development mode with hot reload
             uvicorn.run(
-                "server:app",  # Use string import for reload to work
+                "server:app",
                 host=host,
                 port=port,
                 reload=True,
-                reload_dirs=[".", "app", "utils"],  # Watch these directories
-                reload_excludes=["*.db", "sound"],  # Ignore these
+                reload_dirs=[".", "app", "utils"],
+                reload_excludes=["*.db", "sound"],
             )
         else:
-            # Production mode without reload
             uvicorn.run(app, host=host, port=port, log_level="info")
-
     except KeyboardInterrupt:
         logger.info("Server stopped by user (Ctrl+C)")
         sys.exit(0)

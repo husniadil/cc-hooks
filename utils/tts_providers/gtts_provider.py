@@ -1,9 +1,4 @@
-"""
-Google Text-to-Speech provider for Claude Code hooks TTS system.
-
-This provider generates speech using Google's TTS service and caches
-the results for better performance and reduced API calls.
-"""
+"""Google TTS provider with caching support."""
 
 import hashlib
 from pathlib import Path
