@@ -660,38 +660,6 @@ def _get_all_server_processes() -> Dict[int, Tuple[int, int]]:
     return server_processes
 
 
-def _parse_etime(etime_str: str) -> int:
-    """
-    Parse ps etime format to seconds.
-    Format: [[dd-]hh:]mm:ss
-    Examples: "5:23", "1:05:23", "2-03:45:12"
-    """
-    try:
-        total_seconds = 0
-
-        # Check for days
-        if "-" in etime_str:
-            days_part, time_part = etime_str.split("-", 1)
-            total_seconds += int(days_part) * 86400
-            etime_str = time_part
-
-        # Split time parts (can be hh:mm:ss or mm:ss)
-        parts = etime_str.split(":")
-        int_parts = [int(p) for p in parts]
-
-        if len(int_parts) == 3:  # hh:mm:ss
-            total_seconds += int_parts[0] * 3600 + int_parts[1] * 60 + int_parts[2]
-        elif len(int_parts) == 2:  # mm:ss
-            total_seconds += int_parts[0] * 60 + int_parts[1]
-        else:  # Just seconds
-            total_seconds += int_parts[0]
-
-        return total_seconds
-    except Exception as e:
-        logger.warning(f"Failed to parse etime '{etime_str}': {e}")
-        return 0
-
-
 async def cleanup_orphaned_server_processes() -> int:
     """
     Kill orphaned server.py processes that don't have corresponding valid Claude sessions.
@@ -759,6 +727,13 @@ async def cleanup_orphaned_server_processes() -> int:
             else:
                 # Server not bound to any port yet - check parent PID
                 pass
+
+            # Skip processes younger than 10 seconds (may still be starting up)
+            if elapsed_seconds < 10:
+                logger.debug(
+                    f"Skipping young server PID {server_pid} (age: {elapsed_seconds}s < 10s)"
+                )
+                continue
 
             # Check if parent (Claude) process is valid
             is_orphaned = parent_pid not in valid_claude_pids

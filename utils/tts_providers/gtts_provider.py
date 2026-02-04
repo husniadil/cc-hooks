@@ -80,10 +80,14 @@ class GTTSProvider(TTSProvider):
             cache_key = self._generate_cache_key(text, self.language)
             cached_file = self.cache_dir / f"{cache_key}.mp3"
 
-            # Return cached file if it exists and caching is enabled
+            # Return cached file if it exists, is valid, and caching is enabled
             if self.cache_enabled and not no_cache and cached_file.exists():
-                logger.info(f"Using cached TTS file: {cached_file.name}")
-                return cached_file
+                if cached_file.stat().st_size > 0:
+                    logger.info(f"Using cached TTS file: {cached_file.name}")
+                    return cached_file
+                else:
+                    logger.warning(f"Removing corrupted cache file: {cached_file.name}")
+                    cached_file.unlink()
 
             # Generate new TTS file
             logger.info(
@@ -92,17 +96,31 @@ class GTTSProvider(TTSProvider):
             )
             tts = gTTS(text=text, lang=self.language)
 
+            # gTTS.save() makes network calls without timeout support.
+            # Wrap in a thread with timeout to prevent indefinite hangs.
+            import concurrent.futures
+
             if self.cache_enabled and not no_cache:
-                # Save to cache
-                tts.save(str(cached_file))
+                target_path = str(cached_file)
+            else:
+                import tempfile
+
+                with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as tmp:
+                    target_path = tmp.name
+
+            pool = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+            future = pool.submit(tts.save, target_path)
+            try:
+                future.result(timeout=15)  # 15s timeout for network TTS
+            finally:
+                # Use wait=False to avoid blocking if the thread is still running
+                pool.shutdown(wait=False, cancel_futures=True)
+
+            if self.cache_enabled and not no_cache:
                 logger.info(f"Saved TTS to cache: {cached_file.name}")
                 return cached_file
             else:
-                # Save to temporary file
-                import tempfile
-
-                temp_file = Path(tempfile.mktemp(suffix=".mp3"))
-                tts.save(str(temp_file))
+                temp_file = Path(target_path)
                 logger.info(f"Generated temporary TTS file: {temp_file}")
                 return temp_file
 

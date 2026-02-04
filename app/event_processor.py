@@ -281,13 +281,18 @@ async def process_single_event(event_data: EventData) -> None:
 
     # Check if this event should have announcement (pass session_settings for context)
     if should_play_announcement(
-        hook_event_name, bool(silent_announcements), session_settings  # type: ignore[arg-type]
+        hook_event_name,
+        bool(silent_announcements),
+        session_settings,  # type: ignore[arg-type]
     ):
         volume = 0.5  # Default volume
         logger.debug(f"Playing announcement for {hook_event_name} (volume: {volume})")
         audio_tasks.append(
             play_announcement_sound(
-                hook_event_name, dict(event_data), volume, session_settings  # type: ignore[arg-type]
+                hook_event_name,
+                dict(event_data),
+                volume,
+                session_settings,  # type: ignore[arg-type]
             )
         )
     elif silent_announcements:

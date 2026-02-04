@@ -29,7 +29,10 @@ sys.path.insert(0, str(parent_dir))
 
 from utils.sound_player import play_sound  # noqa: E402
 from utils.tts_manager import get_tts_manager, initialize_tts_manager  # noqa: E402
-from utils.tts_providers.mappings import get_sound_file_for_event, get_audio_description  # noqa: E402
+from utils.tts_providers.mappings import (  # noqa: E402
+    get_sound_file_for_event,
+    get_audio_description,
+)
 from utils.colored_logger import setup_logger, configure_root_logging  # noqa: E402
 from utils.constants import SoundFiles  # noqa: E402
 

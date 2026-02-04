@@ -248,6 +248,11 @@ class VersionChecker:
 
         except asyncio.TimeoutError:
             logger.error(f"Git command timed out after {timeout}s")
+            try:
+                process.terminate()
+                await asyncio.wait_for(process.wait(), timeout=5)
+            except Exception:
+                process.kill()
             return None
         except Exception as e:
             logger.error(f"Git command error: {e}")

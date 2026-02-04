@@ -104,17 +104,17 @@ async def lifespan(app):
     pid_monitor_task = asyncio.create_task(monitor_claude_pid(server_port=server_port))
     logger.info(f"Server started successfully at {server_start_time}")
     yield
-    # Shutdown
+    # Shutdown — cancel both tasks and await concurrently
     event_processor_task.cancel()
     pid_monitor_task.cancel()
-    try:
-        await event_processor_task
-    except asyncio.CancelledError:
-        pass
-    try:
-        await pid_monitor_task
-    except asyncio.CancelledError:
-        pass
+    results = await asyncio.gather(
+        event_processor_task, pid_monitor_task, return_exceptions=True
+    )
+    for i, result in enumerate(results):
+        if isinstance(result, Exception) and not isinstance(
+            result, asyncio.CancelledError
+        ):
+            logger.warning(f"Background task {i} raised during shutdown: {result}")
 
     # Cleanup TTS system
     if tts_manager:

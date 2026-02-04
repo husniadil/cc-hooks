@@ -165,7 +165,7 @@ async def run_migrations():
     await create_migrations_table()
     current_version = await get_current_version()
 
-    pending_migrations = [m for m in MIGRATIONS if (m["version"] or 0) > current_version]  # type: ignore[operator]
+    pending_migrations = [m for m in MIGRATIONS if (m["version"] or 0) > current_version]  # type: ignore[operator]  # fmt: skip
 
     if not pending_migrations:
         logger.info("No pending migrations")
@@ -183,8 +183,8 @@ async def get_migration_status() -> Dict[str, Any]:
     """Get current migration status"""
     await create_migrations_table()
     current_version = await get_current_version()
-    latest_version = max((m["version"] or 0) for m in MIGRATIONS) if MIGRATIONS else 0  # type: ignore[type-var,arg-type]
-    pending_count = len([m for m in MIGRATIONS if (m["version"] or 0) > current_version])  # type: ignore[operator]
+    latest_version = max((m["version"] or 0) for m in MIGRATIONS) if MIGRATIONS else 0  # type: ignore[type-var,arg-type]  # fmt: skip
+    pending_count = len([m for m in MIGRATIONS if (m["version"] or 0) > current_version])  # type: ignore[operator]  # fmt: skip
 
     async with aiosqlite.connect(config.db_path) as db:
         cursor = await db.execute(

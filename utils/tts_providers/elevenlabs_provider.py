@@ -199,10 +199,10 @@ class ElevenLabsProvider(TTSProvider):
                 # Save to temporary file
                 import tempfile
 
-                temp_file = Path(tempfile.mktemp(suffix=".mp3"))
-                with open(temp_file, "wb") as f:
+                with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as tmp:
                     for chunk in audio_chunks:
-                        f.write(chunk)
+                        tmp.write(chunk)
+                    temp_file = Path(tmp.name)
                 logger.info(f"Generated temporary ElevenLabs TTS file: {temp_file}")
                 return temp_file
 

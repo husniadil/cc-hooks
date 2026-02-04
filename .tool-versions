@@ -6,5 +6,5 @@ node 20.19.4
 uv 0.5.29
 
 # Development tools for Claude Code hooks and configuration
-# Note: black formatter is installed via pip, not mise
+# Note: ruff formatter/linter is installed via uv dev dependency
 # Note: prettier is installed as npm dev dependency

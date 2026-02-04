@@ -96,6 +96,9 @@ def cleanup_old_processed_files(max_age_hours: int = 24) -> None:
         import time
 
         temp_dir = _get_temp_dir()
+        if not temp_dir.exists():
+            return
+
         current_time = time.time()
         cutoff_time = current_time - (max_age_hours * 3600)
 

@@ -24,7 +24,7 @@
     "check:verbose": "./check_setup.sh --verbose",
     "format": "npm run format:prettier && npm run format:py",
     "format:prettier": "prettier --write .",
-    "format:py": "uvx black . --line-length 88",
+    "format:py": "uv run --group dev ruff format .",
     "update": "./update.sh",
     "version:check": "uv run utils/version_checker.py"
   },

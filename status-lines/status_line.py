@@ -266,13 +266,11 @@ class StatusLine:
 
             # Query each potential server port to find our instance settings
             # Use shorter timeout and check fewer ports for faster failure
-            for port_offset in range(3):  # Reduced from 10 to 3
+            for port_offset in range(10):  # Check first 10 ports for multi-instance
                 test_port = NetworkConstants.DEFAULT_PORT + port_offset
                 try:
                     url = get_server_url(test_port, f"/instances/{claude_pid}/settings")
-                    response = requests.get(
-                        url, timeout=0.1
-                    )  # Reduced from 0.5s to 0.1s
+                    response = requests.get(url, timeout=0.3)
                     if response.status_code == 200:
                         settings = response.json()
                         port = settings.get("server_port")

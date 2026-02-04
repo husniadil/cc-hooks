@@ -252,7 +252,7 @@ class OpenRouterService:
         # Only check API key availability
         if override_contextual_stop is not None:
             # Session-specific mode: only check API key and SDK availability
-            if not (bool(self.api_key) and OPENAI_AVAILABLE):
+            if not (self._is_valid_api_key(self.api_key) and OPENAI_AVAILABLE):
                 logger.debug("Service not available (missing API key or SDK)")
                 return None
         else:
@@ -354,7 +354,7 @@ class OpenRouterService:
         # Only check API key availability
         if override_contextual_pretooluse is not None:
             # Session-specific mode: only check API key and SDK availability
-            if not (bool(self.api_key) and OPENAI_AVAILABLE):
+            if not (self._is_valid_api_key(self.api_key) and OPENAI_AVAILABLE):
                 logger.debug("Service not available (missing API key or SDK)")
                 return None
         else:
