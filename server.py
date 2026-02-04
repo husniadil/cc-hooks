@@ -9,6 +9,7 @@
 #     "python-dotenv>=1.1.1,<2",
 #     "gtts>=2.5.4,<3",
 #     "elevenlabs>=2.16.0,<3",
+#     "httpx>=0.28.0,<1",
 #     "pygame>=2.6.1,<3",
 #     "openai>=2.1.0,<3",
 #     "requests>=2.32.5,<3",

@@ -19,6 +19,11 @@ CONFIG_TO_ENV_MAP = {
     # ElevenLabs
     "elevenlabs.voice_id": "CC_ELEVENLABS_VOICE_ID",
     "elevenlabs.model_id": "CC_ELEVENLABS_MODEL_ID",
+    # Kokoro (local TTS server)
+    "kokoro.base_url": "KOKORO_BASE_URL",
+    "kokoro.voice": "KOKORO_VOICE",
+    "kokoro.model": "KOKORO_MODEL",
+    "kokoro.response_format": "KOKORO_RESPONSE_FORMAT",
     # Silent modes
     "silent.announcements": "CC_SILENT_ANNOUNCEMENTS",
     "silent.effects": "CC_SILENT_EFFECTS",
@@ -156,7 +161,7 @@ def create_example_config(output_path: Optional[Path] = None) -> None:
 # Audio Settings
 audio:
   # TTS provider chain (comma-separated, left to right priority)
-  # Options: prerecorded, gtts, elevenlabs
+  # Options: prerecorded, gtts, elevenlabs, kokoro
   providers: prerecorded
 
   # Language code for TTS (ISO 639-1)
@@ -174,6 +179,24 @@ elevenlabs:
   # Model ID
   # Options: eleven_flash_v2_5, eleven_turbo_v2_5, eleven_multilingual_v2
   model_id: eleven_flash_v2_5
+
+# Kokoro Settings (local TTS server with OpenAI-compatible API)
+kokoro:
+  # Base URL for Kokoro server (default: http://127.0.0.1:8880/v1)
+  base_url: http://127.0.0.1:8880/v1
+
+  # Voice to use (see https://github.com/remsky/Kokoro-FastAPI for full list)
+  # American Female: af_sky, af_bella, af_sarah, af_nicole, af_nova, etc.
+  # American Male: am_adam, am_echo, am_michael, am_onyx, etc.
+  # British Female: bf_alice, bf_emma, bf_lily
+  # British Male: bm_daniel, bm_george, bm_lewis
+  voice: af_sky
+
+  # Model (default: tts-1)
+  model: tts-1
+
+  # Audio format: mp3, opus, flac, wav, pcm (default: mp3)
+  response_format: mp3
 
 # Silent Modes
 silent:
