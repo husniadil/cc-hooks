@@ -14,7 +14,6 @@ Usage:
     uv run utils/editor_detector.py --test
 """
 
-import os
 import sys
 from typing import Optional, Dict, List, Any
 
@@ -209,7 +208,7 @@ def main():
                     info = get_editor_info(pid)
                     print(f"\nClaude PID {pid}:")
                     print(f"  Editor: {info['editor'] or 'terminal/unknown'}")
-                    print(f"  Process chain:")
+                    print("  Process chain:")
                     for p in info["process_chain"][:5]:
                         print(f"    {p['pid']}: {p['name']}")
             except (psutil.NoSuchProcess, psutil.AccessDenied):
@@ -229,7 +228,7 @@ def main():
     print(f"Editor: {info['editor'] or 'terminal/unknown'}")
     print(f"Is editor session: {info['is_editor']}")
     print(f"Is VSCode: {info['is_vscode']}")
-    print(f"\nProcess chain:")
+    print("\nProcess chain:")
     for i, proc in enumerate(info["process_chain"], 1):
         print(f"{i}. PID {proc['pid']}: {proc['name']}")
         if len(proc["cmdline"]) < 200:

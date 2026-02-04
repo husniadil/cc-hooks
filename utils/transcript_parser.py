@@ -499,6 +499,7 @@ def main():
 
     # Configure logging
     import logging
+
     level = logging.DEBUG if args.verbose else logging.WARNING
     logging.basicConfig(level=level, format="%(levelname)s: %(message)s")
 

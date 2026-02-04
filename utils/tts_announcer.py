@@ -27,11 +27,11 @@ current_dir = Path(__file__).parent
 parent_dir = current_dir.parent
 sys.path.insert(0, str(parent_dir))
 
-from utils.sound_player import play_sound
-from utils.tts_manager import get_tts_manager, initialize_tts_manager
-from utils.tts_providers.mappings import get_sound_file_for_event, get_audio_description
-from utils.colored_logger import setup_logger, configure_root_logging
-from utils.constants import SoundFiles
+from utils.sound_player import play_sound  # noqa: E402
+from utils.tts_manager import get_tts_manager, initialize_tts_manager  # noqa: E402
+from utils.tts_providers.mappings import get_sound_file_for_event, get_audio_description  # noqa: E402
+from utils.colored_logger import setup_logger, configure_root_logging  # noqa: E402
+from utils.constants import SoundFiles  # noqa: E402
 
 configure_root_logging()
 logger = setup_logger(__name__)
@@ -711,7 +711,7 @@ def main():
     if args.source:
         event_data["source"] = args.source
 
-    print(f"🔊 Testing TTS Announcer")
+    print("🔊 Testing TTS Announcer")
     print("=" * 25)
     print(f"🎯 Event: {args.hook_event_name}")
     print(f"🏷️  Source: {args.source or 'None'}")

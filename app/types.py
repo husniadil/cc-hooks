@@ -1,6 +1,6 @@
 """Type definitions for the application."""
 
-from typing import TypedDict, Optional, Any
+from typing import TypedDict, Optional
 
 
 class EventData(TypedDict, total=False):

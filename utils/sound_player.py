@@ -179,7 +179,7 @@ def play_sound(sound_file=None, volume=0.5):
             # Cleanup on error
             try:
                 pygame.mixer.quit()
-            except:
+            except Exception:
                 pass
             # Fall through to ffplay
 

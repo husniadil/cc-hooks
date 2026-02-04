@@ -315,7 +315,7 @@ def delete_session(session_id: str, port: int) -> bool:
         # Connection refused is expected during shutdown - server already closed
         if "Connection refused" in str(e) or "Errno 61" in str(e):
             logger.debug(
-                f"Server already shut down, session cleanup skipped (expected during exit)"
+                "Server already shut down, session cleanup skipped (expected during exit)"
             )
         else:
             logger.error(f"Connection error deleting session: {e}")
@@ -423,8 +423,8 @@ def send_to_api(
                             f"skipping server start (conservative: assume VSCode-like behavior)"
                         )
                         print(
-                            f"cc-hooks: Unknown editor detected, server disabled "
-                            f"(only terminal and known editors supported)",
+                            "cc-hooks: Unknown editor detected, server disabled "
+                            "(only terminal and known editors supported)",
                             file=sys.stderr,
                         )
                         sys.exit(0)  # Exit cleanly
@@ -470,7 +470,9 @@ def send_to_api(
                             )
                             # Verify server is still alive
                             try:
-                                health_url = get_server_url(test_port or 12222, "/health")
+                                health_url = get_server_url(
+                                    test_port or 12222, "/health"
+                                )
                                 health_response = requests.get(health_url, timeout=0.5)
                                 if health_response.status_code == 200:
                                     existing_port = test_port

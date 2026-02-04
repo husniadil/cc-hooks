@@ -22,7 +22,6 @@ import subprocess
 import shutil
 from pathlib import Path
 from datetime import datetime
-import re
 
 # Add imports for constants (at the beginning after standard imports)
 try:
@@ -174,7 +173,7 @@ class StatusLine:
             ts = timestamp_str.replace("Z", "+00:00")
             dt = datetime.datetime.fromisoformat(ts)
             return int(dt.timestamp())
-        except:
+        except Exception:
             # Fallback to date commands
             # Try GNU date first
             success, output, _ = self._run_command(
@@ -198,7 +197,7 @@ class StatusLine:
         try:
             dt = datetime.fromtimestamp(epoch_seconds)
             return dt.strftime("%H:%M")
-        except:
+        except Exception:
             return ""
 
     def _progress_bar(self, pct, width=10):
@@ -281,7 +280,7 @@ class StatusLine:
                             f"Found server port {port} for PID {claude_pid}"
                         )
                         return port
-                except:
+                except Exception:
                     continue
 
             # No server found - this is normal for status_line processes
@@ -531,7 +530,7 @@ class StatusLine:
         except ImportError:
             self._debug_log("requests package not available")
             return None
-        except Exception as e:
+        except Exception:
             # Connection failed - server likely not running
             return None
 
@@ -918,8 +917,8 @@ class StatusLine:
         else:
             update_available, update_msg = False, ""
             tts_info, tts_enabled, voice_name = "", False, ""
-            openrouter_info, openrouter_enabled, openrouter_model = "", False, ""
-            effects_info, effects_muted = "", False
+            openrouter_info, openrouter_enabled, _ = "", False, ""
+            _, effects_muted = "", False
 
         # Context window information
         context_window = data.get("context_window", {})
@@ -938,7 +937,7 @@ class StatusLine:
         cost_data = data.get("cost", {})
         cost_usd = cost_data.get("total_cost_usd", 0) or 0
         total_duration_ms = cost_data.get("total_duration_ms", 0) or 0
-        api_duration_ms = cost_data.get("total_api_duration_ms", 0) or 0
+        _ = cost_data.get("total_api_duration_ms", 0) or 0  # reserved for future use
         lines_added = cost_data.get("total_lines_added", 0) or 0
         lines_removed = cost_data.get("total_lines_removed", 0) or 0
 

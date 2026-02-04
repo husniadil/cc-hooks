@@ -11,8 +11,7 @@ from app.types import SessionRow
 # Global variable to track server start time
 _server_start_time: Optional[str] = None
 
-# Configure logging
-from utils.colored_logger import setup_logger
+from utils.colored_logger import setup_logger  # noqa: E402
 
 logger = setup_logger(__name__)
 
@@ -85,7 +84,6 @@ async def get_next_pending_event() -> Optional[Tuple[int, str, str, str, int]]:
     Event isolation is handled by checking session ownership in the event processor
     (via server_port filter), not during database query.
     """
-    import os
 
     async with aiosqlite.connect(config.db_path) as db:
         server_start = get_server_start_time()

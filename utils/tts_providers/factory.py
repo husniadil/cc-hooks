@@ -131,7 +131,7 @@ def register_provider(name: str, provider_class: Type[TTSProvider]) -> None:
         provider_class (Type[TTSProvider]): Provider class that implements TTSProvider
     """
     if not issubclass(provider_class, TTSProvider):
-        raise ValueError(f"Provider class must inherit from TTSProvider")
+        raise ValueError("Provider class must inherit from TTSProvider")
 
     PROVIDER_REGISTRY[name] = provider_class
     logger.info(f"Registered custom TTS provider: {name}")

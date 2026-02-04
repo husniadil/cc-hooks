@@ -24,6 +24,7 @@ dependencies = [
 [dependency-groups]
 dev = [
     "mypy>=1.15",
+    "ruff>=0.15.0",
     "types-psutil",
     "types-pyyaml",
     "types-requests",

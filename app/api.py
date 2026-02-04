@@ -3,7 +3,7 @@
 
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, Optional
 import os
 import signal
 from app.event_db import (

@@ -85,7 +85,7 @@ def load_config(config_path: Optional[Path] = None) -> Dict[str, str]:
         # Flatten nested structure
         return flatten_dict(config)
 
-    except Exception as e:
+    except Exception:
         # Silently fail - config is optional
         return {}
 
