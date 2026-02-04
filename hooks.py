@@ -378,7 +378,7 @@ def _handle_session_start(
         f"SessionStart source detected: '{source}' (event_data keys: {list(event_data.keys())})"
     )
 
-    port = _try_reuse_existing_server(source, claude_pid)
+    port = _try_reuse_existing_server(source or "", claude_pid)
     if port is None:
         port = find_or_start_server(log_file_path)
 

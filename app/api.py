@@ -195,12 +195,13 @@ def create_app(lifespan=None) -> FastAPI:
         """Query events with optional filters."""
         try:
             limit = min(limit, 100)
-            return await query_events(
+            rows = await query_events(
                 hook_event_name=hook_event_name,
                 session_id=session_id,
                 status=status,
                 limit=limit,
             )
+            return [EventQueryItem(**row) for row in rows]
         except Exception as e:
             logger.error(f"Error querying events: {e}", exc_info=True)
             raise HTTPException(
