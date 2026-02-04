@@ -6,14 +6,14 @@
   },
   "metadata": {
     "description": "Official marketplace for cc-hooks - Audio feedback and TTS announcements for Claude Code",
-    "version": "1.0.12"
+    "version": "1.1.0"
   },
   "plugins": [
     {
       "name": "cc-hooks-plugin",
       "source": "./",
       "description": "Audio feedback system with multilingual TTS announcements, AI-powered contextual messages, and sound effects for Claude Code. Features include: prerecorded sounds (offline), Google TTS (free), ElevenLabs (premium), contextual AI completion messages via OpenRouter, multi-language support, granular silent modes, and multi-instance support for concurrent sessions.",
-      "version": "1.0.12",
+      "version": "1.1.0",
       "author": {
         "name": "Husni Adil Makmur",
         "email": "husniadil@gmail.com"
