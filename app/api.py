@@ -1,6 +1,6 @@
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
-from typing import Dict, Any, Optional
+from typing import Dict, Any, List, Optional
 import os
 import signal
 from app.event_db import (
@@ -103,6 +103,26 @@ class VersionResponse(BaseModel):
     error: Optional[str] = Field(None, description="Error message if check failed")
 
 
+class EventQueryItem(BaseModel):
+    """Single event item returned by GET /events."""
+
+    id: int = Field(..., description="Event database ID")
+    session_id: str = Field(..., description="Claude session UUID")
+    hook_event_name: str = Field(..., description="Hook event type")
+    status: str = Field(
+        ..., description="Event status (pending/processing/completed/failed)"
+    )
+    created_at: Optional[str] = Field(
+        None, description="ISO timestamp when event was created"
+    )
+    processed_at: Optional[str] = Field(
+        None, description="ISO timestamp when event was processed"
+    )
+    error_message: Optional[str] = Field(
+        None, description="Error message if event failed"
+    )
+
+
 class InstanceStatusResponse(BaseModel):
     """Response for instance status query."""
 
@@ -165,13 +185,13 @@ def create_app(lifespan=None) -> FastAPI:
                 detail="Failed to queue event",
             )
 
-    @app.get("/events")
+    @app.get("/events", response_model=List[EventQueryItem])
     async def get_events(
         hook_event_name: Optional[str] = None,
         session_id: Optional[str] = None,
         status: Optional[str] = None,
         limit: int = 10,
-    ):
+    ) -> List[EventQueryItem]:
         """Query events with optional filters."""
         try:
             limit = min(limit, 100)

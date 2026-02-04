@@ -11,6 +11,33 @@ logger = setup_logger(__name__)
 
 _server_start_time: Optional[str] = None
 
+# Persistent connection for the event processor polling loop.
+# Avoids opening/closing a connection every 100ms during polling.
+_persistent_db: Optional[aiosqlite.Connection] = None
+
+
+async def get_persistent_db() -> aiosqlite.Connection:
+    """Get or create a persistent DB connection for the event processor loop."""
+    global _persistent_db
+    if _persistent_db is None:
+        _persistent_db = await aiosqlite.connect(config.db_path)
+        await _persistent_db.execute("PRAGMA journal_mode=WAL")
+        logger.debug("Opened persistent DB connection for event processor")
+    return _persistent_db
+
+
+async def close_persistent_db() -> None:
+    """Close the persistent DB connection (call during shutdown)."""
+    global _persistent_db
+    if _persistent_db is not None:
+        try:
+            await _persistent_db.close()
+            logger.debug("Closed persistent DB connection")
+        except Exception as e:
+            logger.warning(f"Error closing persistent DB connection: {e}")
+        finally:
+            _persistent_db = None
+
 
 async def set_server_start_time(start_time: str) -> None:
     """Set the server start time for filtering events."""
@@ -60,6 +87,7 @@ async def queue_event(
 
 async def get_next_pending_event(
     server_port: Optional[int] = None,
+    db: Optional[aiosqlite.Connection] = None,
 ) -> Optional[Tuple[int, str, str, str, int]]:
     """Atomically claim the next pending event for this server.
 
@@ -71,54 +99,65 @@ async def get_next_pending_event(
     Args:
         server_port: Filter events by session ownership. When set, only
             events for sessions on this port are returned.
+        db: Optional persistent connection. If None, opens a new one.
     """
-    async with aiosqlite.connect(config.db_path) as db:
-        server_start = get_server_start_time()
-        if not server_start:
-            raise RuntimeError("Server start time not set - cannot process events")
+    if db is not None:
+        return await _get_next_pending_event_impl(server_port, db)
+    async with aiosqlite.connect(config.db_path) as new_db:
+        return await _get_next_pending_event_impl(server_port, new_db)
 
-        if server_port is not None:
-            # Atomic claim with ownership filtering:
-            # Single statement = implicitly atomic in SQLite.
-            # Server B can never claim Server A's events.
-            cursor = await db.execute(
-                """UPDATE events SET status = ?
-                WHERE id = (
-                    SELECT e.id FROM events e
-                    INNER JOIN sessions s ON e.session_id = s.session_id
-                    WHERE e.status = ? AND e.created_at >= ? AND s.server_port = ?
-                    ORDER BY e.id LIMIT 1
-                )
-                RETURNING id, session_id, hook_event_name, payload, retry_count""",
-                (
-                    EventStatus.PROCESSING.value,
-                    EventStatus.PENDING.value,
-                    server_start,
-                    server_port,
-                ),
-            )
-        else:
-            # Fallback: claim any pending event (no ownership filtering)
-            cursor = await db.execute(
-                """UPDATE events SET status = ?
-                WHERE id = (
-                    SELECT id FROM events
-                    WHERE status = ? AND created_at >= ?
-                    ORDER BY id LIMIT 1
-                )
-                RETURNING id, session_id, hook_event_name, payload, retry_count""",
-                (
-                    EventStatus.PROCESSING.value,
-                    EventStatus.PENDING.value,
-                    server_start,
-                ),
-            )
 
-        row = await cursor.fetchone()
-        await db.commit()
-        if row is None:
-            return None
-        return (row[0], row[1], row[2], row[3], row[4])  # type: ignore[return-value]
+async def _get_next_pending_event_impl(
+    server_port: Optional[int],
+    db: aiosqlite.Connection,
+) -> Optional[Tuple[int, str, str, str, int]]:
+    """Internal implementation for get_next_pending_event."""
+    server_start = get_server_start_time()
+    if not server_start:
+        raise RuntimeError("Server start time not set - cannot process events")
+
+    if server_port is not None:
+        # Atomic claim with ownership filtering:
+        # Single statement = implicitly atomic in SQLite.
+        # Server B can never claim Server A's events.
+        cursor = await db.execute(
+            """UPDATE events SET status = ?
+            WHERE id = (
+                SELECT e.id FROM events e
+                INNER JOIN sessions s ON e.session_id = s.session_id
+                WHERE e.status = ? AND e.created_at >= ? AND s.server_port = ?
+                ORDER BY e.id LIMIT 1
+            )
+            RETURNING id, session_id, hook_event_name, payload, retry_count""",
+            (
+                EventStatus.PROCESSING.value,
+                EventStatus.PENDING.value,
+                server_start,
+                server_port,
+            ),
+        )
+    else:
+        # Fallback: claim any pending event (no ownership filtering)
+        cursor = await db.execute(
+            """UPDATE events SET status = ?
+            WHERE id = (
+                SELECT id FROM events
+                WHERE status = ? AND created_at >= ?
+                ORDER BY id LIMIT 1
+            )
+            RETURNING id, session_id, hook_event_name, payload, retry_count""",
+            (
+                EventStatus.PROCESSING.value,
+                EventStatus.PENDING.value,
+                server_start,
+            ),
+        )
+
+    row = await cursor.fetchone()
+    await db.commit()
+    if row is None:
+        return None
+    return (row[0], row[1], row[2], row[3], row[4])  # type: ignore[return-value]
 
 
 async def mark_event_processing(event_id: int) -> None:
@@ -131,7 +170,9 @@ async def mark_event_processing(event_id: int) -> None:
         await db.commit()
 
 
-async def mark_event_completed(event_id: int, retry_count: int) -> None:
+async def mark_event_completed(
+    event_id: int, retry_count: int, db: Optional[aiosqlite.Connection] = None
+) -> None:
     """Mark an event as successfully completed.
 
     Only transitions PROCESSING → COMPLETED. The status guard ensures
@@ -139,8 +180,8 @@ async def mark_event_completed(event_id: int, retry_count: int) -> None:
     """
     from datetime import datetime, timezone
 
-    async with aiosqlite.connect(config.db_path) as db:
-        await db.execute(
+    async def _impl(_db: aiosqlite.Connection) -> None:
+        await _db.execute(
             "UPDATE events SET status = ?, processed_at = ?, retry_count = ? WHERE id = ? AND status = ?",
             (
                 EventStatus.COMPLETED.value,
@@ -152,26 +193,49 @@ async def mark_event_completed(event_id: int, retry_count: int) -> None:
                 EventStatus.PROCESSING.value,
             ),
         )
-        await db.commit()
+        await _db.commit()
+
+    if db is not None:
+        await _impl(db)
+    else:
+        async with aiosqlite.connect(config.db_path) as new_db:
+            await _impl(new_db)
 
 
-async def mark_event_pending(event_id: int, retry_count: int) -> None:
+async def mark_event_pending(
+    event_id: int, retry_count: int, db: Optional[aiosqlite.Connection] = None
+) -> None:
     """Reset an event back to pending status for later retry.
 
     Only transitions PROCESSING → PENDING. The status guard prevents
     overwriting COMPLETED/FAILED status during race conditions between
     multiple server instances.
     """
-    async with aiosqlite.connect(config.db_path) as db:
-        await db.execute(
+
+    async def _impl(_db: aiosqlite.Connection) -> None:
+        await _db.execute(
             "UPDATE events SET status = ?, retry_count = ? WHERE id = ? AND status = ?",
-            (EventStatus.PENDING.value, retry_count, event_id, EventStatus.PROCESSING.value),
+            (
+                EventStatus.PENDING.value,
+                retry_count,
+                event_id,
+                EventStatus.PROCESSING.value,
+            ),
         )
-        await db.commit()
+        await _db.commit()
+
+    if db is not None:
+        await _impl(db)
+    else:
+        async with aiosqlite.connect(config.db_path) as new_db:
+            await _impl(new_db)
 
 
 async def mark_event_failed(
-    event_id: int, retry_count: int, error_message: str
+    event_id: int,
+    retry_count: int,
+    error_message: str,
+    db: Optional[aiosqlite.Connection] = None,
 ) -> None:
     """Mark an event as failed after max retries.
 
@@ -180,8 +244,8 @@ async def mark_event_failed(
     """
     from datetime import datetime, timezone
 
-    async with aiosqlite.connect(config.db_path) as db:
-        await db.execute(
+    async def _impl(_db: aiosqlite.Connection) -> None:
+        await _db.execute(
             "UPDATE events SET status = ?, error_message = ?, retry_count = ?, processed_at = ? WHERE id = ? AND status = ?",
             (
                 EventStatus.FAILED.value,
@@ -194,7 +258,13 @@ async def mark_event_failed(
                 EventStatus.PROCESSING.value,
             ),
         )
-        await db.commit()
+        await _db.commit()
+
+    if db is not None:
+        await _impl(db)
+    else:
+        async with aiosqlite.connect(config.db_path) as new_db:
+            await _impl(new_db)
 
 
 async def query_events(
@@ -437,75 +507,45 @@ def _get_server_bound_ports() -> Dict[int, int]:
     """
     Get all server.py processes that have bound ports.
     Returns dict mapping server_pid -> bound_port.
-    Uses lsof to find processes listening on ports.
+    Uses psutil for cross-platform port detection (no subprocess/lsof needed).
     """
-    import subprocess
+    import psutil
 
     server_port_map: dict[int, int] = {}
     try:
-        # Use lsof to find all listening TCP connections
-        # -iTCP -sTCP:LISTEN shows only listening sockets
-        # -n avoids DNS lookups, -P avoids port name lookups
-        result = subprocess.run(
-            ["lsof", "-iTCP", "-sTCP:LISTEN", "-n", "-P"],
-            capture_output=True,
-            text=True,
-            timeout=5,
-        )
+        # Get all server.py processes first, then check their bound ports
+        for proc in psutil.process_iter(["pid", "name", "cmdline"]):
+            try:
+                cmdline = proc.info["cmdline"]
+                name = (proc.info["name"] or "").lower()
+                if not cmdline or "python" not in name:
+                    continue
+                if not any("server.py" in arg for arg in cmdline):
+                    continue
 
-        if result.returncode != 0:
-            logger.debug("lsof command returned non-zero")
-            return server_port_map
+                pid = proc.info["pid"]
 
-        # Parse lsof output to find server.py processes
-        # Format: COMMAND   PID   USER   FD   TYPE   DEVICE SIZE/OFF NODE NAME
-        #         python3  1234  user   3u  IPv4   0x...   0t0     TCP *:12222 (LISTEN)
-        for line in result.stdout.split("\n"):
-            if "python3" in line and "LISTEN" in line:
-                parts = line.split()
-                if len(parts) >= 9:
-                    try:
-                        pid = int(parts[1])
-                        # Find port from line more reliably
-                        # Look for patterns like "*:12222" or "127.0.0.1:12222"
-                        port = None
-                        for field in parts:
-                            if ":" in field and not field.startswith("0t"):
-                                # Extract port from field, removing trailing parens
-                                port_str = field.split(":")[-1].rstrip("()")
-                                try:
-                                    port = int(port_str)
-                                    break
-                                except ValueError:
-                                    continue
+                # Get listening ports for this server.py process
+                try:
+                    connections = proc.net_connections(kind="tcp")
+                    for conn in connections:
+                        if conn.status == "LISTEN" and conn.laddr:
+                            port = conn.laddr.port
+                            server_port_map[pid] = port
+                            logger.debug(
+                                f"Found server.py PID {pid} bound to port {port}"
+                            )
+                            break  # One listening port per server is enough
+                except (psutil.AccessDenied, psutil.NoSuchProcess):
+                    continue
 
-                        if not port:
-                            continue  # Skip this line if no valid port found
-
-                        # Verify it's actually server.py by checking process with psutil
-                        import psutil
-
-                        try:
-                            proc = psutil.Process(pid)
-                            cmdline = " ".join(proc.cmdline())
-                            if "server.py" in cmdline:
-                                server_port_map[pid] = port
-                                logger.debug(
-                                    f"Found server.py PID {pid} bound to port {port}"
-                                )
-                        except (psutil.NoSuchProcess, psutil.AccessDenied):
-                            # Process no longer exists or we can't access it - skip
-                            continue
-                    except (ValueError, IndexError) as e:
-                        logger.debug(f"Could not parse lsof line: {line} - {e}")
-                        continue
+            except (psutil.NoSuchProcess, psutil.AccessDenied, KeyError):
+                continue
 
         logger.debug(
             f"Found {len(server_port_map)} server.py process(es) with bound ports"
         )
 
-    except FileNotFoundError:
-        logger.warning("lsof command not found - port binding check unavailable")
     except Exception as e:
         logger.warning(f"Failed to get server bound ports: {e}")
 

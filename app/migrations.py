@@ -102,6 +102,11 @@ MIGRATIONS = [
         "description": "Drop arguments column from events table",
         "sql": "ALTER TABLE events DROP COLUMN arguments",
     },
+    {
+        "version": 12,
+        "description": "Add unique index on sessions server_port",
+        "sql": "CREATE UNIQUE INDEX IF NOT EXISTS idx_sessions_server_port ON sessions (server_port)",
+    },
 ]
 
 

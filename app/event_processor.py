@@ -10,7 +10,9 @@ import psutil
 from config import config
 from app.types import EventData
 from app.event_db import (
+    close_persistent_db,
     get_next_pending_event,
+    get_persistent_db,
     get_session_by_id,
     mark_event_completed,
     mark_event_failed,
@@ -38,12 +40,15 @@ async def process_events(server_port: Optional[int] = None) -> None:
         else "Starting event processor (processing all events)"
     )
 
+    # Use a persistent DB connection to avoid open/close churn during polling
+    db = await get_persistent_db()
+
     while True:
         try:
             # Atomic claim: fetches next pending event for our server
             # and marks it PROCESSING in a single SQL statement.
             # Events for other servers' sessions are never returned.
-            row = await get_next_pending_event(server_port)
+            row = await get_next_pending_event(server_port, db=db)
 
             if row:
                 event_id, session_id, hook_event_name, payload, retry_count = row
@@ -64,7 +69,7 @@ async def process_events(server_port: Optional[int] = None) -> None:
                     try:
                         await process_single_event(event_data)
                         success = True
-                        await mark_event_completed(event_id, current_retry)
+                        await mark_event_completed(event_id, current_retry, db=db)
                         logger.debug(f"Event {event_id} processed successfully")
                     except Exception as e:
                         current_retry += 1
@@ -84,6 +89,7 @@ async def process_events(server_port: Optional[int] = None) -> None:
                         event_id,
                         current_retry,
                         f"Max retries ({config.max_retry_count}) exceeded. Last error: {last_error}",
+                        db=db,
                     )
             else:
                 await asyncio.sleep(ProcessingConstants.NO_EVENTS_WAIT_SECONDS)
@@ -94,6 +100,12 @@ async def process_events(server_port: Optional[int] = None) -> None:
                 exc_info=True,
                 extra={"server_port": server_port},
             )
+            # Reconnect persistent DB on error (connection may be broken)
+            try:
+                await close_persistent_db()
+                db = await get_persistent_db()
+            except Exception:
+                pass
             await asyncio.sleep(ProcessingConstants.ERROR_WAIT_SECONDS)
 
 

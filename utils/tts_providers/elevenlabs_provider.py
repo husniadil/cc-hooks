@@ -212,8 +212,10 @@ class ElevenLabsProvider(TTSProvider):
             pass
 
     def _get_cache_dir(self) -> Path:
-        """Get the cache directory for ElevenLabs files."""
-        return Path(__file__).parent.parent.parent / ".tts_cache" / "elevenlabs"
+        """Get the cache directory for ElevenLabs files (shared data dir)."""
+        from utils.constants import PathConstants
+
+        return PathConstants.TTS_CACHE_ELEVENLABS_DIR
 
     def _generate_cache_key(
         self, text: str, voice_id: str, model_id: str, language: str

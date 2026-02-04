@@ -47,7 +47,10 @@ def discover_server_port(
         port = start_port + offset
         try:
             if (
-                requests.get(get_server_url(port, "/health"), timeout=0.5).status_code
+                requests.get(
+                    get_server_url(port, "/health"),
+                    timeout=NetworkConstants.HEALTH_CHECK_TIMEOUT,
+                ).status_code
                 == 200
             ):
                 logger.debug(f"Found server on port {port}")
@@ -111,7 +114,8 @@ def start_server(port: int, log_file_path: Optional[str] = None) -> bool:
             try:
                 if (
                     requests.get(
-                        get_server_url(port, "/health"), timeout=0.5
+                        get_server_url(port, "/health"),
+                        timeout=NetworkConstants.HEALTH_CHECK_TIMEOUT,
                     ).status_code
                     == 200
                 ):
@@ -183,7 +187,7 @@ def register_session(session_id: str, claude_pid: int, port: int) -> bool:
             get_server_url(port, "/sessions"),
             json=payload,
             params={"cleanup_pid": claude_pid},
-            timeout=10,
+            timeout=NetworkConstants.API_REQUEST_TIMEOUT,
         )
         response.raise_for_status()
         logger.info(
@@ -218,7 +222,8 @@ def delete_session(session_id: str, port: int) -> bool:
     """Delete session at SessionEnd."""
     try:
         response = requests.delete(
-            get_server_url(port, f"/sessions/{session_id}"), timeout=10
+            get_server_url(port, f"/sessions/{session_id}"),
+            timeout=NetworkConstants.API_REQUEST_TIMEOUT,
         )
         response.raise_for_status()
         logger.info(f"Deleted session {session_id}")
@@ -236,19 +241,350 @@ def delete_session(session_id: str, port: int) -> bool:
         return False
 
 
+def _setup_file_logging(claude_pid: int) -> Optional[str]:
+    """Setup file logging once per process. Returns log file path."""
+    global _file_logging_initialized
+    if not _file_logging_initialized:
+        try:
+            log_file_path = setup_file_logging(claude_pid, str(PathConstants.LOGS_DIR))
+            _file_logging_initialized = True
+            return log_file_path
+        except Exception as e:
+            logger.warning(f"Failed to setup file logging: {e}")
+            return None
+    return str(PathConstants.LOGS_DIR / f"{claude_pid}.log")
+
+
+def _check_editor_compatibility(session_id: str, claude_pid: int) -> None:
+    """Check editor type and exit if unsupported. Only proceeds for terminal/Zed."""
+    try:
+        from utils.editor_detector import detect_editor, is_terminal_session
+
+        if is_terminal_session(claude_pid):
+            logger.info(f"Detected terminal/CLI session {session_id}, starting server")
+            return
+
+        editor = detect_editor(claude_pid)
+
+        if editor in ["vscode", "cursor", "windsurf"]:
+            logger.info(
+                f"Detected {editor.upper()} extension (only sends SessionStart), "
+                f"skipping server start for session {session_id}"
+            )
+            print(
+                f"cc-hooks: {editor.upper()} extension detected, server disabled "
+                f"(only SessionStart hook supported by {editor})",
+                file=sys.stderr,
+            )
+            sys.exit(0)
+
+        elif editor == "zed":
+            logger.info(
+                f"Detected Zed editor for session {session_id}, "
+                f"starting server (PID monitor will handle cleanup on exit)"
+            )
+
+        else:
+            logger.info(
+                f"Detected unknown editor for session {session_id}, "
+                f"skipping server start (conservative: assume VSCode-like behavior)"
+            )
+            print(
+                "cc-hooks: Unknown editor detected, server disabled "
+                "(only terminal and known editors supported)",
+                file=sys.stderr,
+            )
+            sys.exit(0)
+
+    except Exception as e:
+        logger.warning(
+            f"Failed to detect editor for session {session_id}: {e}, "
+            f"defaulting to terminal behavior (starting server)"
+        )
+
+
+def _try_reuse_existing_server(source: str, claude_pid: int) -> Optional[int]:
+    """Try to reuse an existing server for /clear or /compact. Returns port or None."""
+    if source not in ["clear", "compact"]:
+        logger.info(
+            f"Not a /clear or /compact SessionStart (source='{source}'), starting new server"
+        )
+        return None
+
+    logger.info(
+        f"Detected /{source} SessionStart - attempting to reuse existing server for PID {claude_pid}"
+    )
+    try:
+        from app.event_db import get_session_by_pid
+        import asyncio
+
+        existing_session = asyncio.run(get_session_by_pid(claude_pid))
+        if not existing_session:
+            logger.info(
+                f"No existing session found for PID {claude_pid}, will start new server"
+            )
+            return None
+
+        test_port = existing_session.get("server_port")
+        logger.info(
+            f"Found existing session for PID {claude_pid} on port {test_port}, checking health..."
+        )
+
+        if test_port is None:
+            logger.warning(
+                f"Session for PID {claude_pid} has no server_port, will start new server"
+            )
+            return None
+
+        try:
+            health_response = requests.get(
+                get_server_url(test_port, "/health"),
+                timeout=NetworkConstants.HEALTH_CHECK_TIMEOUT,
+            )
+            if health_response.status_code == 200:
+                logger.info(
+                    f"Reusing existing server on port {test_port} for /{source} command"
+                )
+                return test_port
+            logger.info(
+                f"Server on port {test_port} returned status {health_response.status_code}, will start new server"
+            )
+        except requests.exceptions.RequestException as e:
+            logger.info(
+                f"Server on port {test_port} not responding ({e}), will start new server"
+            )
+
+    except Exception as e:
+        logger.info(f"Error looking up existing server: {e}, will start new server")
+
+    return None
+
+
+def _handle_session_start(
+    event_data: Dict[Any, Any], claude_pid: int, log_file_path: Optional[str]
+) -> int:
+    """Handle SessionStart: editor check, server reuse/start, session registration. Returns port."""
+    session_id = event_data.get("session_id")
+    if not session_id:
+        raise RuntimeError("session_id required for SessionStart")
+
+    _check_editor_compatibility(session_id, claude_pid)
+
+    # Check for server reuse on /clear or /compact
+    from utils.tts_providers.mappings import extract_source_from_event_data
+
+    source = extract_source_from_event_data("SessionStart", event_data)
+    logger.info(
+        f"SessionStart source detected: '{source}' (event_data keys: {list(event_data.keys())})"
+    )
+
+    port = _try_reuse_existing_server(source, claude_pid)
+    if port is None:
+        port = find_or_start_server(log_file_path)
+
+    if not register_session(session_id, claude_pid, port):
+        logger.warning("Failed to register session, continuing anyway")
+
+    return port
+
+
+def _resolve_server_port(
+    event_data: Dict[Any, Any],
+    hook_event_name: Optional[str],
+    claude_pid: int,
+    log_file_path: Optional[str],
+) -> tuple[int, int]:
+    """Resolve server port for non-SessionStart events. Returns (port, claude_pid)."""
+    session_id = event_data.get("session_id")
+    if not session_id:
+        raise RuntimeError("session_id required for non-SessionStart events")
+
+    # Fast lookup: scan running servers for this session
+    for port_offset in range(10):
+        test_port = NetworkConstants.PORT_DISCOVERY_START + port_offset
+        try:
+            url = get_server_url(test_port, f"/sessions/{session_id}")
+            response = requests.get(
+                url, timeout=NetworkConstants.SESSION_LOOKUP_TIMEOUT
+            )
+            if response.status_code == 200:
+                session = response.json()
+                found_port = session.get("server_port")
+                actual_claude_pid = session.get("claude_pid")
+                logger.debug(f"Found server port {found_port} for session {session_id}")
+                return found_port, actual_claude_pid
+        except requests.exceptions.RequestException:
+            continue
+
+    # Session not found — fallback based on event type
+    if hook_event_name == "SessionStart":
+        logger.info(f"SessionStart for new session {session_id}. Starting server...")
+        port = find_or_start_server(log_file_path)
+        if not register_session(session_id, claude_pid, port):
+            logger.warning("Failed to register session, continuing anyway")
+        logger.info(f"Started server on port {port} and registered session")
+        return port, claude_pid
+
+    # Non-SessionStart: try auto-registering on a discovered server
+    try:
+        discovered_port = discover_server_port()
+        logger.info(
+            f"Session {session_id} not found, auto-registering on port {discovered_port}"
+        )
+        if register_session(session_id, claude_pid, discovered_port):
+            logger.info(
+                f"Auto-registered session {session_id} on port {discovered_port}"
+            )
+            return discovered_port, claude_pid
+        logger.warning(f"Failed to auto-register session {session_id}, skipping event")
+    except RuntimeError:
+        logger.warning(
+            f"Session {session_id} not found and no running server for "
+            f"{hook_event_name} event. Skipping (SessionStart must run first)."
+        )
+
+    raise _SkipEvent()
+
+
+class _SkipEvent(Exception):
+    """Signal to skip an event gracefully (no server found)."""
+
+
+def _post_event(event_data: Dict[Any, Any], claude_pid: int, port: int) -> str:
+    """POST event to the API server. Returns instance_id."""
+    instance_id = f"{claude_pid}:{port}"
+    payload = {
+        "data": event_data,
+        "claude_pid": claude_pid,
+        "instance_id": instance_id,
+    }
+    response = requests.post(
+        get_server_url(port, "/events"),
+        json=payload,
+        timeout=NetworkConstants.EVENT_SUBMIT_TIMEOUT,
+    )
+    response.raise_for_status()
+    response.json()  # Validate JSON response
+    return instance_id
+
+
+def _handle_session_end(
+    event_data: Dict[Any, Any], port: int, instance_id: str
+) -> None:
+    """Handle SessionEnd: wait for events, cleanup session, maybe shutdown server."""
+    session_id = event_data.get("session_id")
+    if not session_id:
+        logger.warning("No session_id for SessionEnd, skipping cleanup")
+        return
+
+    end_reason = event_data.get("reason")
+
+    # /clear keeps session and server alive
+    if end_reason == "clear":
+        logger.info(
+            f"SessionEnd with reason 'clear' - keeping session {session_id} and server alive"
+        )
+        return
+
+    # Wait for all events to finish processing before cleanup
+    _wait_for_event_completion(port, instance_id)
+
+    logger.debug(f"SessionEnd with reason '{end_reason}' - proceeding with cleanup")
+
+    if not delete_session(session_id, port):
+        logger.warning("Failed to delete session, continuing anyway")
+
+    _maybe_shutdown_server(port)
+
+
+def _wait_for_event_completion(port: int, instance_id: str) -> None:
+    """Poll for last event completion with timeout."""
+    import time
+
+    logger.debug(
+        "Waiting for last event (any type) to complete processing for instance..."
+    )
+
+    max_wait_time = 10
+    poll_interval = 1
+    elapsed = 0
+
+    while elapsed < max_wait_time:
+        try:
+            last_event_url = get_server_url(
+                port, f"/instances/{instance_id}/last-event"
+            )
+            check_response = requests.get(
+                last_event_url, timeout=NetworkConstants.LAST_EVENT_POLL_TIMEOUT
+            )
+
+            if check_response.status_code == 200:
+                result = check_response.json()
+                if not result.get("has_pending", False):
+                    logger.debug(
+                        f"Last event completed for instance {instance_id} after {elapsed:.1f}s"
+                    )
+                    return
+                logger.debug(
+                    f"Still waiting for last event... (has_pending=True, elapsed={elapsed}s)"
+                )
+        except Exception as e:
+            logger.debug(f"Error checking last event status: {e}")
+
+        time.sleep(poll_interval)
+        elapsed += poll_interval
+
+    logger.warning(
+        f"Last event not completed after {max_wait_time}s, proceeding anyway"
+    )
+
+
+def _maybe_shutdown_server(port: int) -> None:
+    """Shutdown server if this was the last session on it."""
+    try:
+        response = requests.get(
+            get_server_url(port, "/sessions/count"),
+            params={"server_port": port},
+            timeout=NetworkConstants.SHUTDOWN_TIMEOUT,
+        )
+        response.raise_for_status()
+        count = response.json().get("count", 0)
+
+        if count == 0:
+            logger.info("Last session closed for this server, shutting down...")
+            shutdown_response = requests.post(
+                get_server_url(port, "/shutdown"),
+                timeout=NetworkConstants.SHUTDOWN_TIMEOUT,
+            )
+            if shutdown_response.status_code == 200:
+                logger.info("Server shutdown initiated successfully")
+            else:
+                logger.warning(
+                    f"Server shutdown returned status: {shutdown_response.status_code}"
+                )
+        else:
+            logger.info(
+                f"Server will continue running ({count} session(s) remaining on port {port})"
+            )
+
+    except requests.exceptions.ConnectionError as e:
+        if "Connection refused" in str(e) or "Errno 61" in str(e):
+            logger.debug(
+                "Server already shut down by Claude Code (expected during exit)"
+            )
+        else:
+            logger.warning(f"Connection error checking session count: {e}")
+    except Exception as e:
+        logger.warning(f"Could not check session count or shutdown server: {e}")
+
+
 def send_to_api(
     event_data: Dict[Any, Any],
     claude_pid: Optional[int] = None,
     port: Optional[int] = None,
 ) -> bool:
-    """Send event data to the API endpoint."""
+    """Send event data to the API endpoint. Orchestrates lifecycle hooks."""
     try:
-        global _file_logging_initialized
-
-        # Get hook event name for lifecycle management
-        hook_event_name = event_data.get("hook_event_name")
-
-        # Detect Claude PID if not provided
         if claude_pid is None:
             claude_pid = detect_claude_pid()
 
@@ -257,384 +593,33 @@ def send_to_api(
 
         hooks_pid = os.getpid()
         hooks_process = psutil.Process(hooks_pid)
+        hook_event_name = event_data.get("hook_event_name")
         logger.debug(
             f"Hook process: PID={hooks_pid}, detected_claude_pid={claude_pid}, "
             f"event={hook_event_name}, name={hooks_process.name()}"
         )
 
-        # Setup file logging early (once per instance)
-        # Use shared directory for logs (persists across plugin updates)
-        log_file_path = None
-        if not _file_logging_initialized:
-            try:
-                # Use shared data directory for logs
-                log_file_path = setup_file_logging(
-                    claude_pid, str(PathConstants.LOGS_DIR)
-                )
-                _file_logging_initialized = True
-            except Exception as e:
-                logger.warning(f"Failed to setup file logging: {e}")
-        else:
-            # Log file already setup, construct path
-            log_file_path = str(PathConstants.LOGS_DIR / f"{claude_pid}.log")
+        log_file_path = _setup_file_logging(claude_pid)
 
-        # Handle SessionStart: find/start server, register session
+        # Resolve server port based on event type
         if hook_event_name == "SessionStart":
-            session_id = event_data.get("session_id")
-            if not session_id:
-                raise RuntimeError("session_id required for SessionStart")
-
-            # Detect editor type and decide whether to start server
-            # Strategy:
-            # - Terminal (any form) → Start server (legitimate CLI usage)
-            # - Known editors → Per-editor rules (VSCode=skip, Zed=start)
-            # - Unknown editor → Skip server (conservative, assume VSCode-like)
-            try:
-                from utils.editor_detector import detect_editor, is_terminal_session
-
-                # First, check if it's a terminal session
-                is_terminal = is_terminal_session(claude_pid)
-
-                if is_terminal:
-                    # Terminal session (iTerm, zsh, ssh, tmux, etc.) → Always start server
-                    logger.info(
-                        f"Detected terminal/CLI session {session_id}, starting server"
-                    )
-                else:
-                    # Not terminal, check for known editors
-                    editor = detect_editor(claude_pid)
-
-                    if editor in ["vscode", "cursor", "windsurf"]:
-                        # VSCode/forks → Skip server (only send SessionStart)
-                        logger.info(
-                            f"Detected {editor.upper()} extension (only sends SessionStart), "
-                            f"skipping server start for session {session_id}"
-                        )
-                        print(
-                            f"cc-hooks: {editor.upper()} extension detected, server disabled "
-                            f"(only SessionStart hook supported by {editor})",
-                            file=sys.stderr,
-                        )
-                        sys.exit(0)  # Exit cleanly
-
-                    elif editor == "zed":
-                        # Zed → Start server (sends hooks, PID monitor handles cleanup)
-                        logger.info(
-                            f"Detected Zed editor for session {session_id}, "
-                            f"starting server (PID monitor will handle cleanup on exit)"
-                        )
-
-                    else:
-                        # Unknown editor → Skip server (conservative approach)
-                        logger.info(
-                            f"Detected unknown editor for session {session_id}, "
-                            f"skipping server start (conservative: assume VSCode-like behavior)"
-                        )
-                        print(
-                            "cc-hooks: Unknown editor detected, server disabled "
-                            "(only terminal and known editors supported)",
-                            file=sys.stderr,
-                        )
-                        sys.exit(0)  # Exit cleanly
-
-            except Exception as e:
-                # Detection failed → Default to terminal behavior (start server)
-                logger.warning(
-                    f"Failed to detect editor for session {session_id}: {e}, "
-                    f"defaulting to terminal behavior (starting server)"
-                )
-
-            # Check if we should reuse existing server (for /clear or /compact commands)
-            # Extract source to determine if this is a soft restart that should reuse server
-            # Use the same extraction logic as audio mappings (supports multiple field names)
-            from utils.tts_providers.mappings import extract_source_from_event_data
-
-            source = extract_source_from_event_data(hook_event_name, event_data)
-            logger.info(
-                f"SessionStart source detected: '{source}' (event_data keys: {list(event_data.keys())})"
+            port = _handle_session_start(event_data, claude_pid, log_file_path)
+        elif port is None:
+            port, claude_pid = _resolve_server_port(
+                event_data, hook_event_name, claude_pid, log_file_path
             )
 
-            existing_port = None
-            if source in ["clear", "compact"]:
-                logger.info(
-                    f"Detected /{source} SessionStart - attempting to reuse existing server for PID {claude_pid}"
-                )
-                # Try to find existing server for this claude_pid
-                try:
-                    from app.event_db import get_session_by_pid
-                    import asyncio
+        # Fire event to server
+        instance_id = _post_event(event_data, claude_pid, port)
 
-                    # Run async function in sync context
-                    existing_session = asyncio.run(get_session_by_pid(claude_pid))
-                    if existing_session:
-                        test_port = existing_session.get("server_port")
-                        logger.info(
-                            f"Found existing session for PID {claude_pid} on port {test_port}, checking health..."
-                        )
-                        # Verify server is still alive
-                        if test_port is not None:
-                            try:
-                                health_url = get_server_url(test_port, "/health")
-                                health_response = requests.get(health_url, timeout=0.5)
-                                if health_response.status_code == 200:
-                                    existing_port = test_port
-                                    logger.info(
-                                        f"✓ Reusing existing server on port {test_port} for /{source} command"
-                                    )
-                                else:
-                                    logger.info(
-                                        f"✗ Server on port {test_port} returned status {health_response.status_code}, will start new server"
-                                    )
-                            except requests.exceptions.RequestException as e:
-                                logger.info(
-                                    f"✗ Server on port {test_port} not responding ({e}), will start new server"
-                                )
-                        else:
-                            logger.warning(
-                                f"Session for PID {claude_pid} has no server_port, will start new server"
-                            )
-                    else:
-                        logger.info(
-                            f"No existing session found for PID {claude_pid}, will start new server"
-                        )
-                except Exception as e:
-                    logger.info(
-                        f"Error looking up existing server: {e}, will start new server"
-                    )
-            else:
-                logger.info(
-                    f"Not a /clear or /compact SessionStart (source='{source}'), starting new server"
-                )
-
-            # Use existing server port or start new one
-            if existing_port:
-                port = existing_port
-            else:
-                # Find running server or start new one, pass log file for server output
-                port = find_or_start_server(log_file_path)
-
-            # Register session in DB (unified table with all info)
-            if not register_session(session_id, claude_pid, port):
-                logger.warning("Failed to register session, continuing anyway")
-
-        # Get server port from DB if not provided (non-SessionStart events)
-        # Each hook call is a new process, so we need to lookup the port from DB
-        if port is None:
-            session_id = event_data.get("session_id")
-            if not session_id:
-                raise RuntimeError("session_id required for non-SessionStart events")
-
-            try:
-                # Fast lookup: try to find session by session_id
-                # Use shorter timeout for faster failure detection
-                found_port = None
-                lookup_timeout = 0.2
-
-                for port_offset in range(10):
-                    test_port = NetworkConstants.PORT_DISCOVERY_START + port_offset
-                    try:
-                        url = get_server_url(test_port, f"/sessions/{session_id}")
-                        response = requests.get(url, timeout=lookup_timeout)
-                        if response.status_code == 200:
-                            session = response.json()
-                            found_port = session.get("server_port")
-                            actual_claude_pid = session.get("claude_pid")
-                            logger.debug(
-                                f"Found server port {found_port} for session {session_id}"
-                            )
-                            # Update claude_pid to actual PID from SessionStart
-                            claude_pid = actual_claude_pid
-                            break
-                    except requests.exceptions.RequestException:
-                        continue
-
-                if found_port:
-                    port = found_port
-                else:
-                    # Session not found - handle based on event type
-                    if hook_event_name == "SessionStart":
-                        # SessionStart creates server
-                        logger.info(
-                            f"SessionStart for new session {session_id}. Starting server..."
-                        )
-                        port = find_or_start_server(log_file_path)
-
-                        # Register session
-                        if not register_session(session_id, claude_pid, port):
-                            logger.warning(
-                                "Failed to register session, continuing anyway"
-                            )
-
-                        logger.info(
-                            f"Started server on port {port} and registered session"
-                        )
-                    else:
-                        # Non-SessionStart event: try to find running server and auto-register
-                        # This handles cases where session ID changes without SessionStart
-                        try:
-                            discovered_port = discover_server_port()
-                            logger.info(
-                                f"Session {session_id} not found, auto-registering on port {discovered_port}"
-                            )
-                            if register_session(
-                                session_id, claude_pid, discovered_port
-                            ):
-                                port = discovered_port
-                                logger.info(
-                                    f"Auto-registered session {session_id} on port {discovered_port}"
-                                )
-                            else:
-                                logger.warning(
-                                    f"Failed to auto-register session {session_id}, skipping event"
-                                )
-                                return True  # Skip event gracefully
-                        except RuntimeError:
-                            # No running server found
-                            logger.warning(
-                                f"Session {session_id} not found and no running server for "
-                                f"{hook_event_name} event. Skipping (SessionStart must run first)."
-                            )
-                            return True  # Skip event gracefully
-
-            except Exception as e:
-                logger.error(f"Could not find or start server: {e}")
-                raise
-
-        # Send the event
-        api_url = get_server_url(port, "/events")
-
-        # Construct instance_id in "claude_pid:server_port" format
-        instance_id = f"{claude_pid}:{port}"
-
-        payload = {
-            "data": event_data,
-            "claude_pid": claude_pid,
-            "instance_id": instance_id,
-        }
-
-        response = requests.post(api_url, json=payload, timeout=30)
-        response.raise_for_status()
-        response.json()  # Validate JSON response
-
-        # Handle SessionEnd: wait for event processing, then cleanup and maybe shutdown
+        # Post-event lifecycle handling
         if hook_event_name == "SessionEnd":
-            import time
-
-            session_id = event_data.get("session_id")
-            if not session_id:
-                logger.warning("No session_id for SessionEnd, skipping cleanup")
-                return True
-
-            # Extract end_reason to determine cleanup behavior
-            # Check FIRST to avoid unnecessary waiting for /clear
-            end_reason = event_data.get("reason")
-
-            if end_reason == "clear":
-                logger.info(
-                    f"SessionEnd with reason 'clear' - keeping session {session_id} and server alive"
-                )
-                # Skip session deletion, shutdown, and waiting for /clear
-                # Server and session will persist, avoiding unnecessary restart
-                return True
-
-            # For actual exits (not /clear), wait for last event to complete
-            # This ensures all announcements complete during server shutdown (e.g., PreCompact, SessionEnd)
-            logger.debug(
-                "Waiting for last event (any type) to complete processing for instance..."
-            )
-
-            # Poll for last event completion with timeout
-            # Check LAST event (not just SessionEnd) to ensure all events complete
-            max_wait_time = 10  # Maximum 10 seconds
-            poll_interval = 1  # Check every 1 second
-            elapsed = 0
-            all_events_completed = False
-
-            while elapsed < max_wait_time:
-                try:
-                    # Check last event status for this instance (any event type)
-                    last_event_url = get_server_url(
-                        port, f"/instances/{instance_id}/last-event"
-                    )
-                    check_response = requests.get(last_event_url, timeout=2)
-
-                    if check_response.status_code == 200:
-                        result = check_response.json()
-                        has_pending = result.get("has_pending", False)
-
-                        if not has_pending:
-                            logger.debug(
-                                f"Last event completed for instance {instance_id} after {elapsed:.1f}s"
-                            )
-                            all_events_completed = True
-                            break
-                        else:
-                            logger.debug(
-                                f"Still waiting for last event... (has_pending={has_pending}, elapsed={elapsed}s)"
-                            )
-                except Exception as e:
-                    logger.debug(f"Error checking last event status: {e}")
-
-                time.sleep(poll_interval)
-                elapsed += poll_interval
-
-            if not all_events_completed:
-                logger.warning(
-                    f"Last event not completed after {max_wait_time}s, proceeding anyway"
-                )
-
-            logger.debug("Last event processing wait completed")
-
-            # Legitimate exit (logout, prompt_input_exit, etc.) - cleanup normally
-            logger.debug(
-                f"SessionEnd with reason '{end_reason}' - proceeding with cleanup"
-            )
-
-            # Delete session (unified table)
-            if not delete_session(session_id, port):
-                logger.warning("Failed to delete session, continuing anyway")
-
-            # Check if this is the last session FOR THIS SERVER and shutdown if so
-            try:
-                # Filter count by server_port to ensure we only count sessions for THIS server
-                # This prevents shutdown when other server instances still have active sessions
-                response = requests.get(
-                    get_server_url(port, "/sessions/count"),
-                    params={"server_port": port},
-                    timeout=5,
-                )
-                response.raise_for_status()
-                count = response.json().get("count", 0)
-
-                if count == 0:
-                    logger.info("Last session closed for this server, shutting down...")
-                    # Shutdown server
-                    shutdown_response = requests.post(
-                        get_server_url(port, "/shutdown"), timeout=5
-                    )
-                    if shutdown_response.status_code == 200:
-                        logger.info("Server shutdown initiated successfully")
-                    else:
-                        logger.warning(
-                            f"Server shutdown returned status: {shutdown_response.status_code}"
-                        )
-                else:
-                    logger.info(
-                        f"Server will continue running ({count} session(s) remaining on port {port})"
-                    )
-            except requests.exceptions.ConnectionError as e:
-                # Connection refused is expected - Claude Code already shut down the server
-                if "Connection refused" in str(e) or "Errno 61" in str(e):
-                    logger.debug(
-                        "Server already shut down by Claude Code (expected during exit)"
-                    )
-                else:
-                    logger.warning(f"Connection error checking session count: {e}")
-            except Exception as e:
-                logger.warning(f"Could not check session count or shutdown server: {e}")
+            _handle_session_end(event_data, port, instance_id)
 
         return True
 
+    except _SkipEvent:
+        return True
     except Exception as e:
         logger.error(f"Error in send_to_api: {e}")
         return False

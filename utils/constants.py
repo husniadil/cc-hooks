@@ -84,6 +84,16 @@ class NetworkConstants:
     PORT_RANGE_MIN = 1024  # Minimum valid port for user applications
     PORT_RANGE_MAX = 65535  # Maximum valid TCP port
 
+    # Request timeouts (seconds)
+    HEALTH_CHECK_TIMEOUT = 0.5  # Fast probes for health/discovery
+    SESSION_LOOKUP_TIMEOUT = 0.2  # Fast session lookup during hook calls
+    API_REQUEST_TIMEOUT = 10  # Session register, delete, count
+    EVENT_SUBMIT_TIMEOUT = 30  # Event POST (needs room for queue)
+    SHUTDOWN_TIMEOUT = 5  # Shutdown requests
+    LAST_EVENT_POLL_TIMEOUT = 2  # Polling for event completion
+    GIT_COMMAND_TIMEOUT = 5  # Git commands (describe, rev-list)
+    GIT_FETCH_TIMEOUT = 10  # Git fetch (network operation)
+
 
 class HTTPStatusConstants:
     """HTTP status code constants for better maintainability."""
@@ -118,8 +128,8 @@ class PathConstants:
     # Database path
     DATABASE_PATH = SHARED_DATA_DIR / "events.db"
 
-    # Temporary tracking files
-    TRANSCRIPT_TRACKING_DIR = Path("/tmp") / "cc-hooks-transcripts"
+    # Transcript tracking files (shared data dir for persistence across reboots)
+    TRANSCRIPT_TRACKING_DIR = SHARED_DATA_DIR / "transcript-tracking"
 
 
 class SoundFiles:

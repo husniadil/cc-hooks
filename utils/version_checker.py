@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Optional, Dict, Any
 
 from utils.colored_logger import setup_logger
+from utils.constants import NetworkConstants
 
 logger = setup_logger(__name__)
 
@@ -185,8 +186,10 @@ class VersionChecker:
     async def _git_fetch(self) -> bool:
         """Fetch latest from remote origin (with timeout)."""
         try:
-            # Run git fetch with 10 second timeout
-            await self._run_git_command(["fetch", "origin"], timeout=10)
+            # Run git fetch with network timeout
+            await self._run_git_command(
+                ["fetch", "origin"], timeout=NetworkConstants.GIT_FETCH_TIMEOUT
+            )
             logger.debug("Git fetch completed successfully")
             return True
         except asyncio.TimeoutError:
@@ -208,7 +211,7 @@ class VersionChecker:
             return 0
 
     async def _run_git_command(
-        self, args: list[str], timeout: int = 5
+        self, args: list[str], timeout: int = NetworkConstants.GIT_COMMAND_TIMEOUT
     ) -> Optional[str]:
         """
         Run a git command asynchronously.

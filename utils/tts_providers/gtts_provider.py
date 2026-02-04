@@ -130,8 +130,10 @@ class GTTSProvider(TTSProvider):
             pass
 
     def _get_cache_dir(self) -> Path:
-        """Get the cache directory for gTTS files."""
-        return Path(__file__).parent.parent.parent / ".tts_cache" / "gtts"
+        """Get the cache directory for gTTS files (shared data dir)."""
+        from utils.constants import PathConstants
+
+        return PathConstants.TTS_CACHE_GTTS_DIR
 
     def _generate_cache_key(self, text: str, language: str) -> str:
         """

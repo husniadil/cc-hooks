@@ -24,7 +24,7 @@ import sys
 from datetime import datetime, timezone
 from contextlib import asynccontextmanager
 from app.api import create_app
-from app.event_db import init_db, set_server_start_time
+from app.event_db import init_db, set_server_start_time, close_persistent_db
 from app.event_processor import process_events, monitor_claude_pid
 from config import config
 from utils.tts_announcer import initialize_tts
@@ -99,6 +99,7 @@ async def lifespan(app):
         ):
             logger.warning(f"Background task {i} raised during shutdown: {result}")
 
+    await close_persistent_db()
     if tts_manager:
         tts_manager.cleanup()
     logger.info("Server shutdown complete")
