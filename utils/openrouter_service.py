@@ -24,7 +24,7 @@ except ImportError:
     OPENAI_AVAILABLE = False
 
     # Define a dummy OpenAI class for type hints when not available
-    class OpenAI:
+    class OpenAI:  # type: ignore[no-redef]
         pass
 
     logger.warning("OpenAI SDK not available. Install with: uv add openai")
@@ -71,7 +71,7 @@ class OpenRouterService:
             and OPENAI_AVAILABLE
         ):
             try:
-                self._client = OpenAI(
+                self._client = OpenAI(  # type: ignore[assignment]
                     api_key=self.api_key,
                     base_url="https://openrouter.ai/api/v1",
                 )
@@ -118,11 +118,12 @@ class OpenRouterService:
             return is_ready
 
         # For other features (contextual messages), check enabled flag
-        self._is_available = (
+        is_ready = (
             self.enabled and self._is_valid_api_key(self.api_key) and OPENAI_AVAILABLE
         )
+        self._is_available = is_ready  # type: ignore[assignment]
 
-        if not self._is_available:
+        if not is_ready:
             if not self.enabled:
                 logger.debug("Service is disabled")
             elif not self._is_valid_api_key(self.api_key):
@@ -130,7 +131,7 @@ class OpenRouterService:
             elif not OPENAI_AVAILABLE:
                 logger.warning("OpenAI SDK not available")
 
-        return self._is_available
+        return is_ready
 
     def translate_text(
         self,
@@ -180,14 +181,14 @@ class OpenRouterService:
             )
 
             # Make API call with system prompt
-            messages = [
+            messages: list[dict[str, str]] = [
                 {"role": "system", "content": TRANSLATION_SYSTEM_PROMPT},
                 {"role": "user", "content": prompt},
             ]
 
-            response = self.client.chat.completions.create(
+            response = self.client.chat.completions.create(  # type: ignore[arg-type,union-attr]
                 model=self.model,
-                messages=messages,
+                messages=messages,  # type: ignore[arg-type]
                 max_tokens=150,  # Allow more tokens for context-aware translations
                 temperature=0.3,  # Slightly creative but consistent
                 extra_headers={
@@ -278,14 +279,14 @@ class OpenRouterService:
             logger.debug(f"Claude Response: {claude_response}")
 
             # Make API call with system prompt
-            messages = [
+            messages: list[dict[str, str]] = [
                 {"role": "system", "content": COMPLETION_SYSTEM_PROMPT},
                 {"role": "user", "content": prompt},
             ]
 
-            response = self.client.chat.completions.create(
+            response = self.client.chat.completions.create(  # type: ignore[arg-type,union-attr]
                 model=self.model,
-                messages=messages,
+                messages=messages,  # type: ignore[arg-type]
                 max_tokens=50,  # Short completion messages
                 temperature=0.3,  # Consistent but natural
                 extra_headers={
@@ -381,14 +382,14 @@ class OpenRouterService:
             logger.debug(f"Claude Response: {claude_response}")
 
             # Make API call with system prompt
-            messages = [
+            messages: list[dict[str, str]] = [
                 {"role": "system", "content": PRE_TOOL_SYSTEM_PROMPT},
                 {"role": "user", "content": prompt},
             ]
 
-            response = self.client.chat.completions.create(
+            response = self.client.chat.completions.create(  # type: ignore[arg-type,union-attr]
                 model=self.model,
-                messages=messages,
+                messages=messages,  # type: ignore[arg-type]
                 max_tokens=50,  # Short action messages
                 temperature=0.3,  # Consistent but natural
                 extra_headers={

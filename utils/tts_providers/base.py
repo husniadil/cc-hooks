@@ -73,7 +73,7 @@ class TTSProvider(ABC):
         # Check for prepared text from tts_announcer
         prepared_text = event_data.get("_prepared_text")
         if prepared_text:
-            return prepared_text
+            return str(prepared_text)
 
         # Fallback: use event name as text
         return hook_event_name.replace("_", " ")

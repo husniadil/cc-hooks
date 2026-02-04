@@ -71,12 +71,14 @@ def detect_claude_pid() -> int:
             )
 
             if is_claude_binary:
-                logger.debug(f"Found Claude process: PID={current_process.pid}")
-                return current_process.pid
+                claude_pid: int = current_process.pid
+                logger.debug(f"Found Claude process: PID={claude_pid}")
+                return claude_pid
 
             # Move to parent
-            if current_process.parent():
-                current_process = current_process.parent()
+            _parent = current_process.parent()
+            if _parent:
+                current_process = _parent
             else:
                 break
 
@@ -284,7 +286,11 @@ def read_json_from_stdin() -> Dict[str, Any]:
         if not data.strip():
             raise ValueError("No data received from stdin")
 
-        return json.loads(data)
+        result = json.loads(data)
+        if not isinstance(result, dict):
+            raise ValueError("Expected JSON object")
+        result_dict: Dict[str, Any] = result
+        return result_dict
     except json.JSONDecodeError as e:
         logger.error(f"Invalid JSON format - {e}")
         sys.exit(1)
@@ -464,7 +470,7 @@ def send_to_api(
                             )
                             # Verify server is still alive
                             try:
-                                health_url = get_server_url(test_port, "/health")
+                                health_url = get_server_url(test_port or 12222, "/health")
                                 health_response = requests.get(health_url, timeout=0.5)
                                 if health_response.status_code == 200:
                                     existing_port = test_port

@@ -258,7 +258,7 @@ def create_app(lifespan=None) -> FastAPI:
 
     @app.post("/sessions")
     async def register_session(
-        session: SessionInfo, cleanup: bool = False, cleanup_pid: int = None
+        session: SessionInfo, cleanup: bool = False, cleanup_pid: int | None = None
     ):
         """Register session with settings in unified sessions table.
 

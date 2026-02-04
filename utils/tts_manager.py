@@ -8,6 +8,7 @@ coordinating between different TTS providers and handling fallbacks.
 from pathlib import Path
 from typing import Dict, Any, Optional, List
 from .tts_providers import create_provider
+from .tts_providers.base import TTSProvider
 from .colored_logger import setup_logger
 
 logger = setup_logger(__name__)
@@ -21,7 +22,7 @@ class TTSManager:
     and handling fallbacks when primary providers fail.
     """
 
-    def __init__(self, providers: List[str] = None, **provider_kwargs):
+    def __init__(self, providers: List[str] | None = None, **provider_kwargs):
         """
         Initialize the TTS manager with ordered provider list.
 
@@ -30,7 +31,7 @@ class TTSManager:
             **provider_kwargs: Additional arguments for provider initialization
         """
         self.provider_kwargs = provider_kwargs
-        self.providers = {}
+        self.providers: Dict[str, TTSProvider] = {}
 
         # Set up provider chain
         if providers is None or not providers:
@@ -169,7 +170,7 @@ def get_tts_manager() -> Optional[TTSManager]:
 
 
 def initialize_tts_manager(
-    providers: List[str] = None, **provider_kwargs
+    providers: List[str] | None = None, **provider_kwargs
 ) -> TTSManager:
     """
     Initialize the global TTS manager with ordered provider list.

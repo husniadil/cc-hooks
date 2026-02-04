@@ -16,7 +16,7 @@ Usage:
 
 import os
 import sys
-from typing import Optional, Dict, List
+from typing import Optional, Dict, List, Any
 
 try:
     import psutil
@@ -58,7 +58,7 @@ EDITOR_SIGNATURES = {
 }
 
 
-def get_process_chain(pid: int, max_depth: int = 10) -> List[Dict[str, str]]:
+def get_process_chain(pid: int, max_depth: int = 10) -> List[Dict[str, Any]]:
     """
     Get the process chain from the given PID to the root process.
 
@@ -172,7 +172,7 @@ def is_editor_session(pid: int) -> bool:
     return detect_editor(pid) is not None
 
 
-def get_editor_info(pid: int) -> Dict[str, any]:
+def get_editor_info(pid: int) -> Dict[str, Any]:
     """
     Get detailed editor information for a given Claude PID.
 

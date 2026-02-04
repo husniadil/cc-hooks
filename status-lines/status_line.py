@@ -29,7 +29,7 @@ try:
     from utils.constants import NetworkConstants, get_server_url
 except ImportError:
     # Fallback for when running as standalone script
-    class NetworkConstants:
+    class NetworkConstants:  # type: ignore[no-redef]
         DEFAULT_PORT = 12222
         LOCALHOST = "localhost"
 
@@ -49,7 +49,7 @@ try:
 except ImportError:
     # Fallback if config module still can't be imported
     print("Warning: Could not import config module", file=sys.stderr)
-    config = None
+    config = None  # type: ignore[assignment]
 
 
 class StatusLine:
@@ -239,8 +239,9 @@ class StatusLine:
                     self._debug_log(f"Found Claude PID: {claude_pid}")
                     return claude_pid
 
-                if current_process.parent():
-                    current_process = current_process.parent()
+                _parent = current_process.parent()
+                if _parent:
+                    current_process = _parent
                 else:
                     break
 
@@ -430,6 +431,7 @@ class StatusLine:
         project_root = Path(__file__).parent.parent
         local_ccusage = project_root / "node_modules" / ".bin" / "ccusage"
 
+        ccusage_path: str | None
         if local_ccusage.exists():
             ccusage_path = str(local_ccusage)
             self._debug_log(f"Using local ccusage: {ccusage_path}")

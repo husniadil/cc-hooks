@@ -72,7 +72,7 @@ async def queue_event(
             f"Event queued with ID {event_id}: {hook_event_name} for session {session_id}"
             + (f" (instance: {instance_id})" if instance_id else "")
         )
-        return event_id
+        return event_id or 0
 
 
 # Event status and monitoring functions
@@ -102,7 +102,10 @@ async def get_next_pending_event() -> Optional[Tuple[int, str, str, str, int]]:
             "SELECT id, session_id, hook_event_name, payload, retry_count FROM events WHERE status = ? AND created_at >= ? ORDER BY id LIMIT 1",
             (EventStatus.PENDING.value, server_start),
         )
-        return await cursor.fetchone()
+        row = await cursor.fetchone()
+        if row is None:
+            return None
+        return (row[0], row[1], row[2], row[3], row[4])  # type: ignore[return-value]
 
 
 async def mark_event_processing(event_id: int) -> None:
@@ -178,7 +181,7 @@ async def query_events(
 
         # Build query dynamically based on filters
         query = "SELECT id, session_id, hook_event_name, status, created_at, processed_at, error_message FROM events WHERE 1=1"
-        params = []
+        params: list[str | int] = []
 
         if hook_event_name:
             query += " AND hook_event_name = ?"
@@ -264,7 +267,7 @@ async def store_session(
         return False
 
 
-def _parse_session_row(result: tuple) -> SessionRow:
+def _parse_session_row(result: Any) -> SessionRow:
     """Parse a database row tuple into a SessionRow TypedDict.
 
     Args:
@@ -544,7 +547,7 @@ def _get_server_bound_ports() -> Dict[int, int]:
     """
     import subprocess
 
-    server_port_map = {}
+    server_port_map: dict[int, int] = {}
     try:
         # Use lsof to find all listening TCP connections
         # -iTCP -sTCP:LISTEN shows only listening sockets
@@ -676,14 +679,14 @@ def _parse_etime(etime_str: str) -> int:
 
         # Split time parts (can be hh:mm:ss or mm:ss)
         parts = etime_str.split(":")
-        parts = [int(p) for p in parts]
+        int_parts = [int(p) for p in parts]
 
-        if len(parts) == 3:  # hh:mm:ss
-            total_seconds += parts[0] * 3600 + parts[1] * 60 + parts[2]
-        elif len(parts) == 2:  # mm:ss
-            total_seconds += parts[0] * 60 + parts[1]
+        if len(int_parts) == 3:  # hh:mm:ss
+            total_seconds += int_parts[0] * 3600 + int_parts[1] * 60 + int_parts[2]
+        elif len(int_parts) == 2:  # mm:ss
+            total_seconds += int_parts[0] * 60 + int_parts[1]
         else:  # Just seconds
-            total_seconds += parts[0]
+            total_seconds += int_parts[0]
 
         return total_seconds
     except Exception as e:
@@ -808,7 +811,7 @@ async def get_last_event_status_for_instance(instance_id: str) -> Optional[str]:
         return result[0] if result else None
 
 
-async def cleanup_orphaned_sessions(exclude_sessions: list[str] = None) -> int:
+async def cleanup_orphaned_sessions(exclude_sessions: list[str] | None = None) -> int:
     """
     Remove sessions for PIDs that no longer exist or are not Claude processes.
     Also cleans up related events.

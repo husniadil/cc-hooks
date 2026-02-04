@@ -90,7 +90,7 @@ def should_play_sound_effect(
 def should_play_announcement(
     hook_event_name: str,
     silent_announcements: bool = False,
-    session_settings: dict = None,
+    session_settings: dict | None = None,
 ) -> bool:
     """
     Determine if TTS announcement should be played for this event.
@@ -104,7 +104,7 @@ def should_play_announcement(
     # Special handling for PreToolUse - only announce if contextual mode enabled
     if hook_event_name == "PreToolUse":
         if session_settings:
-            return session_settings.get("openrouter_contextual_pretooluse", False)
+            return bool(session_settings.get("openrouter_contextual_pretooluse", False))
         return False
 
     config = get_audio_config(hook_event_name)

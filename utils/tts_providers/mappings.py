@@ -186,7 +186,7 @@ def extract_source_from_event_data(
     if event_name in [HookEvent.PRE_TOOL_USE.value, HookEvent.POST_TOOL_USE.value]:
         tool_name = event_data.get("tool_name")
         if tool_name:
-            return tool_name.lower()
+            return str(tool_name).lower()
 
     # Common source fields in Claude Code hook data
     source_fields = ["source", "reason", "trigger", "action", "type"]
@@ -251,4 +251,5 @@ def get_audio_description(sound_file: str) -> Optional[str]:
     Returns:
         str or None: Description text if found, None otherwise
     """
-    return AUDIO_DESCRIPTIONS_MAP.get(sound_file)
+    result: str | None = AUDIO_DESCRIPTIONS_MAP.get(sound_file)
+    return result

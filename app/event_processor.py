@@ -281,13 +281,13 @@ async def process_single_event(event_data: EventData) -> None:
 
     # Check if this event should have announcement (pass session_settings for context)
     if should_play_announcement(
-        hook_event_name, silent_announcements, session_settings
+        hook_event_name, bool(silent_announcements), session_settings  # type: ignore[arg-type]
     ):
         volume = 0.5  # Default volume
         logger.debug(f"Playing announcement for {hook_event_name} (volume: {volume})")
         audio_tasks.append(
             play_announcement_sound(
-                hook_event_name, event_data, volume, session_settings
+                hook_event_name, dict(event_data), volume, session_settings  # type: ignore[arg-type]
             )
         )
     elif silent_announcements:
@@ -296,7 +296,7 @@ async def process_single_event(event_data: EventData) -> None:
         )
 
     # Check if this event should have sound effect
-    sound_file = should_play_sound_effect(hook_event_name, silent_effects)
+    sound_file = should_play_sound_effect(hook_event_name, bool(silent_effects))
     if sound_file:
         logger.debug(f"Playing sound effect for {hook_event_name}: {sound_file}")
         audio_tasks.append(play_sound(sound_file))
@@ -381,22 +381,22 @@ async def handle_generic_event(
     hook_event_name: str, session_id: str, event_data: EventData
 ) -> None:
     """Generic handler for all event types with configurable behavior."""
-    config = EVENT_CONFIGS.get(hook_event_name, {})
+    event_config: Dict[str, Any] = EVENT_CONFIGS.get(hook_event_name, {})  # type: ignore[assignment]
 
     # Build log message with dynamic parameters
     log_params = {"session_id": session_id}
-    if config.get("use_tool_name"):
-        log_params["tool_name"] = event_data.get("tool_name", "unknown")
-    if config.get("use_message"):
-        log_params["message"] = event_data.get("message", "")
+    if event_config.get("use_tool_name"):
+        log_params["tool_name"] = event_data.get("tool_name") or "unknown"
+    if event_config.get("use_message"):
+        log_params["message"] = event_data.get("message") or ""
 
-    log_message = config.get(
+    log_message = event_config.get(
         "log_message", f"Session {session_id}: {hook_event_name} event"
     )
     logger.info(log_message.format(**log_params))
 
     # Handle special behaviors
-    if config.get("cleanup_orphaned"):
+    if event_config.get("cleanup_orphaned"):
         try:
             from app.event_db import (
                 cleanup_orphaned_server_processes,
@@ -427,7 +427,7 @@ async def handle_generic_event(
         except Exception as e:
             logger.warning(f"Failed to cleanup orphaned resources: {e}")
 
-    if config.get("clear_tracking"):
+    if event_config.get("clear_tracking"):
         try:
             from utils.transcript_parser import clear_last_processed_message
 
@@ -440,7 +440,7 @@ async def handle_generic_event(
                 f"Failed to clear last processed message for session {session_id}: {e}"
             )
 
-    if config.get("cleanup_old_files"):
+    if event_config.get("cleanup_old_files"):
         try:
             from utils.transcript_parser import cleanup_old_processed_files
 
@@ -449,7 +449,7 @@ async def handle_generic_event(
         except Exception as e:
             logger.warning(f"Failed to cleanup expired processed files: {e}")
 
-    if config.get("delete_session"):
+    if event_config.get("delete_session"):
         # Check end_reason to determine if we should actually delete
         # For /clear command, keep session alive to enable server reuse
         end_reason = event_data.get("reason")
@@ -525,6 +525,8 @@ async def monitor_claude_pid(server_port: int) -> None:
                     try:
                         from app.event_db import delete_session
 
+                        if not session_id:
+                            continue
                         deleted = await delete_session(session_id)
                         if deleted:
                             logger.info(

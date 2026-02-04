@@ -60,7 +60,7 @@ def resolve_api_key(env_var_name: str) -> str:
     dotenv_dict = dotenv_values(env_file_path) if env_file_path.exists() else {}
 
     # Get value from .env file (parsed but not loaded)
-    dotenv_value = dotenv_dict.get(env_var_name, "").strip()
+    dotenv_value = (dotenv_dict.get(env_var_name) or "").strip()
 
     # Get value from current environment (includes both global env and loaded .env)
     # Since we use load_dotenv() without override, global env takes priority in os.environ

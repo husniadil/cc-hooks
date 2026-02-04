@@ -214,7 +214,8 @@ def parse_jsonl_line(line: str) -> Optional[Dict[str, Any]]:
         line = line.strip()
         if not line:
             return None
-        return json.loads(line)
+        result: Dict[str, Any] = json.loads(line)
+        return result
     except json.JSONDecodeError as e:
         logger.debug(f"Invalid JSON line: {e}")
         return None
@@ -226,8 +227,8 @@ def parse_jsonl_line(line: str) -> Optional[Dict[str, Any]]:
 def read_transcript_backwards(
     transcript_path: str,
     max_lines: int = 50,
-    start_line: int = None,
-    end_line: int = None,
+    start_line: int | None = None,
+    end_line: int | None = None,
 ) -> List[Dict[str, Any]]:
     """
     Read JSONL transcript file backwards for efficiency.
@@ -286,7 +287,7 @@ def read_transcript_backwards(
 
 
 def extract_conversation_context(
-    transcript_path: str, start_line: int = None, end_line: int = None
+    transcript_path: str, start_line: int | None = None, end_line: int | None = None
 ) -> ConversationContext:
     """
     Extract conversation context from Claude Code transcript file.
@@ -497,6 +498,7 @@ def main():
     args = parser.parse_args()
 
     # Configure logging
+    import logging
     level = logging.DEBUG if args.verbose else logging.WARNING
     logging.basicConfig(level=level, format="%(levelname)s: %(message)s")
 

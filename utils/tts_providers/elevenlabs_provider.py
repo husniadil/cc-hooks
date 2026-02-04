@@ -50,7 +50,7 @@ class ElevenLabsProvider(TTSProvider):
         self.model_id = model_id
         self.cache_dir = self._get_cache_dir()
 
-        self._client = None
+        self._client: Any = None
         self._is_setup_complete = False
 
         if cache_enabled:

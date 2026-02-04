@@ -29,7 +29,7 @@ try:
     PYGAME_AVAILABLE = True
 except ImportError:
     PYGAME_AVAILABLE = False
-    pygame = None
+    pygame = None  # type: ignore[assignment]
 
 try:
     from utils.constants import SoundFiles

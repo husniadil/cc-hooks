@@ -512,8 +512,9 @@ def announce_event(
             else config.tts_cache_enabled
         )
 
+        voice_id_preview = elevenlabs_voice_id[:8] if elevenlabs_voice_id else "None"
         logger.debug(
-            f"TTS settings - language: {tts_language}, providers: {tts_providers}, voice_id: {elevenlabs_voice_id[:8]}..., model_id: {elevenlabs_model_id}, cache: {tts_cache_enabled} (from {'session' if session_settings and session_settings.get('tts_language') else 'config'})"
+            f"TTS settings - language: {tts_language}, providers: {tts_providers}, voice_id: {voice_id_preview}..., model_id: {elevenlabs_model_id}, cache: {tts_cache_enabled} (from {'session' if session_settings and session_settings.get('tts_language') else 'config'})"
         )
 
         # Get TTS manager (reinitialize if session has different providers)
@@ -540,7 +541,7 @@ def announce_event(
 
         # Prepare text for TTS providers
         prepared_text = _prepare_text_for_event(
-            hook_event_name, event_data, tts_language, session_settings
+            hook_event_name, event_data, str(tts_language), session_settings
         )
 
         # For contextual events (Stop, PreToolUse), skip announcement if no meaningful context
@@ -580,7 +581,7 @@ def announce_event(
                 f"Failed to announce {hook_event_name} with {sound_path.name}"
             )
 
-        return success
+        return bool(success)
 
     except Exception as e:
         logger.error(f"Error announcing event {hook_event_name}: {e}")
@@ -695,8 +696,8 @@ def main():
         print("💬 Available Descriptions:")
         from utils.tts_providers.mappings import AUDIO_DESCRIPTIONS_MAP
 
-        for sound_file, description in AUDIO_DESCRIPTIONS_MAP.items():
-            print(f'   • {sound_file}: "{description}"')
+        for sound_file, desc in AUDIO_DESCRIPTIONS_MAP.items():
+            print(f'   • {sound_file}: "{desc}"')
 
         return
 
@@ -728,7 +729,7 @@ def main():
         print(f"🎵 Selected: {sound_path.name}")
 
         # Try to get description if it's a known sound file
-        description = get_audio_description(sound_path.name)
+        description: str | None = get_audio_description(sound_path.name)
         if description:
             print(f'💬 Description: "{description}"')
 
