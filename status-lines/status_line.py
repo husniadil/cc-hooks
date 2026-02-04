@@ -210,48 +210,35 @@ class StatusLine:
     def _detect_claude_pid(self):
         """Detect Claude binary PID by walking up the process tree.
         Returns the PID of the Claude process or None if not found.
+        Delegates to shared utility in utils.process_utils.
         """
         try:
-            import psutil
+            from utils.process_utils import detect_claude_pid_safe
 
-            current_process = psutil.Process(os.getpid())
-
-            while current_process:
-                cmdline_list = current_process.cmdline()
-                cmdline = " ".join(cmdline_list).lower()
-                name = current_process.name().lower()
-
-                # Detection strategies for Claude binary:
-                # 1. Name-based: process name is exactly "claude"
-                # 2. Cmdline-based: cmdline starts with "claude " or equals "claude"
-                # 3. Path-based: first cmdline arg ends with "/claude" (for Bun-compiled binary
-                #    where process name might be version number like "2.0.59")
-                is_claude_binary = (
-                    name == "claude"
-                    or cmdline.startswith("claude ")
-                    or cmdline == "claude"
-                    or (len(cmdline_list) > 0 and cmdline_list[0].endswith("/claude"))
-                )
-
-                if is_claude_binary:
-                    claude_pid = current_process.pid
-                    self._debug_log(f"Found Claude PID: {claude_pid}")
-                    return claude_pid
-
-                _parent = current_process.parent()
-                if _parent:
-                    current_process = _parent
-                else:
-                    break
-
-            self._debug_log("Could not detect Claude PID")
-            return None
-
+            claude_pid = detect_claude_pid_safe()
+            if claude_pid:
+                self._debug_log(f"Found Claude PID: {claude_pid}")
+            else:
+                self._debug_log("Could not detect Claude PID")
+            return claude_pid
         except ImportError:
-            self._debug_log("psutil package not available")
-            return None
-        except Exception as e:
-            self._debug_log(f"Error detecting Claude PID: {e}")
+            self._debug_log("process_utils not available, falling back to psutil")
+            # Fallback for standalone script usage
+            try:
+                import psutil
+
+                current_process = psutil.Process(os.getpid())
+                while current_process:
+                    name = current_process.name().lower()
+                    if name == "claude":
+                        return current_process.pid
+                    _parent = current_process.parent()
+                    if _parent:
+                        current_process = _parent
+                    else:
+                        break
+            except Exception:
+                pass
             return None
 
     def _find_server_port_for_pid(self, claude_pid):
@@ -343,11 +330,18 @@ class StatusLine:
 
         return git_branch, git_status
 
-    def _get_cc_hooks_health(self):
-        """Get cc-hooks server health status"""
-        # Detect Claude PID and find its server port
-        claude_pid = self._detect_claude_pid()
-        port = self._find_server_port_for_pid(claude_pid)
+    def _get_cc_hooks_health(self, claude_pid=None, port=None):
+        """Get cc-hooks server health status.
+
+        Args:
+            claude_pid: Pre-detected Claude PID (avoids redundant detection)
+            port: Pre-discovered server port (avoids redundant lookup)
+        """
+        # Use provided values or detect fresh
+        if claude_pid is None:
+            claude_pid = self._detect_claude_pid()
+        if port is None:
+            port = self._find_server_port_for_pid(claude_pid)
 
         # Fallback to env var or default port if detection failed
         if not port:
@@ -372,16 +366,16 @@ class StatusLine:
             self._debug_log(f"Unexpected error in health check: {e}")
             return False, "○", "unknown", port
 
-    def _get_cc_hooks_update_status(self):
-        """Check if cc-hooks update is available"""
+    def _get_cc_hooks_update_status(self, port=None):
+        """Check if cc-hooks update is available.
+
+        Args:
+            port: Pre-discovered server port (avoids redundant detection)
+        """
         update_available = False
         update_msg = ""
 
-        # Detect Claude PID and find its server port (reuse same helper functions)
-        claude_pid = self._detect_claude_pid()
-        port = self._find_server_port_for_pid(claude_pid)
-
-        # Fallback to env var or default port if detection failed
+        # Use provided port or fallback
         if not port:
             port = int(os.getenv("CC_HOOKS_PORT", str(NetworkConstants.DEFAULT_PORT)))
 
@@ -532,15 +526,20 @@ class StatusLine:
             # Connection failed - server likely not running
             return None
 
-    def _get_tts_info(self):
-        """Get TTS provider information from session settings"""
+    def _get_tts_info(self, session_settings=None):
+        """Get TTS provider information from session settings.
+
+        Args:
+            session_settings: Pre-fetched session settings (avoids redundant HTTP call)
+        """
         tts_info = ""
         tts_enabled = False
         voice_name = ""
 
         try:
-            # Get session-specific settings from database
-            session_settings = self._get_session_settings()
+            # Use provided settings or fetch fresh
+            if session_settings is None:
+                session_settings = self._get_session_settings()
             if not session_settings:
                 self._debug_log("No session settings available, using config defaults")
                 # Fallback to config defaults
@@ -709,15 +708,20 @@ class StatusLine:
 
         return elevenlabs_info, voice_name
 
-    def _get_openrouter_info(self):
-        """Get OpenRouter status and model information from session settings"""
+    def _get_openrouter_info(self, session_settings=None):
+        """Get OpenRouter status and model information from session settings.
+
+        Args:
+            session_settings: Pre-fetched session settings (avoids redundant HTTP call)
+        """
         openrouter_info = ""
         openrouter_enabled = False
         openrouter_model = ""
 
         try:
-            # Get session-specific settings from database
-            session_settings = self._get_session_settings()
+            # Use provided settings or fetch fresh
+            if session_settings is None:
+                session_settings = self._get_session_settings()
             if not session_settings:
                 self._debug_log("No session settings available, using config defaults")
                 if config is None:
@@ -812,8 +816,11 @@ class StatusLine:
 
         return openrouter_info, openrouter_enabled, openrouter_model
 
-    def _get_sound_effects_info(self):
+    def _get_sound_effects_info(self, session_settings=None):
         """Get sound effects status from session settings.
+
+        Args:
+            session_settings: Pre-fetched session settings (avoids redundant HTTP call)
 
         Returns tuple of (effects_info, effects_muted):
         - effects_info: Display string (empty if not muted, "Effects" if muted)
@@ -823,8 +830,9 @@ class StatusLine:
         effects_muted = False
 
         try:
-            # Get session-specific settings from database
-            session_settings = self._get_session_settings()
+            # Use provided settings or fetch fresh
+            if session_settings is None:
+                session_settings = self._get_session_settings()
             if not session_settings:
                 self._debug_log("No session settings available for sound effects check")
                 return effects_info, effects_muted
@@ -894,24 +902,39 @@ class StatusLine:
         # Git information
         git_branch, git_status = self._get_git_info()
 
-        # CC-Hooks health check
-        cc_hooks_online, cc_hooks_emoji, _, cc_hooks_port = self._get_cc_hooks_health()
+        # Detect Claude PID and server port ONCE for all cc-hooks queries
+        _cached_claude_pid = self._detect_claude_pid()
+        _cached_port = self._find_server_port_for_pid(_cached_claude_pid)
+
+        # CC-Hooks health check (uses cached PID/port)
+        cc_hooks_online, cc_hooks_emoji, _, cc_hooks_port = self._get_cc_hooks_health(
+            claude_pid=_cached_claude_pid, port=_cached_port
+        )
 
         # Only fetch cc-hooks feature data when server is online
         if cc_hooks_online:
-            # CC-Hooks update check
-            update_available, update_msg = self._get_cc_hooks_update_status()
+            # Fetch session settings ONCE for all feature checks
+            _cached_settings = self._get_session_settings()
 
-            # TTS information
-            tts_info, tts_enabled, voice_name = self._get_tts_info()
-
-            # OpenRouter information
-            openrouter_info, openrouter_enabled, openrouter_model = (
-                self._get_openrouter_info()
+            # CC-Hooks update check (uses cached port)
+            update_available, update_msg = self._get_cc_hooks_update_status(
+                port=cc_hooks_port
             )
 
-            # Sound effects information
-            effects_info, effects_muted = self._get_sound_effects_info()
+            # TTS information (uses cached settings)
+            tts_info, tts_enabled, voice_name = self._get_tts_info(
+                session_settings=_cached_settings
+            )
+
+            # OpenRouter information (uses cached settings)
+            openrouter_info, openrouter_enabled, openrouter_model = (
+                self._get_openrouter_info(session_settings=_cached_settings)
+            )
+
+            # Sound effects information (uses cached settings)
+            effects_info, effects_muted = self._get_sound_effects_info(
+                session_settings=_cached_settings
+            )
         else:
             update_available, update_msg = False, ""
             tts_info, tts_enabled, voice_name = "", False, ""

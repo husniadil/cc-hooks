@@ -10,6 +10,7 @@ from config import config
 from app.types import EventData
 from app.event_db import (
     get_next_pending_event,
+    mark_event_pending,
     mark_event_processing,
     mark_event_completed,
     mark_event_failed,
@@ -52,10 +53,12 @@ async def process_events(server_port: Optional[int] = None) -> None:
                     retry_count,
                 ) = row
 
+                # Mark as processing FIRST to prevent other processors from picking it up
+                await mark_event_processing(event_id)
+
                 # Filter: only process if session belongs to this server
                 if server_port:
                     from app.event_db import get_session_by_id
-                    import aiosqlite
 
                     session = await get_session_by_id(session_id)
 
@@ -81,13 +84,8 @@ async def process_events(server_port: Optional[int] = None) -> None:
                                 "Session not found after max retries",
                             )
                         else:
-                            # Increment retry count but keep as PENDING for retry
-                            async with aiosqlite.connect(config.db_path) as db:
-                                await db.execute(
-                                    "UPDATE events SET retry_count = ? WHERE id = ?",
-                                    (new_retry_count, event_id),
-                                )
-                                await db.commit()
+                            # Reset to PENDING with incremented retry count for later retry
+                            await mark_event_pending(event_id, new_retry_count)
                             logger.debug(
                                 f"Event {event_id} retry count updated to {new_retry_count}, will retry later"
                             )
@@ -98,16 +96,13 @@ async def process_events(server_port: Optional[int] = None) -> None:
                             f"Skipping event {event_id} for session {session_id} "
                             f"(belongs to server port {session.get('server_port')}, we are {server_port})"
                         )
-                        # Don't process - belongs to another server
-                        # Skip immediately to check next event (no sleep needed)
+                        # Reset to PENDING so the correct server can process it
+                        await mark_event_pending(event_id, retry_count)
                         continue
 
                 logger.debug(
                     f"Processing event {event_id}: {hook_event_name} for session {session_id} (attempt {retry_count + 1}/{config.max_retry_count})"
                 )
-
-                # Mark as processing
-                await mark_event_processing(event_id)
 
                 # Prepare event data
                 event_data = json.loads(payload)
@@ -352,7 +347,6 @@ EVENT_CONFIGS = {
         "clear_tracking": True,
         "cleanup_old_files": True,
         "cleanup_orphaned": True,
-        "delete_session": True,
     },
     HookEvent.PRE_TOOL_USE.value: {
         "log_message": "Session {session_id}: Pre-tool use for {tool_name}",
@@ -454,28 +448,9 @@ async def handle_generic_event(
         except Exception as e:
             logger.warning(f"Failed to cleanup expired processed files: {e}")
 
-    if event_config.get("delete_session"):
-        # Check end_reason to determine if we should actually delete
-        # For /clear command, keep session alive to enable server reuse
-        end_reason = event_data.get("reason")
-
-        if end_reason == "clear":
-            logger.info(
-                f"SessionEnd with reason 'clear' - keeping session {session_id} in database for server reuse"
-            )
-        else:
-            try:
-                from app.event_db import delete_session
-
-                deleted = await delete_session(session_id)
-                if deleted:
-                    logger.info(
-                        f"Deleted session {session_id} from database (reason: {end_reason})"
-                    )
-                else:
-                    logger.warning(f"Session {session_id} not found for deletion")
-            except Exception as e:
-                logger.warning(f"Failed to delete session {session_id}: {e}")
+    # Session deletion is handled by hooks.py after all events are processed.
+    # This ensures session data remains available during event processing
+    # and hooks.py can correctly check session count for shutdown decisions.
 
     await asyncio.sleep(ProcessingConstants.DEFAULT_SLEEP_SECONDS)
 

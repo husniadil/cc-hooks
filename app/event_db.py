@@ -135,6 +135,20 @@ async def mark_event_completed(event_id: int, retry_count: int) -> None:
         await db.commit()
 
 
+async def mark_event_pending(event_id: int, retry_count: int) -> None:
+    """Reset an event back to pending status for later retry.
+
+    Used when an event was picked up but can't be processed yet
+    (e.g., session not found yet, or belongs to a different server).
+    """
+    async with aiosqlite.connect(config.db_path) as db:
+        await db.execute(
+            "UPDATE events SET status = ?, retry_count = ? WHERE id = ?",
+            (EventStatus.PENDING.value, retry_count, event_id),
+        )
+        await db.commit()
+
+
 async def mark_event_failed(
     event_id: int, retry_count: int, error_message: str
 ) -> None:
@@ -472,69 +486,22 @@ async def get_active_session_count(server_port: Optional[int] = None) -> int:
 def _is_process_running(pid: int) -> bool:
     """Check if a process with given PID exists.
 
-    Returns True if process exists, False otherwise.
+    Delegates to shared utility in utils.process_utils.
     """
-    try:
-        import os
-        import errno
+    from utils.process_utils import is_process_running
 
-        os.kill(pid, 0)
-        return True
-    except OSError as e:
-        if e.errno == errno.ESRCH:  # No such process
-            return False
-        elif e.errno == errno.EPERM:  # No permission, but process exists
-            return True
-        else:
-            return False
+    return is_process_running(pid)
 
 
 def _is_claude_process(pid: int) -> bool:
+    """Check if a process with given PID is a Claude Code process.
+
+    Delegates to shared utility in utils.process_utils.
+    IMPORTANT: Returns True (conservative) when unable to determine.
     """
-    Check if a process with given PID is a Claude Code process.
-    Returns True if process is Claude, False if definitively not Claude.
+    from utils.process_utils import is_claude_process
 
-    IMPORTANT: Returns True (conservative) when unable to determine, to prevent
-    accidentally cleaning up valid Claude sessions.
-
-    Uses same logic as detect_claude_pid() in hooks.py for consistency.
-    """
-    try:
-        import psutil
-
-        # Use psutil for reliable cross-platform process detection
-        try:
-            proc = psutil.Process(pid)
-            cmdline_list = proc.cmdline()
-            name = proc.name().lower()
-            cmdline = " ".join(cmdline_list).lower()
-
-            # Detection strategies for Claude binary:
-            # 1. Name-based: process name is exactly "claude"
-            # 2. Cmdline-based: cmdline starts with "claude " or equals "claude"
-            # 3. Path-based: first cmdline arg ends with "/claude" (for Bun-compiled binary
-            #    where process name might be version number like "2.0.59")
-            is_claude_binary = (
-                name == "claude"
-                or cmdline.startswith("claude ")
-                or cmdline == "claude"
-                or (len(cmdline_list) > 0 and cmdline_list[0].endswith("/claude"))
-            )
-
-            return is_claude_binary
-        except psutil.NoSuchProcess:
-            # Process doesn't exist - definitely not Claude
-            return False
-        except psutil.AccessDenied:
-            # Cannot access process - be conservative
-            logger.warning(f"Access denied checking PID {pid} - assuming it is Claude")
-            return True
-    except Exception as e:
-        # Error occurred - cannot determine, be conservative to avoid false cleanup
-        logger.warning(
-            f"Could not check if PID {pid} is Claude process: {e} - assuming it is"
-        )
-        return True
+    return is_claude_process(pid)
 
 
 def _get_server_bound_ports() -> Dict[int, int]:

@@ -21,7 +21,6 @@ import json
 import os
 import sys
 import requests
-import psutil
 from pathlib import Path
 from typing import Dict, Any, Optional
 from utils.colored_logger import (
@@ -34,59 +33,13 @@ from utils.constants import (
     PathConstants,
     get_server_url,
 )
+from utils.process_utils import detect_claude_pid
 
 configure_root_logging()
 logger = setup_logger(__name__)
 
 # Track if file logging already setup
 _file_logging_initialized = False
-
-
-def detect_claude_pid() -> int:
-    """
-    Detect Claude binary PID by walking up the process tree.
-    Returns the PID of the Claude process.
-    Raises RuntimeError if Claude process not found.
-    """
-    try:
-        current_process = psutil.Process(os.getpid())
-
-        # Walk up the process tree looking for actual 'claude' binary
-        # Skip shell scripts and paths containing ".claude/"
-        while current_process:
-            cmdline_list = current_process.cmdline()
-            cmdline = " ".join(cmdline_list).lower()
-            name = current_process.name().lower()
-
-            # Detection strategies for Claude binary:
-            # 1. Name-based: process name is exactly "claude"
-            # 2. Cmdline-based: cmdline starts with "claude " or equals "claude"
-            # 3. Path-based: first cmdline arg ends with "/claude" (for Bun-compiled binary
-            #    where process name might be version number like "2.0.59")
-            is_claude_binary = (
-                name == "claude"
-                or cmdline.startswith("claude ")
-                or cmdline == "claude"
-                or (len(cmdline_list) > 0 and cmdline_list[0].endswith("/claude"))
-            )
-
-            if is_claude_binary:
-                claude_pid: int = current_process.pid
-                logger.debug(f"Found Claude process: PID={claude_pid}")
-                return claude_pid
-
-            # Move to parent
-            _parent = current_process.parent()
-            if _parent:
-                current_process = _parent
-            else:
-                break
-
-        raise RuntimeError("Claude process not found in parent process tree")
-
-    except Exception as e:
-        logger.error(f"Failed to detect Claude PID: {e}")
-        raise RuntimeError(f"Could not detect Claude PID: {e}")
 
 
 def discover_server_port(
@@ -197,10 +150,23 @@ def start_server(port: int, log_file_path: Optional[str] = None) -> bool:
 
                 time.sleep(NetworkConstants.SERVER_STARTUP_RETRY_DELAY)
 
-        # Server failed to start
+        # Server failed to start - kill the leaked subprocess
         logger.error(f"Server failed to start on port {port}")
         if log_file_path:
             logger.error(f"Check log file for details: {log_file_path}")
+
+        try:
+            process.terminate()
+            process.wait(timeout=5)
+            logger.debug(f"Cleaned up failed server process (PID: {process.pid})")
+        except Exception as cleanup_err:
+            logger.warning(
+                f"Failed to cleanup server process {process.pid}: {cleanup_err}"
+            )
+            try:
+                process.kill()
+            except Exception:
+                pass
 
         return False
 
@@ -457,22 +423,16 @@ def send_to_api(
                     import asyncio
 
                     # Run async function in sync context
-                    loop = asyncio.new_event_loop()
-                    asyncio.set_event_loop(loop)
-                    try:
-                        existing_session = loop.run_until_complete(
-                            get_session_by_pid(claude_pid)
+                    existing_session = asyncio.run(get_session_by_pid(claude_pid))
+                    if existing_session:
+                        test_port = existing_session.get("server_port")
+                        logger.info(
+                            f"Found existing session for PID {claude_pid} on port {test_port}, checking health..."
                         )
-                        if existing_session:
-                            test_port = existing_session.get("server_port")
-                            logger.info(
-                                f"Found existing session for PID {claude_pid} on port {test_port}, checking health..."
-                            )
-                            # Verify server is still alive
+                        # Verify server is still alive
+                        if test_port is not None:
                             try:
-                                health_url = get_server_url(
-                                    test_port or 12222, "/health"
-                                )
+                                health_url = get_server_url(test_port, "/health")
                                 health_response = requests.get(health_url, timeout=0.5)
                                 if health_response.status_code == 200:
                                     existing_port = test_port
@@ -488,11 +448,13 @@ def send_to_api(
                                     f"✗ Server on port {test_port} not responding ({e}), will start new server"
                                 )
                         else:
-                            logger.info(
-                                f"No existing session found for PID {claude_pid}, will start new server"
+                            logger.warning(
+                                f"Session for PID {claude_pid} has no server_port, will start new server"
                             )
-                    finally:
-                        loop.close()
+                    else:
+                        logger.info(
+                            f"No existing session found for PID {claude_pid}, will start new server"
+                        )
                 except Exception as e:
                     logger.info(
                         f"Error looking up existing server: {e}, will start new server"

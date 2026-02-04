@@ -520,15 +520,31 @@ def announce_event(
             f"TTS settings - language: {tts_language}, providers: {tts_providers}, voice_id: {voice_id_preview}..., model_id: {elevenlabs_model_id}, cache: {tts_cache_enabled} (from {'session' if session_settings and session_settings.get('tts_language') else 'config'})"
         )
 
-        # Get TTS manager (reinitialize if session has different providers)
+        # Get TTS manager (reinitialize only if session has DIFFERENT providers)
         manager = get_tts_manager()
-        if not manager or (session_settings and session_settings.get("tts_providers")):
-            # Reinitialize with session-specific providers if provided
-            providers_list = (
-                [p.strip() for p in tts_providers.split(",")]
-                if isinstance(tts_providers, str)
-                else config.get_tts_providers_list()
-            )
+        providers_list = (
+            [p.strip() for p in tts_providers.split(",")]
+            if isinstance(tts_providers, str)
+            else config.get_tts_providers_list()
+        )
+
+        # Check if we need to reinitialize (no manager, or session providers differ)
+        needs_reinit = not manager
+        if (
+            not needs_reinit
+            and manager
+            and session_settings
+            and session_settings.get("tts_providers")
+        ):
+            # Compare current provider chain with session providers
+            current_chain = getattr(manager, "provider_chain", [])
+            if current_chain != providers_list:
+                needs_reinit = True
+                logger.debug(
+                    f"TTS providers changed: {current_chain} -> {providers_list}, reinitializing"
+                )
+
+        if needs_reinit:
             manager = initialize_tts_manager(
                 providers=providers_list,
                 language=tts_language,

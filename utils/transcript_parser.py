@@ -372,8 +372,8 @@ def extract_conversation_context(
                         logger.debug(
                             f"Found user prompt {'after Stop event' if found_stop_event else ''}: {content[:50]}..."
                         )
-                        # Debug logging for full user prompt
-                        logger.info(f"User Prompt (session: {session_id}): {content}")
+                        # Full user prompt content at DEBUG to avoid leaking sensitive data
+                        logger.debug(f"User Prompt (session: {session_id}): {content}")
 
                 # Look for assistant messages
                 if entry.get("type") == "assistant" and not last_claude_response:
@@ -445,11 +445,11 @@ def extract_conversation_context(
                 f"Successfully extracted conversation context from {transcript_path}"
                 f"{' (after Stop event)' if found_stop_event else ''}"
             )
-            # Debug logging for final extracted context
-            logger.info(
+            # Full conversation content at DEBUG to avoid leaking sensitive data
+            logger.debug(
                 f"Final User Prompt (session: {session_id}): {last_user_prompt}"
             )
-            logger.info(
+            logger.debug(
                 f"Final Claude Response (session: {session_id}): {last_claude_response}"
             )
         else:
