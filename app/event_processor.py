@@ -313,9 +313,9 @@ async def process_single_event(event_data: EventData) -> None:
         # Log results for debugging
         for i, result in enumerate(audio_results):
             if isinstance(result, Exception):
-                logger.warning(f"Audio task {i+1} failed: {result}")
+                logger.warning(f"Audio task {i + 1} failed: {result}")
             else:
-                logger.debug(f"Audio task {i+1} completed: {result}")
+                logger.debug(f"Audio task {i + 1} completed: {result}")
 
         # Check if any audio task failed
         failed_tasks = [r for r in audio_results if isinstance(r, Exception)]

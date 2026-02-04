@@ -202,11 +202,11 @@ class StatusLine:
             return ""
 
     def _progress_bar(self, pct, width=10):
-        """Generate progress bar (▰▱)"""
+        """Generate progress bar [████████░░]"""
         pct = max(0, min(100, int(pct) if str(pct).isdigit() else 0))
         filled = pct * width // 100
         empty = width - filled
-        return "▰" * filled + "▱" * empty
+        return "█" * filled + "░" * empty
 
     def _detect_claude_pid(self):
         """Detect Claude binary PID by walking up the process tree.
@@ -869,6 +869,8 @@ class StatusLine:
         model_name = model.get("display_name", "Claude")
         model_version = model.get("version", "")
 
+        cc_version = data.get("version", "")
+
         output_style = data.get("output_style", {}).get("name", "")
 
         # Replace home directory with ~
@@ -894,40 +896,41 @@ class StatusLine:
         git_branch, git_status = self._get_git_info()
 
         # CC-Hooks health check
-        _, cc_hooks_emoji, _, cc_hooks_port = self._get_cc_hooks_health()
+        cc_hooks_online, cc_hooks_emoji, _, cc_hooks_port = self._get_cc_hooks_health()
 
-        # CC-Hooks update check
-        update_available, update_msg = self._get_cc_hooks_update_status()
+        # Only fetch cc-hooks feature data when server is online
+        if cc_hooks_online:
+            # CC-Hooks update check
+            update_available, update_msg = self._get_cc_hooks_update_status()
 
-        # TTS information
-        tts_info, tts_enabled, voice_name = self._get_tts_info()
+            # TTS information
+            tts_info, tts_enabled, voice_name = self._get_tts_info()
 
-        # OpenRouter information
-        openrouter_info, openrouter_enabled, openrouter_model = (
-            self._get_openrouter_info()
-        )
+            # OpenRouter information
+            openrouter_info, openrouter_enabled, openrouter_model = (
+                self._get_openrouter_info()
+            )
 
-        # Sound effects information
-        effects_info, effects_muted = self._get_sound_effects_info()
+            # Sound effects information
+            effects_info, effects_muted = self._get_sound_effects_info()
+        else:
+            update_available, update_msg = False, ""
+            tts_info, tts_enabled, voice_name = "", False, ""
+            openrouter_info, openrouter_enabled, openrouter_model = "", False, ""
+            effects_info, effects_muted = "", False
 
-        # Context window information (following official docs calculation)
+        # Context window information
         context_window = data.get("context_window", {})
-
-        context_size = context_window.get("context_window_size", 200000)
         current_usage = context_window.get("current_usage", {})
 
-        # Calculate current context from current_usage fields (official docs formula)
-        input_tokens = current_usage.get("input_tokens", 0) or 0
-        cache_creation_tokens = current_usage.get("cache_creation_input_tokens", 0) or 0
-        cache_read_tokens = current_usage.get("cache_read_input_tokens", 0) or 0
-        total_tokens = input_tokens + cache_creation_tokens + cache_read_tokens
-
-        context_pct = (total_tokens * 100 // context_size) if context_size > 0 else 0
+        context_size = context_window.get("context_window_size", 200000)
+        context_pct = int(context_window.get("used_percentage", 0) or 0)
         context_bar = self._progress_bar(context_pct, 10)
 
-        # Total tokens (for display)
+        # Token counts for display
         total_input_tokens = context_window.get("total_input_tokens", 0) or 0
         total_output_tokens = context_window.get("total_output_tokens", 0) or 0
+        current_output_tokens = current_usage.get("output_tokens", 0) or 0
 
         # Cost information from Claude Code JSON (replaces ccusage)
         cost_data = data.get("cost", {})
@@ -966,38 +969,37 @@ class StatusLine:
         if model_version and model_version != "null":
             line1_parts.append(f" {self.version_color()}{model_version}{self._reset()}")
 
-        # Build line 2: CC-Hooks features
+        # Claude Code CLI version
+        if cc_version:
+            line1_parts.append(f" {self.version_color()}v{cc_version}{self._reset()}")
+
+        # Build line 2: CC-Hooks features (skip entirely when server is offline)
         line2_parts = []
 
-        # CC-Hooks health status (● online, ○ offline) - all line 2 color
-        line2_col = self._line2_color()
-        if cc_hooks_emoji == "●":
-            dot_color = line2_col
-        else:
-            dot_color = self.gray_color()
-        line2_parts.append(
-            f"{dot_color}{cc_hooks_emoji}{self._reset()} {line2_col}cc-hooks:{cc_hooks_port}{self._reset()}"
-        )
+        if cc_hooks_online:
+            # CC-Hooks health status - all line 2 color
+            line2_col = self._line2_color()
+            line2_parts.append(f"{line2_col}● cc-hooks:{cc_hooks_port}{self._reset()}")
 
-        # TTS information - line 2 color
-        if tts_enabled and tts_info:
-            tts_display = tts_info
-            if (
-                voice_name
-                and voice_name != tts_info
-                and not tts_info.startswith(voice_name)
-            ):
-                tts_display = f"{voice_name}: {tts_info}"
-            # Format: "TTS: info" or "TTS: Muted"
-            line2_parts.append(f"{line2_col}TTS: {tts_display}{self._reset()}")
+            # TTS information - line 2 color
+            if tts_enabled and tts_info:
+                tts_display = tts_info
+                if (
+                    voice_name
+                    and voice_name != tts_info
+                    and not tts_info.startswith(voice_name)
+                ):
+                    tts_display = f"{voice_name}: {tts_info}"
+                # Format: "TTS: info" or "TTS: Muted"
+                line2_parts.append(f"{line2_col}TTS: {tts_display}{self._reset()}")
 
-        # Sound effects information - always show status
-        sfx_status = "Muted" if effects_muted else "On"
-        line2_parts.append(f"{line2_col}SFX: {sfx_status}{self._reset()}")
+            # Sound effects information - always show status
+            sfx_status = "Muted" if effects_muted else "On"
+            line2_parts.append(f"{line2_col}SFX: {sfx_status}{self._reset()}")
 
-        # OpenRouter information - line 2 color
-        if openrouter_enabled and openrouter_info:
-            line2_parts.append(f"{line2_col}OR: {openrouter_info}{self._reset()}")
+            # OpenRouter information - line 2 color
+            if openrouter_enabled and openrouter_info:
+                line2_parts.append(f"{line2_col}OR: {openrouter_info}{self._reset()}")
 
         # Build line 3: Usage & Cost (from Claude Code JSON - replaces ccusage)
         line3_parts = []
@@ -1005,18 +1007,23 @@ class StatusLine:
         # Line 3 color (with dynamic warning for high context usage)
         line3_col = self.context_color(context_pct)
 
-        # Context window with progress bar
-        total_k = total_tokens / 1000
+        # Context window with progress bar (using pre-calculated percentage)
+        used_k = context_pct * context_size / 100 / 1000
         size_k = context_size / 1000
         line3_parts.append(
-            f" {line3_col}{context_pct}% {context_bar} {total_k:.0f}k/{size_k:.0f}k{self._reset()}"
+            f" {line3_col}{context_pct}% {context_bar} {used_k:.0f}k/{size_k:.0f}k{self._reset()}"
         )
 
-        # Total tokens (input/output) - line 3 color
+        # Total tokens (input/output) and current output tokens
         if total_input_tokens > 0 or total_output_tokens > 0:
             in_k = total_input_tokens / 1000
             out_k = total_output_tokens / 1000
-            line3_parts.append(f" {line3_col}↓{in_k:.1f}k ↑{out_k:.1f}k{self._reset()}")
+            tokens_str = f" {line3_col}↓{in_k:.1f}k ↑{out_k:.1f}k"
+            if current_output_tokens > 0:
+                cur_out_k = current_output_tokens / 1000
+                tokens_str += f" (↑{cur_out_k:.1f}k)"
+            tokens_str += self._reset()
+            line3_parts.append(tokens_str)
 
         # Cost information - line 3 color
         if cost_usd and cost_usd > 0:
