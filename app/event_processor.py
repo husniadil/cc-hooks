@@ -12,8 +12,6 @@ from app.types import EventData
 from app.event_db import (
     get_next_pending_event,
     get_session_by_id,
-    mark_event_pending,
-    mark_event_processing,
     mark_event_completed,
     mark_event_failed,
 )
@@ -30,7 +28,9 @@ logger = setup_logger(__name__)
 async def process_events(server_port: Optional[int] = None) -> None:
     """Background task for processing events.
 
-    Each server only processes events for sessions it owns (by server_port).
+    Uses atomic claim (UPDATE...RETURNING with session JOIN) to ensure
+    each server only processes events for its own sessions. This prevents
+    cross-instance audio leaks when multiple servers share the same database.
     """
     logger.info(
         f"Starting event processor for server port {server_port}"
@@ -40,41 +40,13 @@ async def process_events(server_port: Optional[int] = None) -> None:
 
     while True:
         try:
-            row = await get_next_pending_event()
+            # Atomic claim: fetches next pending event for our server
+            # and marks it PROCESSING in a single SQL statement.
+            # Events for other servers' sessions are never returned.
+            row = await get_next_pending_event(server_port)
 
             if row:
                 event_id, session_id, hook_event_name, payload, retry_count = row
-                await mark_event_processing(event_id)
-
-                if server_port:
-                    session = await get_session_by_id(session_id)
-
-                    if not session:
-                        new_retry_count = retry_count + 1
-                        logger.debug(
-                            f"Session {session_id} not found for event {event_id} "
-                            f"(attempt {new_retry_count}/{config.max_retry_count})"
-                        )
-
-                        if new_retry_count >= config.max_retry_count:
-                            logger.error(
-                                f"Session {session_id} not found after {config.max_retry_count} attempts"
-                            )
-                            await mark_event_failed(
-                                event_id,
-                                new_retry_count,
-                                "Session not found after max retries",
-                            )
-                        else:
-                            await mark_event_pending(event_id, new_retry_count)
-                        continue
-
-                    if session.get("server_port") != server_port:
-                        logger.debug(
-                            f"Skipping event {event_id} (belongs to port {session.get('server_port')}, we are {server_port})"
-                        )
-                        await mark_event_pending(event_id, retry_count)
-                        continue
 
                 logger.debug(
                     f"Processing event {event_id}: {hook_event_name} for session {session_id}"

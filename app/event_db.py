@@ -58,19 +58,64 @@ async def queue_event(
         return event_id or 0
 
 
-async def get_next_pending_event() -> Optional[Tuple[int, str, str, str, int]]:
-    """Get the next pending event created at or after server start time."""
+async def get_next_pending_event(
+    server_port: Optional[int] = None,
+) -> Optional[Tuple[int, str, str, str, int]]:
+    """Atomically claim the next pending event for this server.
+
+    Uses UPDATE...RETURNING with INNER JOIN on sessions table to ensure
+    only events belonging to this server's sessions are claimed.
+    This prevents cross-instance event leaks when multiple servers
+    share the same database.
+
+    Args:
+        server_port: Filter events by session ownership. When set, only
+            events for sessions on this port are returned.
+    """
     async with aiosqlite.connect(config.db_path) as db:
         server_start = get_server_start_time()
         if not server_start:
             raise RuntimeError("Server start time not set - cannot process events")
 
-        cursor = await db.execute(
-            "SELECT id, session_id, hook_event_name, payload, retry_count "
-            "FROM events WHERE status = ? AND created_at >= ? ORDER BY id LIMIT 1",
-            (EventStatus.PENDING.value, server_start),
-        )
+        if server_port is not None:
+            # Atomic claim with ownership filtering:
+            # Single statement = implicitly atomic in SQLite.
+            # Server B can never claim Server A's events.
+            cursor = await db.execute(
+                """UPDATE events SET status = ?
+                WHERE id = (
+                    SELECT e.id FROM events e
+                    INNER JOIN sessions s ON e.session_id = s.session_id
+                    WHERE e.status = ? AND e.created_at >= ? AND s.server_port = ?
+                    ORDER BY e.id LIMIT 1
+                )
+                RETURNING id, session_id, hook_event_name, payload, retry_count""",
+                (
+                    EventStatus.PROCESSING.value,
+                    EventStatus.PENDING.value,
+                    server_start,
+                    server_port,
+                ),
+            )
+        else:
+            # Fallback: claim any pending event (no ownership filtering)
+            cursor = await db.execute(
+                """UPDATE events SET status = ?
+                WHERE id = (
+                    SELECT id FROM events
+                    WHERE status = ? AND created_at >= ?
+                    ORDER BY id LIMIT 1
+                )
+                RETURNING id, session_id, hook_event_name, payload, retry_count""",
+                (
+                    EventStatus.PROCESSING.value,
+                    EventStatus.PENDING.value,
+                    server_start,
+                ),
+            )
+
         row = await cursor.fetchone()
+        await db.commit()
         if row is None:
             return None
         return (row[0], row[1], row[2], row[3], row[4])  # type: ignore[return-value]
@@ -87,12 +132,16 @@ async def mark_event_processing(event_id: int) -> None:
 
 
 async def mark_event_completed(event_id: int, retry_count: int) -> None:
-    """Mark an event as successfully completed."""
+    """Mark an event as successfully completed.
+
+    Only transitions PROCESSING → COMPLETED. The status guard ensures
+    idempotent completion even under concurrent access.
+    """
     from datetime import datetime, timezone
 
     async with aiosqlite.connect(config.db_path) as db:
         await db.execute(
-            "UPDATE events SET status = ?, processed_at = ?, retry_count = ? WHERE id = ?",
+            "UPDATE events SET status = ?, processed_at = ?, retry_count = ? WHERE id = ? AND status = ?",
             (
                 EventStatus.COMPLETED.value,
                 datetime.now(timezone.utc).strftime(
@@ -100,6 +149,7 @@ async def mark_event_completed(event_id: int, retry_count: int) -> None:
                 ),
                 retry_count,
                 event_id,
+                EventStatus.PROCESSING.value,
             ),
         )
         await db.commit()
@@ -108,13 +158,14 @@ async def mark_event_completed(event_id: int, retry_count: int) -> None:
 async def mark_event_pending(event_id: int, retry_count: int) -> None:
     """Reset an event back to pending status for later retry.
 
-    Used when an event was picked up but can't be processed yet
-    (e.g., session not found yet, or belongs to a different server).
+    Only transitions PROCESSING → PENDING. The status guard prevents
+    overwriting COMPLETED/FAILED status during race conditions between
+    multiple server instances.
     """
     async with aiosqlite.connect(config.db_path) as db:
         await db.execute(
-            "UPDATE events SET status = ?, retry_count = ? WHERE id = ?",
-            (EventStatus.PENDING.value, retry_count, event_id),
+            "UPDATE events SET status = ?, retry_count = ? WHERE id = ? AND status = ?",
+            (EventStatus.PENDING.value, retry_count, event_id, EventStatus.PROCESSING.value),
         )
         await db.commit()
 
@@ -122,12 +173,16 @@ async def mark_event_pending(event_id: int, retry_count: int) -> None:
 async def mark_event_failed(
     event_id: int, retry_count: int, error_message: str
 ) -> None:
-    """Mark an event as failed after max retries."""
+    """Mark an event as failed after max retries.
+
+    Only transitions PROCESSING → FAILED. The status guard prevents
+    marking already-completed events as failed during race conditions.
+    """
     from datetime import datetime, timezone
 
     async with aiosqlite.connect(config.db_path) as db:
         await db.execute(
-            "UPDATE events SET status = ?, error_message = ?, retry_count = ?, processed_at = ? WHERE id = ?",
+            "UPDATE events SET status = ?, error_message = ?, retry_count = ?, processed_at = ? WHERE id = ? AND status = ?",
             (
                 EventStatus.FAILED.value,
                 error_message,
@@ -136,6 +191,7 @@ async def mark_event_failed(
                     DateTimeConstants.ISO_DATETIME_FORMAT
                 ),
                 event_id,
+                EventStatus.PROCESSING.value,
             ),
         )
         await db.commit()
