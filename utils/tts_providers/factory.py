@@ -5,6 +5,7 @@ from .base import TTSProvider
 from .prerecorded_provider import PrerecordedProvider
 from .gtts_provider import GTTSProvider
 from .elevenlabs_provider import ElevenLabsProvider
+from .sixtydb_provider import SixtyDBProvider
 from utils.colored_logger import setup_logger
 
 logger = setup_logger(__name__)
@@ -14,6 +15,7 @@ PROVIDER_REGISTRY: Dict[str, Type[TTSProvider]] = {
     "prerecorded": PrerecordedProvider,
     "gtts": GTTSProvider,
     "elevenlabs": ElevenLabsProvider,
+    "60db": SixtyDBProvider,
 }
 
 # Provider configuration mapping (what parameters each provider supports)
@@ -32,6 +34,14 @@ PROVIDER_CONFIGS = {
         "supports_api_key": True,
         "supports_voice_id": True,
         "supports_model_id": True,
+    },
+    "60db": {
+        "supports_language": True,
+        "supports_cache": True,
+        # 60db params are namespaced (sixtydb_*) so they don't collide with
+        # elevenlabs api_key/voice_id in the shared provider kwargs.
+        "supports_sixtydb_api_key": True,
+        "supports_sixtydb_voice_id": True,
     },
 }
 
@@ -79,6 +89,20 @@ def create_provider(provider_name: str, **kwargs) -> Optional[TTSProvider]:
 
         if provider_config.get("supports_model_id", False) and "model_id" in kwargs:
             filtered_kwargs["model_id"] = kwargs["model_id"]
+
+        # Add 60db-specific parameters (mapped from namespaced kwargs to the
+        # provider's generic constructor params)
+        if (
+            provider_config.get("supports_sixtydb_api_key", False)
+            and "sixtydb_api_key" in kwargs
+        ):
+            filtered_kwargs["api_key"] = kwargs["sixtydb_api_key"]
+
+        if (
+            provider_config.get("supports_sixtydb_voice_id", False)
+            and "sixtydb_voice_id" in kwargs
+        ):
+            filtered_kwargs["voice_id"] = kwargs["sixtydb_voice_id"]
 
         # Create provider with filtered parameters
         provider = provider_class(**filtered_kwargs)

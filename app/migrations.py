@@ -107,6 +107,11 @@ MIGRATIONS = [
         "description": "Add unique index on sessions server_port",
         "sql": "CREATE UNIQUE INDEX IF NOT EXISTS idx_sessions_server_port ON sessions (server_port)",
     },
+    {
+        "version": 13,
+        "description": "Add sixtydb_voice_id column to sessions",
+        "sql": "ALTER TABLE sessions ADD COLUMN sixtydb_voice_id TEXT NULL",
+    },
 ]
 
 

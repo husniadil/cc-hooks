@@ -19,6 +19,8 @@ CONFIG_TO_ENV_MAP = {
     # ElevenLabs
     "elevenlabs.voice_id": "CC_ELEVENLABS_VOICE_ID",
     "elevenlabs.model_id": "CC_ELEVENLABS_MODEL_ID",
+    # 60db
+    "sixtydb.voice_id": "CC_SIXTYDB_VOICE_ID",
     # Silent modes
     "silent.announcements": "CC_SILENT_ANNOUNCEMENTS",
     "silent.effects": "CC_SILENT_EFFECTS",
@@ -156,7 +158,7 @@ def create_example_config(output_path: Optional[Path] = None) -> None:
 # Audio Settings
 audio:
   # TTS provider chain (comma-separated, left to right priority)
-  # Options: prerecorded, gtts, elevenlabs
+  # Options: prerecorded, gtts, elevenlabs, 60db
   providers: prerecorded
 
   # Language code for TTS (ISO 639-1)
@@ -174,6 +176,12 @@ elevenlabs:
   # Model ID
   # Options: eleven_flash_v2_5, eleven_turbo_v2_5, eleven_multilingual_v2
   model_id: eleven_flash_v2_5
+
+# 60db Settings (requires SIXTYDB_API_KEY in shell env or .env)
+sixtydb:
+  # Voice ID from your account (see https://docs.60db.ai/api-reference/voices/get-my-voices)
+  # Leave empty to use the 60db system default voice
+  voice_id: ""
 
 # Silent Modes
 silent:

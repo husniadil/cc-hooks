@@ -173,6 +173,7 @@ def register_session(session_id: str, claude_pid: int, port: int) -> bool:
             == "true",
             "elevenlabs_voice_id": os.getenv("CC_ELEVENLABS_VOICE_ID"),
             "elevenlabs_model_id": os.getenv("CC_ELEVENLABS_MODEL_ID"),
+            "sixtydb_voice_id": os.getenv("CC_SIXTYDB_VOICE_ID"),
             "silent_announcements": _env_bool("CC_SILENT_ANNOUNCEMENTS"),
             "silent_effects": _env_bool("CC_SILENT_EFFECTS"),
             "openrouter_enabled": _env_bool("CC_OPENROUTER_ENABLED"),

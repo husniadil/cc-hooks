@@ -580,6 +580,11 @@ class StatusLine:
                     if api_key:
                         active_provider = "elevenlabs"
                         break
+                elif provider == "60db":
+                    api_key = config.sixtydb_api_key if config else None
+                    if api_key:
+                        active_provider = "60db"
+                        break
                 elif provider == "gtts":
                     # GTTS is always available if specified
                     active_provider = "gtts"
@@ -599,6 +604,8 @@ class StatusLine:
             # Get provider-specific information
             if active_provider == "elevenlabs":
                 tts_info, voice_name = self._get_elevenlabs_details(session_settings)
+            elif active_provider == "60db":
+                tts_info, voice_name = self._get_sixtydb_details(session_settings)
             elif active_provider == "gtts":
                 tts_info = f"Google TTS ({tts_language.upper()})"
                 voice_name = "Google TTS"
@@ -667,6 +674,24 @@ class StatusLine:
         except Exception as e:
             self._debug_log(f"Error fetching ElevenLabs details: {e}")
             return f"Error: {type(e).__name__}", f"ElevenLabs{language_display}"
+
+    def _get_sixtydb_details(self, session_settings=None):
+        """Get detailed 60db information"""
+        config_lang = config.tts_language if config else "en"
+        language = self._setting(session_settings, "tts_language", config_lang)
+        language_display = f" ({language.upper()})"
+
+        api_key = config.sixtydb_api_key if config else None
+        if not api_key:
+            return "60db: No API key", ""
+
+        config_voice = config.sixtydb_voice_id if config else None
+        voice_id = self._setting(session_settings, "sixtydb_voice_id", config_voice)
+        voice_name = f"60db{language_display}"
+
+        if voice_id:
+            return f"Connected ({voice_id[:8]}...)", voice_name
+        return "Connected (default voice)", voice_name
 
     def _get_openrouter_info(self, session_settings=None):
         """Get OpenRouter status and model information from session settings."""
