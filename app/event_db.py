@@ -300,7 +300,7 @@ async def query_events(
 
 _SESSION_COLUMNS = (
     "session_id, claude_pid, server_port, tts_language, tts_providers, tts_cache_enabled, "
-    "elevenlabs_voice_id, elevenlabs_model_id, silent_announcements, silent_effects, "
+    "elevenlabs_voice_id, elevenlabs_model_id, sixtydb_voice_id, silent_announcements, silent_effects, "
     "openrouter_enabled, openrouter_model, openrouter_contextual_stop, openrouter_contextual_pretooluse, "
     "created_at"
 )
@@ -315,6 +315,7 @@ async def store_session(
     tts_cache_enabled: bool = True,
     elevenlabs_voice_id: Optional[str] = None,
     elevenlabs_model_id: Optional[str] = None,
+    sixtydb_voice_id: Optional[str] = None,
     silent_announcements: bool = False,
     silent_effects: bool = False,
     openrouter_enabled: bool = False,
@@ -328,9 +329,9 @@ async def store_session(
             await db.execute(
                 """INSERT OR REPLACE INTO sessions
                 (session_id, claude_pid, server_port, tts_language, tts_providers, tts_cache_enabled,
-                 elevenlabs_voice_id, elevenlabs_model_id, silent_announcements, silent_effects,
+                 elevenlabs_voice_id, elevenlabs_model_id, sixtydb_voice_id, silent_announcements, silent_effects,
                  openrouter_enabled, openrouter_model, openrouter_contextual_stop, openrouter_contextual_pretooluse)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
                     session_id,
                     claude_pid,
@@ -340,6 +341,7 @@ async def store_session(
                     int(tts_cache_enabled),
                     elevenlabs_voice_id,
                     elevenlabs_model_id,
+                    sixtydb_voice_id,
                     int(silent_announcements),
                     int(silent_effects),
                     int(openrouter_enabled),
@@ -369,13 +371,14 @@ def _parse_session_row(result: Any) -> SessionRow:
         "tts_cache_enabled": bool(result[5]),
         "elevenlabs_voice_id": result[6],
         "elevenlabs_model_id": result[7],
-        "silent_announcements": bool(result[8]),
-        "silent_effects": bool(result[9]),
-        "openrouter_enabled": bool(result[10]),
-        "openrouter_model": result[11],
-        "openrouter_contextual_stop": bool(result[12]),
-        "openrouter_contextual_pretooluse": bool(result[13]),
-        "created_at": result[14],
+        "sixtydb_voice_id": result[8],
+        "silent_announcements": bool(result[9]),
+        "silent_effects": bool(result[10]),
+        "openrouter_enabled": bool(result[11]),
+        "openrouter_model": result[12],
+        "openrouter_contextual_stop": bool(result[13]),
+        "openrouter_contextual_pretooluse": bool(result[14]),
+        "created_at": result[15],
     }
 
 

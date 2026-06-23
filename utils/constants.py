@@ -124,6 +124,7 @@ class PathConstants:
     TTS_CACHE_PRERECORDED_DIR = TTS_CACHE_DIR / "prerecorded"
     TTS_CACHE_GTTS_DIR = TTS_CACHE_DIR / "gtts"
     TTS_CACHE_ELEVENLABS_DIR = TTS_CACHE_DIR / "elevenlabs"
+    TTS_CACHE_SIXTYDB_DIR = TTS_CACHE_DIR / "60db"
 
     # Database path
     DATABASE_PATH = SHARED_DATA_DIR / "events.db"

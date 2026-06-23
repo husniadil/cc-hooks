@@ -66,6 +66,8 @@ async def lifespan(app):
         api_key=config.elevenlabs_api_key,
         voice_id=config.elevenlabs_voice_id,
         model_id=config.elevenlabs_model_id,
+        sixtydb_api_key=config.sixtydb_api_key,
+        sixtydb_voice_id=config.sixtydb_voice_id,
     )
     if tts_manager:
         logger.debug(f"TTS system initialized with providers: {providers}")

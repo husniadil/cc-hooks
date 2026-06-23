@@ -28,6 +28,7 @@ class SessionRow(TypedDict):
     tts_cache_enabled: bool
     elevenlabs_voice_id: Optional[str]
     elevenlabs_model_id: Optional[str]
+    sixtydb_voice_id: Optional[str]
     silent_announcements: bool
     silent_effects: bool
     openrouter_enabled: bool

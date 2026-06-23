@@ -6,6 +6,7 @@
 CC_TTS_LANGUAGE=""
 CC_ELEVENLABS_VOICE_ID=""
 CC_ELEVENLABS_MODEL_ID=""
+CC_SIXTYDB_VOICE_ID=""
 CC_TTS_PROVIDERS=""
 CC_TTS_CACHE_ENABLED=""
 CC_SILENT_ANNOUNCEMENTS=""
@@ -27,6 +28,9 @@ for arg in "$@"; do
         --elevenlabs-model=*)
             CC_ELEVENLABS_MODEL_ID="${arg#*=}"
             ;;
+        --sixtydb-voice-id=*)
+            CC_SIXTYDB_VOICE_ID="${arg#*=}"
+            ;;
         --tts-providers=*)
             CC_TTS_PROVIDERS="${arg#*=}"
             ;;
@@ -42,8 +46,11 @@ for arg in "$@"; do
                 elevenlabs)
                     CC_TTS_PROVIDERS="elevenlabs,gtts,prerecorded"
                     ;;
+                60db)
+                    CC_TTS_PROVIDERS="60db,gtts,prerecorded"
+                    ;;
                 *)
-                    echo "Warning: Unknown --audio value '$AUDIO_MODE'. Valid values: prerecorded, gtts, elevenlabs" >&2
+                    echo "Warning: Unknown --audio value '$AUDIO_MODE'. Valid values: prerecorded, gtts, elevenlabs, 60db" >&2
                     ;;
             esac
             ;;
@@ -111,6 +118,10 @@ fi
 
 if [ -n "$CC_ELEVENLABS_MODEL_ID" ]; then
     export CC_ELEVENLABS_MODEL_ID
+fi
+
+if [ -n "$CC_SIXTYDB_VOICE_ID" ]; then
+    export CC_SIXTYDB_VOICE_ID
 fi
 
 if [ -n "$CC_TTS_PROVIDERS" ]; then

@@ -67,6 +67,10 @@ class Config:
     elevenlabs_voice_id: str = "21m00Tcm4TlvDq8ikWAM"  # Rachel voice
     elevenlabs_model_id: str = "eleven_flash_v2_5"
 
+    # 60db Configuration
+    sixtydb_api_key: str = ""
+    sixtydb_voice_id: str = ""  # empty -> 60db system default voice
+
     # OpenRouter Configuration
     openrouter_enabled: bool = False
     openrouter_api_key: str = ""
@@ -95,6 +99,8 @@ class Config:
             elevenlabs_model_id=get_env_with_fallback(
                 "ELEVENLABS_MODEL_ID", "eleven_flash_v2_5"
             ),
+            sixtydb_api_key=resolve_api_key("SIXTYDB_API_KEY"),
+            sixtydb_voice_id=get_env_with_fallback("SIXTYDB_VOICE_ID", ""),
             openrouter_enabled=parse_bool_env(
                 get_env_with_fallback("OPENROUTER_ENABLED", "false")
             ),

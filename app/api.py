@@ -48,6 +48,7 @@ class SessionInfo(BaseModel):
     tts_cache_enabled: bool = Field(True, description="Enable TTS caching")
     elevenlabs_voice_id: Optional[str] = Field(None, description="ElevenLabs voice ID")
     elevenlabs_model_id: Optional[str] = Field(None, description="ElevenLabs model ID")
+    sixtydb_voice_id: Optional[str] = Field(None, description="60db voice ID")
     silent_announcements: bool = Field(False, description="Disable TTS announcements")
     silent_effects: bool = Field(False, description="Disable sound effects")
     openrouter_enabled: bool = Field(False, description="Enable OpenRouter features")
@@ -301,6 +302,7 @@ def create_app(lifespan=None) -> FastAPI:
                 tts_cache_enabled=session.tts_cache_enabled,
                 elevenlabs_voice_id=session.elevenlabs_voice_id,
                 elevenlabs_model_id=session.elevenlabs_model_id,
+                sixtydb_voice_id=session.sixtydb_voice_id,
                 silent_announcements=session.silent_announcements,
                 silent_effects=session.silent_effects,
                 openrouter_enabled=session.openrouter_enabled,

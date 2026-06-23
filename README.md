@@ -34,7 +34,7 @@ _Watch cc-hooks in action with premium ElevenLabs text-to-speech_
 
 - **Sound effects** for different events (tool execution, notifications, completions)
 - **Voice announcements** for session lifecycle and task completions
-- **Multiple TTS providers**: Prerecorded sounds (offline), Google TTS (free), ElevenLabs (premium)
+- **Multiple TTS providers**: Prerecorded sounds (offline), Google TTS (free), ElevenLabs (premium), 60db (premium)
 - **Smart fallback chain** - automatically tries next provider if one fails
 
 ### 🤖 AI-Powered Intelligence (Optional)
@@ -191,6 +191,9 @@ cld --audio=gtts --language=id
 # Premium ElevenLabs voice
 cld --audio=elevenlabs
 
+# Premium 60db voice
+cld --audio=60db
+
 # With AI-powered contextual messages
 cld --audio=gtts --ai=full --language=id
 
@@ -208,6 +211,7 @@ cld --silent
 cld --audio=prerecorded  # Offline sounds (default, no API key)
 cld --audio=gtts         # Google TTS (free, requires internet)
 cld --audio=elevenlabs   # Premium quality (requires API key)
+cld --audio=60db         # Premium quality (requires API key)
 ```
 
 | Provider        | Quality | Cost | Requires Internet | API Key |
@@ -215,6 +219,10 @@ cld --audio=elevenlabs   # Premium quality (requires API key)
 | **prerecorded** | Good    | Free | ❌ No             | ❌ No   |
 | **gtts**        | Great   | Free | ✅ Yes            | ❌ No   |
 | **elevenlabs**  | Premium | Paid | ✅ Yes            | ✅ Yes  |
+| **60db**        | Premium | Paid | ✅ Yes            | ✅ Yes  |
+
+Each provider is the head of a fallback chain (e.g. `--audio=60db` → `60db,gtts,prerecorded`); if
+the premium provider fails or has no key, cc-hooks automatically falls back to the next one.
 
 #### Language
 
@@ -256,17 +264,19 @@ cld --silent=sound-effects      # No sound effects, keep TTS
 ```bash
 --elevenlabs-voice-id=ID        # Custom ElevenLabs voice
 --elevenlabs-model=MODEL        # ElevenLabs model (default: eleven_flash_v2_5)
+--sixtydb-voice-id=ID           # Custom 60db voice (default: 60db system voice)
 --openrouter-model=MODEL        # AI model (default: openai/gpt-4o-mini)
 --no-cache                      # Disable TTS caching (for testing)
 ```
 
 ### API Keys Setup
 
-For ElevenLabs or AI features, set API keys as environment variables:
+For ElevenLabs, 60db, or AI features, set API keys as environment variables:
 
 ```bash
 # Add to your .bashrc or .zshrc
 export ELEVENLABS_API_KEY=your_key_here
+export SIXTYDB_API_KEY=your_key_here
 export OPENROUTER_API_KEY=your_key_here
 ```
 
@@ -274,6 +284,7 @@ export OPENROUTER_API_KEY=your_key_here
 
 - **ElevenLabs**:
   [elevenlabs.io/app/developers/api-keys](https://elevenlabs.io/app/developers/api-keys)
+- **60db**: from your [60db](https://60db.ai) account dashboard
 - **OpenRouter**: [openrouter.ai/keys](https://openrouter.ai/keys) (free credits available)
 
 ### Configuration File (Recommended)
@@ -329,6 +340,18 @@ openrouter:
   enabled: true
   model: openai/gpt-4o-mini
   contextual_stop: true
+```
+
+**Example config** (Premium with 60db):
+
+```yaml
+audio:
+  providers: 60db,gtts,prerecorded
+  language: en
+  cache_enabled: true
+
+sixtydb:
+  voice_id: "" # empty = 60db system default voice
 ```
 
 **Priority**: CLI flags > Environment variables > Config file > Defaults
@@ -504,6 +527,13 @@ skip permission prompts, but doesn't seem to handle the initial folder trust flo
 3. Test:
    `uv run ~/.claude/plugins/marketplaces/cc-hooks-plugin/utils/tts_announcer.py --provider elevenlabs SessionStart`
 
+### 60db not working?
+
+1. Verify API key: `printenv SIXTYDB_API_KEY`
+2. Check your account/quota at [60db.ai](https://60db.ai)
+3. Test:
+   `uv run ~/.claude/plugins/marketplaces/cc-hooks-plugin/utils/tts_announcer.py --provider 60db SessionStart`
+
 ### AI contextual messages not working?
 
 1. Verify API key: `printenv OPENROUTER_API_KEY`
@@ -550,6 +580,7 @@ No! Default mode uses prerecorded sounds and works completely offline with no AP
 - **Prerecorded**: Fastest, offline, no costs (great for starting)
 - **Google TTS**: Free, good quality, requires internet
 - **ElevenLabs**: Premium quality, costs money, best voices
+- **60db**: Premium quality, costs money, alternative premium provider
 
 **Q: Can I use my own voice with ElevenLabs?**
 

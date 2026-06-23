@@ -394,6 +394,9 @@ def announce_event(
         elevenlabs_model_id = _session_or_config(
             "elevenlabs_model_id", config.elevenlabs_model_id
         )
+        sixtydb_voice_id = _session_or_config(
+            "sixtydb_voice_id", config.sixtydb_voice_id
+        )
         tts_cache_enabled = _session_or_config(
             "tts_cache_enabled", config.tts_cache_enabled
         )
@@ -435,6 +438,8 @@ def announce_event(
                 api_key=config.elevenlabs_api_key,
                 voice_id=elevenlabs_voice_id,
                 model_id=elevenlabs_model_id,
+                sixtydb_api_key=config.sixtydb_api_key,
+                sixtydb_voice_id=sixtydb_voice_id,
             )
 
         if not manager:
@@ -565,6 +570,8 @@ def main():
         api_key=config.elevenlabs_api_key,
         voice_id=config.elevenlabs_voice_id,
         model_id=config.elevenlabs_model_id,
+        sixtydb_api_key=config.sixtydb_api_key,
+        sixtydb_voice_id=config.sixtydb_voice_id,
     )
 
     if not manager:
