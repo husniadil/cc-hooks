@@ -1,6 +1,6 @@
 # Core runtime environments
-python 3.12.7
-node 20.19.4
+python 3.12.15
+node 24.22.1
 
 # Package managers and tools
 uv 0.5.29
